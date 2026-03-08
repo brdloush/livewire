@@ -1,0 +1,24 @@
+{:min-bb-version "0.8.0"
+
+ :tasks
+ {clean
+  {:doc "Remove build artifacts (target/ directory)"
+   :task (shell "lein clean")}
+
+  compile
+  {:doc "Compile Java and Clojure sources"
+   :task (shell "lein with-profile +provided compile")}
+
+  jar
+  {:doc "Build the JAR (without installing to ~/.m2)"
+   :depends [compile]
+   :task (shell "lein with-profile +provided jar")}
+
+  install
+  {:doc "Build and install livewire to the local Maven repository (~/.m2)"
+   :task (shell "lein with-profile +provided install")}
+
+  clean-install
+  {:doc "Clean build artifacts, then install to local Maven repository"
+   :depends [clean]
+   :task (shell "lein with-profile +provided install")}}}

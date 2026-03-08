@@ -1,9 +1,9 @@
 package net.brdloush.livewire;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 
 /**
@@ -11,13 +11,17 @@ import org.springframework.core.env.Environment;
  *
  * Activated automatically when:
  *   1. The library JAR is on the classpath, AND
- *   2. The active Spring profile includes "dev"
+ *   2. The property livewire.enabled=true is set
+ *
+ * Add to whichever local/dev properties file your project uses, e.g.:
+ *   # application-local.properties
+ *   livewire.enabled=true
  *
  * The nREPL port is configurable via the property:
  *   livewire.nrepl.port (default: 7888)
  */
 @AutoConfiguration
-@Profile("dev")
+@ConditionalOnProperty(name = "livewire.enabled", havingValue = "true")
 public class LivewireAutoConfiguration {
 
     @Bean

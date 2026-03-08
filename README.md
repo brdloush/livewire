@@ -101,21 +101,49 @@ Once connected, require the namespace:
 ```clojure
 ;; What datasource URL is actually in use?
 (lw/props-matching "spring\\.datasource\\.url")
-;; => {"spring.datasource.url" "jdbc:postgresql://prod-db:5432/myapp"}
+;; => {"spring.datasource.url" "jdbc:postgresql://localhost:5432/myapp"}
 
 ;; Find all repository beans
 (lw/find-beans-matching ".*Repository.*")
-;; => ("userRepository" "orderRepository" ...)
+;; => ("bookRepository" "authorRepository" ...)
 
-;; Call a service method and inspect the result
+;; Query via a repository — convert to plain Clojure maps inside the
+;; transaction (see note on lazy loading below)
 (lw/in-readonly-tx
-  (.findByEmail (lw/bean "userRepository") "alice@example.com"))
+  (->> (.findAll (lw/bean "bookRepository"))
+       (mapv #(select-keys (clojure.core/bean %) [:id :email :status :active]))))
+;; => [{:id 1, :email "test@example.com", :status "PENDING", :active false}]
 
 ;; Safely mutate — the transaction rolls back automatically
 (lw/in-tx
   (.save (lw/bean "userRepository") (->User "test@example.com"))
   (count (.findAll (lw/bean "userRepository"))))
 ```
+
+### ⚠️ Hibernate lazy loading and transaction boundaries
+
+Returning a raw Hibernate entity from `in-tx` / `in-readonly-tx` will cause
+a `LazyInitializationException` when Clojure tries to print it — the session
+is already closed by the time the REPL renders the result.
+
+**Always convert to a plain Clojure map inside the transaction boundary:**
+
+```clojure
+;; ❌ will blow up — entity printed after session closes
+(lw/in-readonly-tx
+  (.findById (lw/bean "bookRepository") 1))
+
+;; ✅ convert eagerly while the session is still open
+(lw/in-readonly-tx
+  (-> (.findById (lw/bean "bookRepository") 1)
+      .get
+      clojure.core/bean          ; converts all Java bean properties to a map
+      (select-keys [:id :email :status :active])))  ; narrow to what you need
+```
+
+`clojure.core/bean` introspects all getter methods and returns a Clojure map.
+Wrap it in `select-keys` to avoid triggering lazy associations you don't care
+about.
 
 ---
 

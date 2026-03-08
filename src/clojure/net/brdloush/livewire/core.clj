@@ -95,17 +95,6 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Transactional macros
 
-(defn- ^TransactionTemplate make-tx-template
-  [read-only?]
-  (let [tm (bean PlatformTransactionManager)
-        tt (TransactionTemplate. tm)]
-    (when read-only?
-      (.setReadOnly tt true)
-      (.setPropagationBehavior tt TransactionDefinition/PROPAGATION_REQUIRES_NEW))
-    (when-not read-only?
-      (.setPropagationBehavior tt TransactionDefinition/PROPAGATION_REQUIRES_NEW))
-    tt))
-
 (defmacro in-tx
   "Executes body inside a real Spring transaction that is always rolled back,
    even on success. Safe for mutation exploration — nothing persists.
@@ -117,7 +106,8 @@
        (.save userRepository (->User \"test@example.com\"))
        (count (findAll userRepository)))"
   [& body]
-  `(let [tt# (make-tx-template false)]
+  `(let [tt# (doto (TransactionTemplate. (bean PlatformTransactionManager))
+               (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW))]
      (.execute tt#
        (reify TransactionCallback
          (doInTransaction [_# status#]
@@ -135,7 +125,9 @@
      (in-readonly-tx
        (.findAll userRepository))"
   [& body]
-  `(let [tt# (make-tx-template true)]
+  `(let [tt# (doto (TransactionTemplate. (bean PlatformTransactionManager))
+               (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW)
+               (.setReadOnly true))]
      (.execute tt#
        (reify TransactionCallback
          (doInTransaction [_# _status#]

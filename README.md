@@ -39,17 +39,16 @@ implementation 'net.brdloush:livewire:0.1.0-SNAPSHOT'
 Livewire auto-configures itself when **two conditions are met**:
 
 1. The JAR is on the classpath
-2. The active Spring profile includes `dev`
+2. The property `livewire.enabled=true` is set
 
-```bash
-# e.g.
-SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
-```
-
-The nREPL server starts on port **7888** by default. Override via:
+Add it to whichever local properties file your project already uses — no
+profile name convention required:
 
 ```properties
-# application-dev.properties
+# application-local.properties  (or -dev, -sandbox, whatever you use)
+livewire.enabled=true
+
+# optional: override the default nREPL port (7888)
 livewire.nrepl.port=7888
 ```
 

@@ -23,7 +23,7 @@ The mechanism is an **nREPL server embedded in the Spring Boot application**, ho
 ```
 Spring Boot App (running)
   └── nREPL server (embedded, dev profile only)
-        └── dev.core namespace
+        └── net.brdloush.livewire.core namespace
               ├── Spring ApplicationContext reference (injected at boot)
               ├── Utility namespaces (query, introspection, tracing...)
               └── Hot-swap engine (query watcher + live query registry)
@@ -36,7 +36,7 @@ The nREPL server is **never active in production**. It is gated behind a Spring 
 
 ---
 
-## Component 1: Foundation Namespace (`dev.core`)
+## Component 1: Foundation Namespace (`net.brdloush.livewire.core`)
 
 Bootstraps access to the running Spring context and exposes core primitives used by all other namespaces.
 
@@ -55,7 +55,7 @@ Bootstraps access to the running Spring context and exposes core primitives used
 
 ---
 
-## Component 2: Introspection Tools (`dev.introspect`)
+## Component 2: Introspection Tools (`net.brdloush.livewire.introspect`)
 
 Allows the agent (or developer) to interrogate the live application structure without reading source files.
 
@@ -70,7 +70,7 @@ Filters all bean names by regex. Useful for discovering beans related to a featu
 
 ---
 
-## Component 3: Query & Data Tools (`dev.query`)
+## Component 3: Query & Data Tools (`net.brdloush.livewire.query`)
 
 Allows the agent to execute queries through the application layer — with Hibernate type converters, active `@Filter`s, and proper transaction semantics.
 
@@ -85,7 +85,7 @@ Captures entity state before and after calling `thunk`, returns a diff. Used to 
 
 ---
 
-## Component 4: Tracing Tools (`dev.trace`)
+## Component 4: Tracing Tools (`net.brdloush.livewire.trace`)
 
 **`(trace-sql & body)`**
 Wraps body and captures every SQL statement fired by Hibernate during execution. Returns `{:result ... :queries [...] :count n :duration-ms n}`. Implemented by instrumenting a `StatementInspector` or P6Spy datasource proxy.
@@ -101,7 +101,7 @@ Invokes a service method via reflection, inside a read-only transaction, with fu
 
 ---
 
-## Component 5: Hot Query Swap Engine (`dev.hot-queries`)
+## Component 5: Hot Query Swap Engine (`net.brdloush.livewire.hot-queries`)
 
 ### The Problem
 `@Query` annotations on Spring Data repository methods are compiled into `SimpleJpaQuery` / `NativeJpaQuery` objects at application startup and stored in a private `Map<Method, RepositoryQuery>` inside `QueryExecutorMethodInterceptor`. Changing a query today requires a full application restart.
@@ -118,7 +118,7 @@ The live wrapper delegates `getQueryMethod` to the original (preserving paramete
 
 ---
 
-## Component 6: File Watcher (`dev.query-watcher`)
+## Component 6: File Watcher (`net.brdloush.livewire.query-watcher`)
 
 ### Purpose
 Makes `hot-swap-query!` invisible to Java/Kotlin developers. They change a `@Query` annotation and press **Recompile** (Ctrl+F9 / Cmd+F9 in IntelliJ). The new query is live within milliseconds. No REPL interaction required.
@@ -178,17 +178,19 @@ Today, agents reason about Spring applications *statically* and guess at runtime
 src/
   main/
     clojure/
-      dev/
-        core.clj          ; context access, in-tx, run-as
-        introspect.clj    ; list-endpoints, inspect-entity
-        query.clj         ; jpql, sql, diff-entity
-        trace.clj         ; trace-sql, detect-n+1, hibernate-stats, call-service
-        hot_queries.clj   ; hot-swap-query!, live query registry
-        query_watcher.clj ; file watcher, ASM bytecode reader, auto-dir detection
-        boot.clj          ; nREPL server start, namespace init, context injection
+      net/
+        brdloush/
+          livewire/
+            core.clj          ; context access, in-tx, run-as
+            introspect.clj    ; list-endpoints, inspect-entity
+            query.clj         ; jpql, sql, diff-entity
+            trace.clj         ; trace-sql, detect-n+1, hibernate-stats, call-service
+            hot_queries.clj   ; hot-swap-query!, live query registry
+            query_watcher.clj ; file watcher, ASM bytecode reader, auto-dir detection
+            boot.clj          ; nREPL server start, namespace init, context injection
 ```
 
-`boot.clj` is the only entry point Spring needs to know about — a `@Component` / `@Bean` conditioned on `@Profile("dev")` that starts the nREPL server and injects the `ApplicationContext` reference into `dev.core`.
+`boot.clj` is the only entry point Spring needs to know about — a `@Component` / `@Bean` conditioned on `@Profile("dev")` that starts the nREPL server and injects the `ApplicationContext` reference into `net.brdloush.livewire.core`.
 
 
 ## References

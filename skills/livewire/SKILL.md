@@ -79,9 +79,12 @@ Use `run-as` whenever calling a bean that is protected by Spring Security (`@Pre
   (.getBookById (lw/bean "bookController") 25))
 
 ;; Combine with in-readonly-tx for repository access under a security context
+;; Always page or limit — never call .findAll on a large table (see pitfalls)
 (lw/run-as "admin"
   (lw/in-readonly-tx
-    (->> (.findAll (lw/bean "bookRepository"))
+    (->> (.findAll (lw/bean "bookRepository")
+                   (org.springframework.data.domain.PageRequest/of 0 20))
+         .getContent
          (mapv #(select-keys (clojure.core/bean %) [:id :email])))))
 
 ;; Use a specific role set when the method checks for a non-admin role
@@ -229,6 +232,25 @@ Using `:simple-name` returns nil for every entry and causes a NullPointerExcepti
 (->> (intro/list-entities) (map :name) (filter some?) (filter #(re-find #"Foo" %)))
 ```
 
+### Never call `.findAll` without a `Pageable` — it may return millions of rows
+`.findAll()` on a `JpaRepository` has no built-in limit and will eagerly load every row in
+the table. On large production-like datasets this will hang the REPL and potentially OOM the JVM.
+Always pass a `PageRequest` to cap results, or use a more specific query method.
+
+```clojure
+;; ❌ danger: fetches every row in the table
+(.findAll (lw/bean "bookRepository"))
+
+;; ✅ cap at 20 rows using Pageable
+(->> (.findAll (lw/bean "bookRepository")
+               (org.springframework.data.domain.PageRequest/of 0 20))
+     .getContent
+     (mapv #(select-keys (clojure.core/bean %) [:id :email])))
+
+;; ✅ or use a native/JPQL query with an explicit limit
+(lw/in-readonly-tx (q/sql "SELECT TOP 20 id, email FROM clients"))
+```
+
 ### `lw/bean SomeClass` only resolves Spring beans, not JPA entities
 JPA entity classes are not Spring beans. Passing an entity class throws `NoSuchBeanDefinitionException`.
 Use `lw/bean "repositoryBeanName"` to access data — find the right name with `lw/find-beans-matching`.
@@ -282,22 +304,25 @@ Ensure the app is running with a current Livewire JAR.
 (lw/find-beans-matching ".*Repository.*")
 ;; => ("bookRepository" "authorRepository" ...)
 
-;; Query a repository safely
+;; Query a repository safely — always page or limit (see pitfalls)
 (lw/in-readonly-tx
-  (->> (.findAll (lw/bean "bookRepository"))
+  (->> (.findAll (lw/bean "bookRepository")
+                 (org.springframework.data.domain.PageRequest/of 0 20))
+       .getContent
        (mapv #(select-keys (clojure.core/bean %) [:id :email :status :active]))))
 ;; => [{:id 1, :email "test@example.com", :status "PENDING", :active false}]
 
 ;; Mutate safely — rolls back automatically
+;; (count here is intentional — we want the total, not a page of rows)
 (lw/in-tx
   (.save (lw/bean "userRepository") (->User "test@example.com"))
-  (count (.findAll (lw/bean "userRepository"))))
+  (.count (lw/bean "userRepository")))
 
 ;; Capture the SQL a service method fires
 (trace/trace-sql
   (lw/in-readonly-tx
-    (count (.findAll (lw/bean "userRepository")))))
-;; => {:result 42, :queries [{:sql "select ...", :caller "..."}], :count 1, :duration-ms 15}
+    (.count (lw/bean "userRepository"))))
+;; => {:result 42, :queries [{:sql "select count(*) ...", :caller "..."}], :count 1, :duration-ms 15}
 
 ;; Hunt for N+1 queries
 (trace/detect-n+1

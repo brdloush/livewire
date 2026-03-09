@@ -61,15 +61,39 @@ You'll see this in the logs on startup:
 
 ## Connecting
 
-Any nREPL client works. With [clojure-mcp](https://github.com/stuarthalloway/clojure-mcp)
-(the recommended path for agentic use), point it at port 7888. For a quick
-interactive session from the terminal:
+### CIDER (Emacs)
+
+```
+M-x cider-connect-clj
+  Host: localhost
+  Port: 7888
+```
+
+Once the REPL buffer is open, require the Livewire namespaces:
+
+```clojure
+(require '[net.brdloush.livewire.core :as lw]
+         '[net.brdloush.livewire.query :as q])
+```
+
+Then you're ready to go:
+
+```clojure
+(q/sql "SELECT count(1) FROM books")
+;; => [{:count 0}]
+```
+
+### Terminal
 
 ```bash
-# using the Clojure CLI nREPL client
 clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version "1.3.1"}}}' \
         -M -m nrepl.cmdline --connect --host 127.0.0.1 --port 7888
 ```
+
+### clojure-mcp (agentic use)
+
+Point it at port 7888 — the AI assistant can then use `clojure_eval` to
+probe the live app directly.
 
 ---
 

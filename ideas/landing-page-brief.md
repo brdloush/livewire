@@ -199,6 +199,31 @@ Pick 2–3 of these for the features section — they're the most visually strik
 
 ---
 
+## Color Palette (extracted from the logo)
+
+The logo uses a dark, high-contrast theme. Stick close to these colors throughout the page.
+
+| Role | Hex | Description |
+|---|---|---|
+| Background | `#151423` | Very dark navy — almost black with a purple undertone |
+| Primary accent | `#5785CA` | Electric blue — links, buttons, highlights |
+| Secondary accent | `#98C948` | Lime green — the "live wire" energy; use for badges, glows, key callouts |
+| Text / light | `#FAFAFA` | Near-white for body text on dark backgrounds |
+| Muted / secondary text | `#A5A5AD` | Grey for captions, labels |
+| Dark mid-tone | `#3C4A4E` | Subtle borders, card backgrounds |
+
+**Usage guidance:**
+- Page background: `#151423`
+- Hero headline: `#FAFAFA` with the lime `#98C948` used to highlight a key word (e.g. *"live"*, *"running"*)
+- CTA button: `#5785CA` fill, `#FAFAFA` text; hover glow in `#98C948`
+- Code blocks: dark card (`#1e1d2e` or similar), with syntax colors that complement the blues and greens
+- Section dividers / glows: subtle `#5785CA` or `#98C948` radial gradient on dark background
+- Feature card borders: `#3C4A4E` with a `#5785CA` left-border accent
+
+**Overall feel:** A terminal / dev-tool aesthetic — dark, precise, a little electric. Think VS Code Dark+ meets a live oscilloscope readout.
+
+---
+
 ## Assets
 
 | File | Use |

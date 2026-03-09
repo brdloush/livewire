@@ -177,7 +177,7 @@ about.
 |---|---|
 | `core` — context, beans, transactions | ✅ Done |
 | `boot` — nREPL lifecycle | ✅ Done |
-| `introspect` — endpoints, Hibernate metamodel | 🔜 Planned |
+| `introspect` — endpoints, Hibernate metamodel | ✅ Done |
 | `query` — JPQL/SQL execution, diff-entity | 🔜 Planned |
 | `trace` — SQL tracing, N+1 detection | 🔜 Planned |
 | `hot-queries` — live @Query swap | 🔜 Planned |

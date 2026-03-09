@@ -50,3 +50,13 @@ Example — query returns a vector of maps:
 | 1  | test@example.com | PENDING | false |
 
 ---
+
+## Specs
+
+The `specs` folder contains various context, architectural designs, and feature specifications about what we want to achieve in this project. When starting a new task or component, always consult the relevant files in the `specs` directory for guidance.
+
+---
+
+## Live REPL-driven development
+
+When developing new features or fixing bugs in Livewire, we strongly prefer an interactive approach. **Always use the live REPL to test things immediately**. Don't write code blindly and hope it compiles/runs; evaluate small snippets, check the output in the target Spring Boot application environment, and iteratively build up the solution. This is the core "agentic feedback loop" we aim to achieve.

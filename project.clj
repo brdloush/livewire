@@ -19,6 +19,8 @@
      [org.springframework/spring-context "6.1.14"
       :scope "provided"]
      [org.springframework/spring-tx "6.1.14"
+      :scope "provided"]
+     [org.hibernate.orm/hibernate-core "6.5.3.Final"
       :scope "provided"]]}}
 
   :javac-options ["--release" "17" "-Xlint:unchecked"]

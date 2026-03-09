@@ -156,6 +156,34 @@ Once connected, require the namespace:
 
 ---
 
+## Trace API (`net.brdloush.livewire.trace`)
+
+Once connected, require the namespace:
+
+```clojure
+(require '[net.brdloush.livewire.trace :as trace])
+```
+
+| Function / Macro | Description |
+|---|---|
+| `(trace/trace-sql & body)` | Wraps body and captures every SQL statement fired by Hibernate on the current thread. |
+| `(trace/trace-sql-global & body)` | Same as above, but captures SQL across *all* threads globally (useful for `@Async`). |
+
+### Trace examples
+
+```clojure
+;; Run a repository method and see the actual SQL that gets executed
+(trace/trace-sql
+  (lw/in-readonly-tx
+    (count (.findAll (lw/bean "userRepository")))))
+;; => {:result 42,
+;;     :queries ["select count(*) from users"],
+;;     :count 1,
+;;     :duration-ms 15}
+```
+
+---
+
 ## Example session
 
 ```clojure
@@ -215,9 +243,15 @@ about.
 | `boot` — nREPL lifecycle | ✅ Done |
 | `introspect` — endpoints, Hibernate metamodel | ✅ Done |
 | `query` — JPQL/SQL execution, diff-entity | 🔜 Planned |
-| `trace` — SQL tracing, N+1 detection | 🔜 Planned |
+| `trace` — SQL tracing, N+1 detection | 🚧 In Progress |
 | `hot-queries` — live @Query swap | 🔜 Planned |
 | `query-watcher` — file watcher + ASM | 🔜 Planned |
+
+---
+
+## Technical Debt / Chores
+
+- [ ] **Hibernate version support:** We currently rely on `hibernate-core` version 6.x in our `project.clj` `:provided` scope to compile the Java `StatementInspector`. This is technical debt: we may need to support compiling against multiple major versions (e.g., Hibernate 5 for Spring Boot 2.x apps) or find a reflection-based way to avoid the compile-time coupling.
 
 ---
 

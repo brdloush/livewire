@@ -1,11 +1,12 @@
 package net.brdloush.livewire;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
 
 /**
  * Spring Boot auto-configuration for Livewire.
@@ -35,8 +36,12 @@ public class LivewireAutoConfiguration {
         return new LivewireBootstrapBean(applicationContext, port);
     }
 
-    @Bean
-    public HibernatePropertiesCustomizer livewireHibernateCustomizer() {
-        return (properties) -> properties.put("hibernate.session_factory.statement_inspector", new LivewireSqlTracer());
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer")
+    public static class HibernateTracingConfiguration {
+        @Bean
+        public org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer livewireHibernateCustomizer() {
+            return (properties) -> properties.put("hibernate.session_factory.statement_inspector", new LivewireSqlTracer());
+        }
     }
 }

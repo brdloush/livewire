@@ -27,23 +27,7 @@ Spec: `specs/01-initial-project-scope.md` → Component 3
 - **`(diff-entity entity-class id thunk)`** — Capture entity state before and after calling
   `thunk`, return a diff. Used to observe what a service method actually changes.
 
-### `hot-queries` namespace — live `@Query` swap engine
-Spec: `specs/01-initial-project-scope.md` → Component 5
-
-Reach into Spring Data's internal `Map<Method, RepositoryQuery>` inside
-`QueryExecutorMethodInterceptor` via reflection and replace entries with atom-backed live
-wrappers (`LiveQuery`).
-
-- **`(hot-swap-query! repo-bean method-name new-jpql)`**
-  - First call: wraps the existing `RepositoryQuery` in a `LiveQuery` reify backed by an atom;
-    registers it in a global registry.
-  - Subsequent calls for the same method: `reset!` on the existing atom only — no more
-    reflection.
-  - Returns `{:swapped key :query jpql}`.
-  - The live wrapper delegates `getQueryMethod` to the original (preserving parameter metadata)
-    and re-executes the JPQL from the atom on every `execute` call, handling both named and
-    positional parameters.
-- Also: registry of all swapped queries for tracking / rollback.
+### ~~`hot-queries` namespace — live `@Query` swap engine~~ → ✅ Done (see below)
 
 ### `query-watcher` namespace — file watcher + ASM bytecode reader
 Spec: `specs/01-initial-project-scope.md` → Component 6
@@ -71,6 +55,23 @@ Console output on swap:
 ---
 
 ## ✅ Done
+
+### `hot-queries` namespace — live `@Query` swap engine
+Spec: `specs/01-initial-project-scope.md` → Component 5
+
+Implemented in `net.brdloush.livewire.hot-queries`. Instead of replacing the
+`RepositoryQuery` entry in the queries map with a reify, the implementation
+mutates the `queryString` Lazy field inside `DefaultEntityQuery` (held by
+`AbstractStringBasedJpaQuery`) to be atom-backed. The original `SimpleJpaQuery`
+— with all of Spring Data's result-type coercion — stays in place.
+
+- **`(list-queries repo-bean-name)`** — lists all `@Query` methods with current JPQL
+- **`(hot-swap-query! repo-bean method-name new-jpql)`** — first call uses reflection
+  to wire up an atom-backed `Lazy<String>`; subsequent calls just `reset!` the atom
+- **`(list-swapped)`** — global registry of all currently swapped queries
+- **`(reset-query! repo-bean method-name)`** — restores the original `Lazy` and deregisters
+
+Verified live on `bookRepository#findByIdWithDetails` in Bloated Shelf.
 
 ### `core` namespace — `run-as`
 Spec: `specs/01-initial-project-scope.md` → Component 1

@@ -62,6 +62,26 @@
            (#(when % (.getName (.getJavaType %)))))
       target-name)))
 
+;;; Hibernate 6 / 7 cross-compatibility helpers
+
+(defn- safe-get-entity-persister [mm entity-name]
+  (try
+    (clojure.lang.Reflector/invokeInstanceMethod mm "getEntityDescriptor" (object-array [entity-name]))
+    (catch Exception _
+      (clojure.lang.Reflector/invokeInstanceMethod mm "entityPersister" (object-array [entity-name])))))
+
+(defn- safe-get-collection-persister [mm role]
+  (try
+    (clojure.lang.Reflector/invokeInstanceMethod mm "getCollectionDescriptor" (object-array [role]))
+    (catch Exception _
+      (clojure.lang.Reflector/invokeInstanceMethod mm "collectionPersister" (object-array [role])))))
+
+(defn- safe-get-cascade-style [ep idx]
+  (try
+    (clojure.lang.Reflector/invokeInstanceMethod ep "getCascadeStyle" (object-array [(int idx)]))
+    (catch Exception _
+      (aget (clojure.lang.Reflector/invokeInstanceMethod ep "getPropertyCascadeStyles" (object-array [])) idx))))
+
 (defn inspect-entity
   "Reads Hibernate's metamodel for a given entity (by Class or simple/FQN String).
    Returns mapped table name, column mappings, relation definitions, etc.
@@ -71,7 +91,7 @@
         sf (.unwrap emf org.hibernate.SessionFactory)
         mm (.getMetamodel sf)
         entity-name (resolve-entity-name emf entity-class)]
-    (if-let [ep (try (.entityPersister mm entity-name) (catch Exception _ nil))]
+    (if-let [ep (try (safe-get-entity-persister mm entity-name) (catch Exception _ nil))]
       (let [prop-names (seq (.getPropertyNames ep))]
         {:entity-name entity-name
          :table-name (.getTableName ep)
@@ -81,7 +101,7 @@
          :properties (mapv (fn [pn]
                              (let [idx (.getPropertyIndex ep pn)
                                    prop-type (.getPropertyType ep pn)
-                                   cascade (str (.getCascadeStyle ep idx))
+                                   cascade (str (safe-get-cascade-style ep idx))
                                    fetch (str (.getFetchMode ep idx))
                                    cols (seq (.getPropertyColumnNames ep pn))
                                    is-collection (.isCollectionType prop-type)
@@ -94,7 +114,7 @@
                                 :target-entity (cond
                                                  is-collection
                                                  (let [role (.getRole prop-type)
-                                                       cp (.collectionPersister mm role)]
+                                                       cp (safe-get-collection-persister mm role)]
                                                    (.getName (.getElementType cp)))
                                                  is-entity
                                                  (.getName prop-type)

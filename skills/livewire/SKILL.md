@@ -104,6 +104,57 @@ Wrap it in `select-keys` to avoid triggering lazy associations you don't need.
 
 ---
 
+## ⚠️ Known Pitfalls
+
+### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`
+The docstring mentions "simple name + FQN" but the actual map keys are `:name` and `:class`.
+Using `:simple-name` returns nil for every entry and causes a NullPointerException in regex filters.
+
+```clojure
+;; ❌ NullPointerException
+(->> (intro/list-entities) (map :simple-name) (filter #(re-find #"Foo" %)))
+
+;; ✅ correct
+(->> (intro/list-entities) (map :name) (filter some?) (filter #(re-find #"Foo" %)))
+```
+
+### `lw/bean SomeClass` only resolves Spring beans, not JPA entities
+JPA entity classes are not Spring beans. Passing an entity class throws `NoSuchBeanDefinitionException`.
+Use `lw/bean "repositoryBeanName"` to access data — find the right name with `lw/find-beans-matching`.
+
+```clojure
+;; ❌ NoSuchBeanDefinitionException
+(lw/bean eu.example.MyEntity)
+
+;; ✅ find the repository instead
+(lw/find-beans-matching ".*MyEntity.*[Rr]epo.*")
+(lw/bean "myEntityRepository")
+```
+
+### `clojure.core/bean` on a Spring proxy exposes proxy internals, not domain properties
+Controllers and services are CGLIB proxies. Calling `(clojure.core/bean proxy)` returns proxy metadata
+(`:advisors`, `:callbacks`, `:frozen`, etc.), not the bean's own fields or properties.
+To discover what methods to call on a bean, read the source code instead.
+
+### `@PreAuthorize` on controllers blocks direct REPL invocation
+Calling a controller method directly from the REPL throws `AuthenticationCredentialsNotFoundException`
+because there is no Spring Security context. Bypass by calling the underlying service bean directly.
+
+```clojure
+;; ❌ AuthenticationCredentialsNotFoundException
+(.myEndpoint (lw/bean "myController") someArg)
+
+;; ✅ call the service the controller delegates to
+(.myServiceMethod (lw/bean "myService") someArg)
+```
+
+### `trace/trace-sql` requires Livewire ≥ 0.1.0-SNAPSHOT (post Hibernate 7 fix)
+SQL tracing works with both Hibernate 6 and 7. Older Livewire builds silently registered
+no `StatementInspector` on Hibernate 7 apps, resulting in `{:count 0, :queries []}`.
+Ensure the app is running with a current Livewire JAR.
+
+---
+
 ## Examples
 
 ```clojure

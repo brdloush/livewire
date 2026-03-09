@@ -263,10 +263,5 @@ about.
 
 ---
 
-## Technical Debt / Chores
-
-- [ ] **Hibernate version support:** We currently rely on `hibernate-core` version 6.x in our `project.clj` `:provided` scope to compile the Java `StatementInspector`. This is technical debt: we may need to support compiling against multiple major versions (e.g., Hibernate 5 for Spring Boot 2.x apps) or find a reflection-based way to avoid the compile-time coupling.
-
----
 
 *Don't touch live wires in production. But in dev? Grab on.*

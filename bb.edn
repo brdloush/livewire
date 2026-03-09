@@ -21,4 +21,16 @@
   clean-install
   {:doc "Clean build artifacts, then install to local Maven repository"
    :depends [clean]
-   :task (shell "lein with-profile +provided install")}}}
+   :task (shell "lein with-profile +provided install")}
+
+  serve
+  {:doc "Serve web/ on port 4000 and print a QR code for the local URL"
+   :task (let [ip   (first (.split (.trim (:out (babashka.process/sh "hostname" "-I"))) " "))
+               port 4000
+               url  (str "http://" ip ":" port)]
+           (println (str "→ " url))
+           (babashka.process/process ["bbserve" "--dir" "web" "--port" (str port)]
+                                     {:out :inherit :err :inherit})
+           (Thread/sleep 600)
+           (babashka.process/shell "qrencode" "-t" "ansiutf8" url))}}
+}

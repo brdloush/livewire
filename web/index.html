@@ -82,25 +82,31 @@
       background: rgba(21, 20, 35, 0.88);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
-      padding: 0.9rem 2rem;
+      padding: 0 2rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      height: 140px;
     }
 
     .nav-brand {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
-      font-weight: 700;
-      font-size: 1.1rem;
-      color: var(--text);
+      gap: 0.85rem;
+      font-weight: 800;
+      font-size: 1.75rem;
+      letter-spacing: -0.02em;
+      background: linear-gradient(110deg, var(--text) 40%, var(--green) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     .nav-brand img {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
+      width: 128px;
+      height: 128px;
+      border-radius: 14px;
+      display: block;
     }
 
     .nav-links {
@@ -118,7 +124,7 @@
       min-height: 100vh;
       display: flex;
       align-items: center;
-      padding: 8rem 0 6rem;
+      padding: 10rem 0 6rem;
       position: relative;
       overflow: hidden;
     }

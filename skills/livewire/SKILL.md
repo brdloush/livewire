@@ -218,6 +218,60 @@ if a method returns a `List`, confirm the table is small before calling it witho
 
 ---
 
+## N+1 Hunting — Tips & Gotchas
+
+### N+1 presence is data-dependent — always test multiple IDs
+An N+1 only fires when the problematic association actually has rows. A query that looks
+fine on one record may blow up on another. **Always test several representative IDs**
+before concluding there is no N+1.
+
+```clojure
+;; ✅ test multiple IDs in one shot and compare query counts
+(mapv (fn [id]
+        (let [res (trace/trace-sql
+                    (lw/run-as "admin"
+                      (.myEndpoint (lw/bean "myController")
+                                   (java.util.UUID/fromString id))))]
+          {:id id :total-queries (:count res) :suspicious (count (:suspicious-queries (trace/detect-n+1 res)))}))
+      ["uuid-1" "uuid-2" "uuid-3" "uuid-4" "uuid-5"])
+;; => look for outliers — the problematic ID will stand out with a much higher :total-queries count
+```
+
+### `FetchType.LAZY` on a non-PK `@ManyToOne` is silently ignored by Hibernate
+If a `@ManyToOne` uses `referencedColumnName` pointing to a **non-primary-key** column,
+Hibernate cannot create a lazy proxy (it needs the PK to do so). The association is
+effectively loaded eagerly regardless of the `LAZY` declaration, firing one SELECT per
+parent row — a hidden N+1 that is invisible from reading the code alone.
+
+```kotlin
+// ⚠️ looks lazy, but Hibernate fires a SELECT per row because Uid is not the @Id
+@ManyToOne(fetch = FetchType.LAZY, optional = false)
+@JoinColumn(name = "book_isbn", referencedColumnName = "isbn")   // ← non-PK join
+open var bookIsbn: Book? = null
+```
+
+**Fix:** add an explicit `left join fetch` in the JPQL for the owning query so Hibernate
+loads the full entity (including its PK) in the main query instead of per-row selects.
+
+### Use hot-swap to confirm a JPQL fix before touching source code
+Rather than edit → restart → retest, hot-swap the candidate fix, verify with `trace-sql`,
+then swap back to the original to confirm the N+1 returns. Only then write the fix to
+source. This round-trip gives high confidence with zero restarts.
+
+```clojure
+;; 1. swap in the fix
+(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")
+;; 2. confirm N+1 is gone
+(trace/detect-n+1 (trace/trace-sql (lw/run-as "admin" (.myMethod ...))))
+;; 3. swap back to broken — confirm N+1 returns
+(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original without fetch")
+(trace/detect-n+1 (trace/trace-sql (lw/run-as "admin" (.myMethod ...))))
+;; 4. restore and write the fix to source
+(hq/reset-query! "myRepo" "myMethod")
+```
+
+---
+
 ## ⚠️ Known Pitfalls
 
 ### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`

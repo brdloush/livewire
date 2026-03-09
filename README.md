@@ -159,10 +159,11 @@ Once connected, require the namespace:
 
 ## Trace API (`net.brdloush.livewire.trace`)
 
-Once connected, require the namespace:
+Once connected, require the namespaces:
 
 ```clojure
-(require '[net.brdloush.livewire.trace :as trace])
+(require '[net.brdloush.livewire.core :as lw]
+         '[net.brdloush.livewire.trace :as trace])
 ```
 
 | Function / Macro | Description |

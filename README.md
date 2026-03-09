@@ -207,7 +207,7 @@ Once connected, require the namespaces:
 ;; Run a repository method and see the actual SQL that gets executed
 (trace/trace-sql
   (lw/in-readonly-tx
-    (count (.findAll (lw/bean "userRepository")))))
+    (.count (lw/bean "userRepository"))))
 ;; => {:result 42,
 ;;     :queries [{:sql "select ...", :caller "com.example.MyService:42"}],
 ;;     :count 1,
@@ -238,10 +238,14 @@ Once connected, require the namespaces:
 (lw/find-beans-matching ".*Repository.*")
 ;; => ("bookRepository" "authorRepository" ...)
 
-;; Query via a repository — convert to plain Clojure maps inside the
-;; transaction (see note on lazy loading below)
+;; Query via a repository — always page or limit; never call .findAll on a large table
+;; ❌ danger: may return millions of rows
+;; (.findAll (lw/bean "bookRepository"))
+;; ✅ use findAll with a Pageable to cap results
 (lw/in-readonly-tx
-  (->> (.findAll (lw/bean "bookRepository"))
+  (->> (.findAll (lw/bean "bookRepository")
+                 (org.springframework.data.domain.PageRequest/of 0 20))
+       .getContent
        (mapv #(select-keys (clojure.core/bean %) [:id :email :status :active]))))
 ;; => [{:id 1, :email "test@example.com", :status "PENDING", :active false}]
 
@@ -249,6 +253,22 @@ Once connected, require the namespaces:
 (lw/in-tx
   (.save (lw/bean "userRepository") (->User "test@example.com"))
   (count (.findAll (lw/bean "userRepository"))))
+```
+
+### ⚠️ Never call `.findAll` without a `Pageable`
+
+`.findAll()` with no arguments fetches every row in the table. On large datasets this
+hangs the REPL and can OOM the JVM. Always cap results with a `PageRequest`:
+
+```clojure
+;; ❌ danger: loads every row
+(.findAll (lw/bean "bookRepository"))
+
+;; ✅ cap at 20 rows
+(->> (.findAll (lw/bean "bookRepository")
+               (org.springframework.data.domain.PageRequest/of 0 20))
+     .getContent
+     (mapv #(select-keys (clojure.core/bean %) [:id :email])))
 ```
 
 ### ⚠️ Hibernate lazy loading and transaction boundaries

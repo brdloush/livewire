@@ -2,7 +2,7 @@
   "Tracing tools: capture SQL execution natively without P6Spy."
   (:import [net.brdloush.livewire LivewireSqlTracer LivewireSqlTracer$TraceEntry]))
 
-(defn- unpack-entries [entries]
+(defn unpack-entries [entries]
   (mapv (fn [^LivewireSqlTracer$TraceEntry e]
           {:sql (.-sql e)
            :caller (.-caller e)})

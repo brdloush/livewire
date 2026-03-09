@@ -66,6 +66,25 @@
     (filter #(re-find re %) (bean-names))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Environment information
+
+(defn info
+  "Returns basic information about the running environment (Spring version,
+   Java version, active profiles, etc.)."
+  []
+  (let [env (.getEnvironment (ctx))]
+    {:application-name    (.getProperty env "spring.application.name" "unknown")
+     :active-profiles     (vec (.getActiveProfiles env))
+     :java-version        (System/getProperty "java.version")
+     :os-name             (System/getProperty "os.name")
+     :spring-version      (try (org.springframework.core.SpringVersion/getVersion)
+                               (catch Throwable _ nil))
+     :spring-boot-version (try (org.springframework.boot.SpringBootVersion/getVersion)
+                               (catch Throwable _ nil))
+     :hibernate-version   (try (org.hibernate.Version/getVersionString)
+                               (catch Throwable _ nil))}))
+
+;;; ---------------------------------------------------------------------------
 ;;; Property inspection
 
 (defn all-properties

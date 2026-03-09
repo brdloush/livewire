@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Livewire — Live nREPL wire into your Spring Boot app</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #151423;
+      --bg-card:   #1a1930;
+      --bg-code:   #0f0e1c;
+      --blue:      #5785CA;
+      --blue-dim:  #3d6aad;
+      --green:     #98C948;
+      --green-dim: #7aab2f;
+      --text:      #FAFAFA;
+      --muted:     #A5A5AD;
+      --border:    #2a2940;
+      --border-mid:#3C4A4E;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { color: var(--green); }
+
+    code, pre {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.875em;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────── */
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    section { padding: 6rem 0; }
+    section:nth-child(even) { background: rgba(255,255,255,0.018); }
+
+    h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-sub {
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 620px;
+      margin-bottom: 3rem;
+    }
+
+    /* ── Nav ──────────────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(21, 20, 35, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.9rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+    }
+
+    .nav-brand img {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+      font-size: 0.9rem;
+    }
+
+    .nav-links a { color: var(--muted); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 8rem 0 6rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #hero::before {
+      content: '';
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 900px; height: 600px;
+      background: radial-gradient(ellipse at center,
+        rgba(87,133,202,0.18) 0%,
+        rgba(152,201,72,0.08) 40%,
+        transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4rem;
+      align-items: center;
+    }
+
+    .hero-logo {
+      width: 220px;
+      height: 220px;
+      border-radius: 28px;
+      box-shadow:
+        0 0 60px rgba(87,133,202,0.25),
+        0 0 120px rgba(152,201,72,0.1);
+    }
+
+    .hero-warning {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--green);
+      border: 1px solid rgba(152,201,72,0.35);
+      border-radius: 999px;
+      padding: 0.3rem 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title {
+      font-size: clamp(2.4rem, 5vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-title .live {
+      color: var(--green);
+      text-shadow: 0 0 40px rgba(152,201,72,0.5);
+    }
+
+    .hero-title .wire {
+      color: var(--blue);
+    }
+
+    .hero-tagline {
+      font-size: 1.2rem;
+      color: var(--muted);
+      margin-bottom: 2.5rem;
+      max-width: 560px;
+    }
+
+    .hero-tagline strong {
+      color: var(--text);
+      font-style: italic;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.6rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      border: 1px solid transparent;
+    }
+    .btn-primary:hover {
+      background: var(--blue-dim);
+      color: #fff;
+      box-shadow: 0 0 24px rgba(152,201,72,0.35);
+      border-color: var(--green);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border-mid);
+    }
+    .btn-ghost:hover {
+      color: var(--text);
+      border-color: var(--blue);
+    }
+
+    /* ── Problem ──────────────────────────────────────────────────── */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 3rem;
+    }
+
+    .problem-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+    }
+
+    .problem-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+
+    .problem-card p { color: var(--muted); font-size: 0.95rem; }
+
+    .problem-card .emoji {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .problem-card.highlight {
+      border-color: var(--green);
+      background: linear-gradient(135deg, rgba(152,201,72,0.06), var(--bg-card));
+    }
+
+    .loop-arrow {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin: 1.5rem 0;
+      flex-wrap: wrap;
+    }
+
+    .loop-arrow span {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.9rem;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+
+    .loop-arrow span.bad { border-color: rgba(200,80,80,0.5); color: #e07070; }
+    .loop-arrow span.good { border-color: var(--green); color: var(--green); }
+    .loop-arrow .arrow { color: var(--border-mid); font-size: 1.2rem; }
+
+    /* ── Architecture ─────────────────────────────────────────────── */
+    .arch-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      font-family: monospace;
+      font-size: 0.92rem;
+      line-height: 2;
+      color: var(--muted);
+      max-width: 640px;
+      margin: 3rem 0;
+    }
+
+    .arch-box .hl-green { color: var(--green); }
+    .arch-box .hl-blue  { color: var(--blue); }
+    .arch-box .hl-text  { color: var(--text); }
+
+    /* ── Features ─────────────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--blue);
+      border-radius: 12px;
+      padding: 1.75rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .feature-card:hover {
+      border-left-color: var(--green);
+      box-shadow: 0 4px 32px rgba(87,133,202,0.1);
+    }
+
+    .feature-icon {
+      font-size: 1.6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-card h3 code {
+      color: var(--green);
+      font-size: 0.95em;
+    }
+
+    .feature-card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Code blocks ──────────────────────────────────────────────── */
+    .code-block {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.7;
+    }
+
+    .code-block .c  { color: #5a6a7a; }   /* comments */
+    .code-block .kw { color: var(--blue); }/* keywords / fn names */
+    .code-block .s  { color: #e6a95a; }   /* strings */
+    .code-block .n  { color: var(--green); }/* numbers / special vals */
+    .code-block .p  { color: var(--muted); }/* punctuation */
+    .code-block .r  { color: #c47bdb; }   /* result output */
+
+    /* ── Story ────────────────────────────────────────────────────── */
+    #story { position: relative; overflow: hidden; }
+
+    #story::before {
+      content: '';
+      position: absolute;
+      right: -200px; top: 50%;
+      transform: translateY(-50%);
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(152,201,72,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .story-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--green);
+      border-radius: 12px;
+      padding: 2.5rem;
+      max-width: 780px;
+      font-size: 1.05rem;
+      line-height: 1.8;
+    }
+
+    .story-box p { color: var(--muted); margin-bottom: 1rem; }
+    .story-box p:last-child { margin-bottom: 0; }
+    .story-box strong { color: var(--text); }
+    .story-box .result {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--green);
+    }
+
+    .story-stats {
+      display: flex;
+      gap: 2rem;
+      margin-top: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-num {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--green);
+      line-height: 1;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ── Screenshots ──────────────────────────────────────────────── */
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 3rem;
+    }
+
+    .screenshot-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .screenshot-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(87,133,202,0.15);
+    }
+
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .screenshot-caption {
+      padding: 0.75rem 1rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    /* ── Install ──────────────────────────────────────────────────── */
+    #install { text-align: center; }
+
+    .install-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+      text-align: left;
+    }
+
+    .install-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem;
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      background: var(--blue);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .install-step h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 0;
+      text-align: center;
+    }
+
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+
+    .footer-logo img { width: 24px; border-radius: 4px; }
+
+    .footer-warning {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .footer-warning strong { color: var(--green); }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-logo { width: 140px; height: 140px; justify-self: center; order: -1; }
+      .hero-title { font-size: 2.2rem; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav>
+  <a class="nav-brand" href="#">
+    <img src="logo.png" alt="Livewire logo" />
+    Livewire
+  </a>
+  <ul class="nav-links">
+    <li><a href="#problem">Problem</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#story">Story</a></li>
+    <li><a href="#install">Install</a></li>
+  </ul>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-warning">⚡ Dev only &nbsp;·&nbsp; You've been warned</div>
+        <h1 class="hero-title">
+          Stop guessing.<br>
+          Ask the <span class="live">live</span> app.
+        </h1>
+        <p class="hero-tagline">
+          Livewire embeds a Clojure nREPL server inside your running Spring Boot app —
+          giving your AI agent a <strong>live, stateful probe into the JVM</strong>.
+          Beans, queries, transactions, security context, and all.
+        </p>
+        <div class="hero-cta">
+          <a href="#install" class="btn btn-primary">⚡ Get started</a>
+          <a href="#features" class="btn btn-ghost">See what it can do →</a>
+        </div>
+      </div>
+      <img src="logo.png" alt="Livewire" class="hero-logo" />
+    </div>
+  </div>
+</section>
+
+<!-- ── Problem ──────────────────────────────────────────────────────── -->
+<section id="problem">
+  <div class="container">
+    <div class="section-label">The problem</div>
+    <h2>The restart tax is killing your loop</h2>
+    <p class="section-sub">
+      Modern Spring Boot development has a fundamental feedback problem. And AI agents make it worse.
+    </p>
+
+    <div class="loop-arrow">
+      <span class="bad">edit</span>
+      <span class="arrow">→</span>
+      <span class="bad">restart (30–120s)</span>
+      <span class="arrow">→</span>
+      <span class="bad">observe</span>
+      <span class="arrow">→</span>
+      <span class="bad">repeat</span>
+    </div>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <span class="emoji">🤖</span>
+        <h3>Agents guess. They don't ask.</h3>
+        <p>
+          AI coding agents reason statically about your Spring app. They read the code,
+          form a hypothesis, and apply a fix — but they can't observe the running system.
+          They're flying blind every time.
+        </p>
+      </div>
+      <div class="problem-card">
+        <span class="emoji">⏱️</span>
+        <h3>Restarts destroy state and time</h3>
+        <p>
+          Every restart costs 30 seconds to 2 minutes and destroys all in-memory state
+          accumulated during a debugging session. You lose context, momentum, and time.
+        </p>
+      </div>
+      <div class="problem-card highlight">
+        <span class="emoji">⚡</span>
+        <h3>Livewire closes the gap</h3>
+        <p>
+          With a live nREPL wired into the JVM, your agent can probe beans, run queries,
+          trace SQL, and hot-swap fixes — all against the actual running app.
+          Hypotheses are tested in seconds, not minutes.
+        </p>
+      </div>
+      <div class="problem-card">
+        <span class="emoji">🔁</span>
+        <h3>The loop you actually want</h3>
+        <div class="loop-arrow" style="margin: 1rem 0 0; flex-wrap: wrap;">
+          <span class="good">observe</span>
+          <span class="arrow">→</span>
+          <span class="good">hypothesise</span>
+          <span class="arrow">→</span>
+          <span class="good">hot-swap</span>
+          <span class="arrow">→</span>
+          <span class="good">verify</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How it works ──────────────────────────────────────────────────── -->
+<section id="how">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2>One wire. Everything inside.</h2>
+    <p class="section-sub">
+      Livewire auto-configures when <code>livewire.enabled=true</code> is set.
+      No code changes. No Spring profiles to configure. Just a JAR dependency.
+    </p>
+
+    <div class="arch-box">
+      <span class="hl-text">Spring Boot App</span> <span style="color:var(--border-mid)">(running)</span><br>
+      &nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-green">nREPL server</span> <span style="color:var(--border-mid)">(embedded, dev only · port 7888)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-text">Livewire namespaces</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">core</span> &nbsp;&nbsp;· beans, transactions, run-as<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">trace</span> &nbsp;· SQL tracing, N+1 detection<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query</span> &nbsp;· JPQL / SQL execution<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
+      <br>
+      <span class="hl-green">Claude Code</span> <span style="color:var(--border-mid)">→</span> <span class="hl-blue">clojure_eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ──────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2>Everything you need to probe a live Spring app</h2>
+    <p class="section-sub">Six namespaces. Require and go.</p>
+
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Live Bean &amp; Property Inspection</h3>
+        <p>Query any Spring bean, list all endpoints, inspect resolved properties and filter beans by regex — all against the running app, no source reading required.</p>
+        <div class="code-block"><pre><span class="c">;; find all repository beans</span>
+<span class="p">(</span><span class="kw">lw/find-beans-matching</span> <span class="s">".*Repository.*"</span><span class="p">)</span>
+
+<span class="c">;; check what DB URL is actually in use</span>
+<span class="p">(</span><span class="kw">lw/props-matching</span> <span class="s">"spring\\.datasource\\.url"</span><span class="p">)</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗄️</div>
+        <h3>SQL &amp; JPQL Execution</h3>
+        <p>Run raw SQL or JPQL directly through the live <code>DataSource</code> / <code>EntityManager</code> — with Hibernate type converters, active <code>@Filter</code>s, and real transaction semantics.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+  <span class="p">(</span><span class="kw">q/sql</span> <span class="s">"SELECT TOP 20 id, email
+         FROM clients
+         ORDER BY created_at DESC"</span><span class="p">))</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔬</div>
+        <h3>SQL Tracing &amp; N+1 Detection</h3>
+        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">detect-n+1</span>
+  <span class="p">(</span><span class="kw">trace-sql</span>
+    <span class="p">(</span><span class="kw">.getBalances</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"balanceService"</span><span class="p">)</span>
+                  25<span class="p">)))</span>
+<span class="r">;; => {:suspicious-queries
+;;      [{:sql "select ... yields", :count 30}]
+;;     :total-queries 31, :duration-ms 1271}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <h3><code>run-as</code> — Call Secured Beans Directly</h3>
+        <p>Set a Spring <code>SecurityContext</code> for the duration of a REPL call. Call <code>@PreAuthorize</code>-guarded controllers and services directly — no more bypassing to the service layer.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="s">"admin@example.com"</span>
+  <span class="p">(</span><span class="kw">.getBookById</span>
+    <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)</span>
+    25<span class="p">))</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔥</div>
+        <h3>Live <code>@Query</code> Hot-Swap</h3>
+        <p>Replace any Spring Data JPA <code>@Query</code> live — no restart. Fix it, verify it, write it back to source. Works by patching three internal layers of Spring Data JPA + Hibernate in concert.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">hq/hot-swap-query!</span>
+  <span class="s">"bookRepository"</span>
+  <span class="s">"findByIdWithDetails"</span>
+  <span class="s">"select a from Account a
+   join fetch a.yields
+   where a.clientId = :clientId"</span><span class="p">)</span>
+<span class="r">;; [hot-queries] hot-swapped ✓</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🏗️</div>
+        <h3>Hibernate Entity Introspection</h3>
+        <p>Inspect any entity's live Hibernate metamodel: table name, column mappings, relation definitions, fetch strategies. No annotation parsing — the live metamodel is the source of truth.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">intro/inspect-entity</span> <span class="s">"Client"</span><span class="p">)</span>
+<span class="r">;; => {:table-name "clients",
+;;     :identifier {:name "id", ...},
+;;     :properties [{:name "accounts",
+;;                   :fetch "SELECT", ...}]}</span></pre></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Story ──────────────────────────────────────────────────────────── -->
+<section id="story">
+  <div class="container">
+    <div class="section-label">Real-world story</div>
+    <h2>From Sentry alert to confirmed fix.<br>Zero restarts.</h2>
+
+    <div class="story-box">
+      <p>
+        A performance regression landed in Sentry — suspiciously high query counts on a
+        books endpoint. The AI agent connected to the live app via Livewire,
+        traced the service call with <strong>trace-sql</strong>, and found nothing suspicious at first.
+        It tried several book IDs.
+      </p>
+      <p>
+        One of them triggered <strong>30+ SQL queries</strong> for a single request.
+        <strong>detect-n+1</strong> immediately flagged the culprit: a
+        <strong>@ManyToOne(LAZY)</strong> relation with <strong>referencedColumnName</strong>
+        pointing to a non-PK column — Hibernate can't proxy without the PK, so it fires an
+        immediate SELECT per row regardless of the LAZY declaration.
+      </p>
+      <p>
+        The agent used <strong>hot-swap-query!</strong> to inject a JOIN FETCH fix live,
+        re-ran the trace, and confirmed the query count dropped from 30 to 1.
+        Then it wrote the fix back to the source file.
+      </p>
+      <div class="result">One REPL session. Zero restarts. Bug confirmed and fixed.</div>
+    </div>
+
+    <div class="story-stats">
+      <div class="stat">
+        <span class="stat-num">30→1</span>
+        <div class="stat-label">SQL queries per request</div>
+      </div>
+      <div class="stat">
+        <span class="stat-num">0</span>
+        <div class="stat-label">App restarts needed</div>
+      </div>
+      <div class="stat">
+        <span class="stat-num">1</span>
+        <div class="stat-label">REPL session</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Screenshots ───────────────────────────────────────────────────── -->
+<section id="screenshots">
+  <div class="container">
+    <div class="section-label">In action</div>
+    <h2>See it happen</h2>
+    <p class="section-sub">Real sessions. Real apps. Real results.</p>
+
+    <div class="screenshots-grid">
+      <div class="screenshot-card">
+        <img src="milestones/02-tracing-sql-of-service.png" alt="SQL tracing live" loading="lazy" />
+        <div class="screenshot-caption">SQL tracing a live service call</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="milestones/04-detect-nplus1.png" alt="N+1 detection output" loading="lazy" />
+        <div class="screenshot-caption">detect-n+1 flagging the culprit</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="milestones/03-pinpointing-the-smoking-gun.png" alt="Pinpointing the N+1 caller" loading="lazy" />
+        <div class="screenshot-caption">Pinpointing the exact N+1 caller</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="milestones/13-hot-reload-of-Query-in-spring-data.png" alt="Hot-swapping a @Query" loading="lazy" />
+        <div class="screenshot-caption">Hot-swapping a @Query live</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Install ───────────────────────────────────────────────────────── -->
+<section id="install">
+  <div class="container">
+    <div class="section-label">Get started</div>
+    <h2>Three steps. One property.</h2>
+    <p class="section-sub">No code changes to your app. No Spring profiles to configure.</p>
+
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="step-num">1</div>
+        <h3>Add the dependency</h3>
+        <div class="code-block"><pre><span class="c">&lt;!-- Maven --&gt;</span>
+<span class="kw">&lt;dependency&gt;</span>
+  &lt;groupId&gt;<span class="n">net.brdloush</span>&lt;/groupId&gt;
+  &lt;artifactId&gt;<span class="n">livewire</span>&lt;/artifactId&gt;
+  &lt;version&gt;<span class="n">0.1.0-SNAPSHOT</span>&lt;/version&gt;
+<span class="kw">&lt;/dependency&gt;</span></pre></div>
+      </div>
+
+      <div class="install-step">
+        <div class="step-num">2</div>
+        <h3>Enable it locally</h3>
+        <div class="code-block"><pre><span class="c"># application-local.properties</span>
+<span class="kw">livewire.enabled</span>=<span class="n">true</span>
+
+<span class="c"># optional: change the port (default 7888)</span>
+<span class="kw">livewire.nrepl.port</span>=<span class="n">7888</span></pre></div>
+      </div>
+
+      <div class="install-step">
+        <div class="step-num">3</div>
+        <h3>Connect &amp; probe</h3>
+        <div class="code-block"><pre><span class="c">;; From Claude Code / clojure-mcp</span>
+<span class="c">;; or any nREPL client on port 7888</span>
+<span class="p">(</span><span class="kw">require</span>
+  <span class="s">'[net.brdloush.livewire.core :as lw]</span>
+  <span class="s">'[net.brdloush.livewire.trace :as trace]</span>
+  <span class="s">'[net.brdloush.livewire.hot-queries :as hq]</span><span class="p">)</span>
+
+<span class="p">(</span><span class="kw">lw/info</span><span class="p">)</span> <span class="c">; you're in</span></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-logo">
+      <img src="logo.png" alt="Livewire" />
+      Livewire
+    </div>
+    <p class="footer-warning">
+      <strong>Dev only. Not for production.</strong>
+      You've been warned.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

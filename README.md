@@ -120,6 +120,42 @@ Once connected, require the namespace:
 
 ---
 
+## Introspection API (`net.brdloush.livewire.introspect`)
+
+Once connected, require the namespace:
+
+```clojure
+(require '[net.brdloush.livewire.introspect :as intro])
+```
+
+| Function | Description |
+|---|---|
+| `(intro/list-endpoints)` | Returns all registered HTTP endpoints (path, method, controller, params) |
+| `(intro/list-entities)` | Lists all Hibernate-managed entities (simple name and FQN) |
+| `(intro/inspect-entity "Name")` | Deeply inspects an entity's mapped table, columns, and relations |
+
+### Introspection examples
+
+```clojure
+;; Discover available HTTP endpoints
+(first (intro/list-endpoints))
+;; => {:methods ["PUT"], :paths ["/api/v1/clients/segments"], :controller "com.example.bloatedshelf.controller.BookController", ...}
+
+;; Find entities managed by Hibernate
+(take 2 (intro/list-entities))
+;; => ({:name "AccountBalance", :class "eu...AccountBalance"}
+;;     {:name "AcknowledgeNotification", :class "eu...AcknowledgeNotification"})
+
+;; Inspect a specific entity to see its exact database mappings and relations
+(intro/inspect-entity "Client")
+;; => {:entity-name "com.example.bloatedshelf.entity.Book",
+;;     :table-name "clients",
+;;     :identifier {:name "id", :columns ["id"], :type "uuid"},
+;;     :properties [{:name "clientAddresses", :is-association true, :collection true, :target-entity "...", :fetch "SELECT", ...}]}
+```
+
+---
+
 ## Example session
 
 ```clojure

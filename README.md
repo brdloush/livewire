@@ -108,6 +108,7 @@ Once connected, require the namespace:
 | Function / Macro | Description |
 |---|---|
 | `(lw/ctx)` | Returns the live `ApplicationContext` |
+| `(lw/info)` | Basic env info (Spring, Java, OS, active profiles) |
 | `(lw/bean "name")` | Get a bean by name |
 | `(lw/bean MyService)` | Get a bean by type |
 | `(lw/beans-of-type DataSource)` | All beans of a type → map |

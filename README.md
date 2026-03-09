@@ -170,6 +170,7 @@ Once connected, require the namespaces:
 |---|---|
 | `(trace/trace-sql & body)` | Wraps body and captures every SQL statement fired by Hibernate on the current thread. |
 | `(trace/trace-sql-global & body)` | Same as above, but captures SQL across *all* threads globally (useful for `@Async`). |
+| `(trace/detect-n+1 trace-res)` | Analyzes a trace result and groups repeatedly fired queries to find N+1 problems. |
 
 ### Trace examples
 
@@ -179,9 +180,20 @@ Once connected, require the namespaces:
   (lw/in-readonly-tx
     (count (.findAll (lw/bean "userRepository")))))
 ;; => {:result 42,
-;;     :queries ["select count(*) from users"],
+;;     :queries [{:sql "select ...", :caller "com.example.MyService:42"}],
 ;;     :count 1,
 ;;     :duration-ms 15}
+
+;; Automatically hunt for N+1 queries by passing the trace result to detect-n+1
+(trace/detect-n+1
+  (trace/trace-sql
+    (.getAllBooks (lw/bean "bookController")
+                        25)))
+;; => {:suspicious-queries [{:sql "select ... from client_account_yields ...",
+;;                           :caller "com.example.bloatedshelf.service.BookService:52",
+;;                           :count 18}],
+;;     :total-queries 30,
+;;     :duration-ms 1271}
 ```
 
 ---

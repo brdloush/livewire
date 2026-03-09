@@ -47,3 +47,24 @@
          (catch Exception e#
            (LivewireSqlTracer/stopGlobalTrace)
            (throw e#))))))
+
+(defn detect-n+1
+  "Analyzes a trace result (from `trace-sql` or `trace-sql-global`) and
+   flags any queries that were executed repeatedly.
+
+   Returns a map with `:suspicious-queries` containing queries that ran
+   more than the `threshold` times (defaults to 3), sorted by execution count."
+  ([trace-result]
+   (detect-n+1 trace-result 3))
+  ([trace-result threshold]
+   (let [queries (:queries trace-result)
+         ;; Group by identical sql+caller signature
+         freqs (frequencies queries)
+         suspicious (->> freqs
+                         (filter (fn [[_ count]] (> count threshold)))
+                         (sort-by val >)
+                         (mapv (fn [[query-info count]]
+                                 (assoc query-info :count count))))]
+     {:suspicious-queries suspicious
+      :total-queries (:count trace-result)
+      :duration-ms (:duration-ms trace-result)})))

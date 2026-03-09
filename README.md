@@ -278,6 +278,64 @@ about.
 
 ---
 
+## Hot Queries API (`net.brdloush.livewire.hot-queries`)
+
+Swap a Spring Data JPA `@Query` annotation live — without restarting the app.
+Mutates the `queryString` inside the `SimpleJpaQuery` held by
+`QueryExecutorMethodInterceptor`, so all of Spring Data's result-type coercion
+stays intact. On subsequent swaps, only an atom is `reset!` — no reflection on
+the hot path.
+
+```clojure
+(require '[net.brdloush.livewire.hot-queries :as hq])
+```
+
+| Function | Description |
+|---|---|
+| `(hq/list-queries "repoBean")` | Lists all `@Query`-annotated methods on a repository bean with their current JPQL |
+| `(hq/hot-swap-query! "repoBean" "methodName" new-jpql)` | Swaps the JPQL live; first call uses reflection, subsequent calls just `reset!` the atom |
+| `(hq/list-swapped)` | Shows all currently hot-swapped queries across all repos |
+| `(hq/reset-query! "repoBean" "methodName")` | Restores the original JPQL |
+
+### Hot Queries example
+
+```clojure
+;; See what @Query methods are on the repository
+(hq/list-queries "bookRepository")
+;; => ({:method "findByIdWithDetails",
+;;      :query-class "SimpleJpaQuery",
+;;      :jpql "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres WHERE b.id = :id"}
+;;     ...)
+
+;; Swap the query to return nothing (useful for testing / debugging)
+(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
+  "select b from Book b where 1=2")
+;; [hot-queries] hot-swapped bookRepository#findByIdWithDetails
+;; => {:swapped ["bookRepository" "findByIdWithDetails"], :query "select b from Book b where 1=2"}
+
+;; Confirm it's live — call the repo method, get empty result
+(lw/run-as "admin"
+  (lw/in-readonly-tx
+    (.findByIdWithDetails (lw/bean "bookRepository") 25)))
+;; => []
+
+;; Subsequent swap is reflection-free (just resets the atom)
+(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
+  "select b from Book b where b.id = :id")
+;; => {:swapped ["bookRepository" "findByIdWithDetails"], :query "..."}
+
+;; Check what's currently swapped
+(hq/list-swapped)
+;; => [{:bean "bookRepository", :method "findByIdWithDetails", :jpql "select c from Contract c ..."}]
+
+;; Restore the original
+(hq/reset-query! "bookRepository" "findByIdWithDetails")
+;; [hot-queries] restored bookRepository#findByIdWithDetails
+;; => :restored
+```
+
+---
+
 ## What's next
 
 See [TODO.md](TODO.md) for open tasks, planned components, and ideas.

@@ -191,6 +191,30 @@ Wrap it in `select-keys` to avoid triggering lazy associations you don't need.
 
 ---
 
+## ⚠️ Important Rules
+
+### Always limit SQL queries when fetching sample data or IDs
+Tables in a live app can contain millions of rows. **Always add a `TOP` / `LIMIT` / `FETCH FIRST`
+clause** when querying for sample data, example IDs, or exploratory results. The default cap is
+**20 rows**.
+
+```clojure
+;; ❌ may return millions of rows and hang the REPL
+(lw/in-readonly-tx (q/sql "SELECT id FROM books"))
+
+;; ✅ safe — cap at 20
+(lw/in-readonly-tx (q/sql "SELECT TOP 20 id, email FROM books"))
+
+;; ✅ also fine with LIMIT (depends on DB dialect)
+(lw/in-readonly-tx (q/sql "SELECT id, email FROM books LIMIT 20"))
+```
+
+Apply the same discipline to JPQL queries via `EntityManager` and to repository calls —
+if a method returns a `List`, confirm the table is small before calling it without a
+`Pageable` / `limit`.
+
+---
+
 ## ⚠️ Known Pitfalls
 
 ### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`

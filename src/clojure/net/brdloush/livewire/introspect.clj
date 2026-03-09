@@ -36,6 +36,18 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Hibernate Metamodel
 
+(defn list-entities
+  "Returns a list of all Hibernate-managed entities (their simple names and FQNs)."
+  []
+  (let [emf (core/bean "entityManagerFactory")
+        mm (.getMetamodel emf)]
+    (->> (.getEntities mm)
+         (map (fn [e]
+                {:name (.getName e)
+                 :class (.getName (.getJavaType e))}))
+         (sort-by :name)
+         vec)))
+
 (defn- resolve-entity-name
   "Resolves a simple name or FQN to the Hibernate entity name."
   [emf entity-class]

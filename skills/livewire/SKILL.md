@@ -20,7 +20,8 @@ the JVM beats static analysis every time.
    ```clojure
    (require '[net.brdloush.livewire.core :as lw]
             '[net.brdloush.livewire.introspect :as intro]
-            '[net.brdloush.livewire.trace :as trace])
+            '[net.brdloush.livewire.trace :as trace]
+            '[net.brdloush.livewire.hot-queries :as hq])
    ```
 
 3. **Evaluate** snippets iteratively — the session persists between calls:
@@ -56,6 +57,40 @@ the JVM beats static analysis every time.
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
 | `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
 | `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
+| `(lw/run-as user & body)` | Run body with a Spring `SecurityContext` set — required for `@PreAuthorize`-guarded beans |
+
+### `run-as` — when and how to use it
+
+Use `run-as` whenever calling a bean that is protected by Spring Security (`@PreAuthorize`,
+`@Secured`, etc.). Without it the REPL has no `SecurityContext` and throws
+`AuthenticationCredentialsNotFoundException`.
+
+`user` accepts three forms:
+
+| Form | Effect |
+|---|---|
+| `"alice"` | Token for `alice` with `ROLE_USER` + `ROLE_ADMIN` |
+| `["alice" "ROLE_X" "ROLE_Y"]` | Token with exactly the specified roles |
+| an `Authentication` object | Used as-is |
+
+```clojure
+;; Call a @PreAuthorize-guarded controller or service
+(lw/run-as "admin"
+  (.getBookById (lw/bean "bookController") 25))
+
+;; Combine with in-readonly-tx for repository access under a security context
+(lw/run-as "admin"
+  (lw/in-readonly-tx
+    (->> (.findAll (lw/bean "bookRepository"))
+         (mapv #(select-keys (clojure.core/bean %) [:id :email])))))
+
+;; Use a specific role set when the method checks for a non-admin role
+(lw/run-as ["auditor@example.com" "ROLE_AUDITOR"]
+  (.getAuditLog (lw/bean "auditService")))
+```
+
+**Prefer `run-as` over bypassing to the service layer** when you want to exercise
+the real secured code path — including AOP advice, `@PostAuthorize` filters, etc.
 
 ---
 
@@ -76,6 +111,58 @@ the JVM beats static analysis every time.
 | `(trace/trace-sql & body)` | Captures every SQL fired by Hibernate on the current thread |
 | `(trace/trace-sql-global & body)` | Same, but captures across *all* threads (useful for `@Async`) |
 | `(trace/detect-n+1 trace-res)` | Analyzes a trace result and flags repeated queries |
+
+---
+
+## Hot Queries API — `net.brdloush.livewire.hot-queries`
+
+Swap a Spring Data JPA `@Query` live without restarting the app. Works by replacing the
+`queryString` Lazy field inside `SimpleJpaQuery` with an atom-backed one — Spring Data's
+full result-type coercion stays intact. The first swap uses reflection; subsequent swaps
+for the same method are reflection-free (just `reset!` the atom).
+
+| Expression | What it does |
+|---|---|
+| `(hq/list-queries "repoBean")` | Lists all `@Query` methods on the repo with their current JPQL |
+| `(hq/hot-swap-query! "repoBean" "method" new-jpql)` | Swaps the JPQL live; first call uses reflection, subsequent calls just `reset!` the atom |
+| `(hq/list-swapped)` | Shows all currently swapped queries across all repos |
+| `(hq/reset-query! "repoBean" "method")` | Restores the original JPQL |
+
+### When to use hot-queries
+
+- **Iterating on a JPQL fix** without a restart — swap, call the method, observe, refine.
+- **Reproducing a query bug** by temporarily substituting a known-bad query.
+- **Testing a `JOIN FETCH` or `@EntityGraph`** addition before writing it to source.
+- Works best combined with `trace/trace-sql` to verify the resulting SQL.
+
+```clojure
+;; See what @Query methods exist on a repo
+(hq/list-queries "bookRepository")
+;; => ({:method "findByIdWithDetails", :query-class "SimpleJpaQuery",
+;;      :jpql "select b from Book b where b.id = :id ..."} ...)
+
+;; Swap to a fixed query (e.g. add JOIN FETCH to fix N+1)
+(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
+  "select b from Book b join fetch b.author join fetch b.reviews where b.id = :id")
+
+;; Verify the fix — combine with trace-sql to confirm query shape
+(trace/trace-sql
+  (lw/run-as "admin"
+    (lw/in-readonly-tx
+      (.findByIdWithDetails (lw/bean "bookRepository") 25))))
+
+;; Swap again (reflection-free atom reset)
+(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
+  "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres WHERE b.id = :id")
+
+;; Check registry
+(hq/list-swapped)
+;; => [{:bean "bookRepository", :method "findByIdWithDetails", :jpql "..."}]
+
+;; Restore original when done
+(hq/reset-query! "bookRepository" "findByIdWithDetails")
+;; => :restored
+```
 
 ---
 
@@ -137,14 +224,19 @@ Controllers and services are CGLIB proxies. Calling `(clojure.core/bean proxy)` 
 To discover what methods to call on a bean, read the source code instead.
 
 ### `@PreAuthorize` on controllers blocks direct REPL invocation
-Calling a controller method directly from the REPL throws `AuthenticationCredentialsNotFoundException`
-because there is no Spring Security context. Bypass by calling the underlying service bean directly.
+Calling a controller or service method directly from the REPL throws
+`AuthenticationCredentialsNotFoundException` because there is no Spring Security context.
+Use `lw/run-as` to set one, or bypass to the underlying service if security is not relevant.
 
 ```clojure
 ;; ❌ AuthenticationCredentialsNotFoundException
 (.myEndpoint (lw/bean "myController") someArg)
 
-;; ✅ call the service the controller delegates to
+;; ✅ preferred: use run-as to exercise the real secured code path
+(lw/run-as "admin"
+  (.myEndpoint (lw/bean "myController") someArg))
+
+;; ✅ alternative: call the service the controller delegates to (skips security entirely)
 (.myServiceMethod (lw/bean "myService") someArg)
 ```
 
@@ -198,4 +290,20 @@ Ensure the app is running with a current Livewire JAR.
 ;; Inspect a Hibernate entity's DB mappings
 (intro/inspect-entity "Book")
 ;; => {:table-name "books", :identifier {:name "id", :columns ["id"], :type "uuid"}, :properties [...]}
+
+;; Call a @PreAuthorize-guarded controller method directly
+(lw/run-as "admin"
+  (.getBookById (lw/bean "bookController") 25))
+;; => #object[QuestionnaireDto ...]
+
+;; Live-swap a JPQL query, verify with trace-sql, then restore
+(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
+  "select b from Book b join fetch b.author join fetch b.reviews where b.id = :id")
+(trace/trace-sql
+  (lw/run-as "admin"
+    (lw/in-readonly-tx
+      (.findByIdWithDetails (lw/bean "bookRepository") 25))))
+;; => {:result [...], :queries [{:sql "select ... join addresses ..."}], :count 1, :duration-ms 8}
+(hq/reset-query! "bookRepository" "findByIdWithDetails")
+;; => :restored
 ```

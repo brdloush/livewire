@@ -23,6 +23,13 @@
    :depends [clean]
    :task (shell "lein with-profile +provided install")}
 
+  stop-serve
+  {:doc "Kill the bbserve process on port 4000"
+   :task (if-let [pid (not-empty (.trim (:out (babashka.process/sh "lsof" "-ti:4000"))))]
+           (do (babashka.process/shell "kill" pid)
+               (println (str "Stopped (pid " pid ")")))
+           (println "Nothing running on port 4000"))}
+
   serve
   {:doc "Serve web/ on port 4000 and print a QR code for the local URL"
    :task (let [ip   (first (.split (.trim (:out (babashka.process/sh "hostname" "-I"))) " "))

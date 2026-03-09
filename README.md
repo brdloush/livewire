@@ -118,6 +118,35 @@ Once connected, require the namespace:
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
 | `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
 | `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
+| `(lw/run-as user & body)` | Run body with a specific Spring `SecurityContext` — essential for calling `@PreAuthorize`-guarded beans from the REPL |
+
+### `run-as` — calling secured beans from the REPL
+
+Without a security context, calling any `@PreAuthorize`-guarded bean from the REPL throws
+`AuthenticationCredentialsNotFoundException`. `run-as` temporarily sets the
+`SecurityContextHolder` for the duration of the body, then restores it.
+
+`user` accepts three forms:
+
+| Form | Effect |
+|---|---|
+| `"alice"` | Creates a token for `alice` with `ROLE_USER` + `ROLE_ADMIN` |
+| `["alice" "ROLE_READ" "ROLE_WRITE"]` | Creates a token with exactly the specified roles |
+| an `Authentication` object | Uses it as-is |
+
+```clojure
+;; Call a @PreAuthorize-guarded controller method directly
+(lw/run-as "superadmin@example.com"
+  (.getBookById (lw/bean "bookController") 25))
+
+;; Verify what principal and roles are active inside the body
+(lw/run-as ["alice" "ROLE_READ"]
+  (let [auth (-> (org.springframework.security.core.context.SecurityContextHolder/getContext)
+                 .getAuthentication)]
+    {:principal (.getName auth)
+     :roles     (mapv str (.getAuthorities auth))}))
+;; => {:principal "alice", :roles ["ROLE_READ"]}
+```
 
 ---
 
@@ -251,15 +280,7 @@ about.
 
 ## What's next
 
-| Component | Status |
-|---|---|
-| `core` — context, beans, transactions | ✅ Done |
-| `boot` — nREPL lifecycle | ✅ Done |
-| `introspect` — endpoints, Hibernate metamodel | ✅ Done |
-| `query` — JPQL/SQL execution, diff-entity | 🔜 Planned |
-| `trace` — SQL tracing, N+1 detection | 🚧 In Progress |
-| `hot-queries` — live @Query swap | 🔜 Planned |
-| `query-watcher` — file watcher + ASM | 🔜 Planned |
+See [TODO.md](TODO.md) for open tasks, planned components, and ideas.
 
 ---
 

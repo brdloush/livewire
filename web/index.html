@@ -278,25 +278,50 @@
     .loop-arrow {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      font-size: 0.95rem;
-      color: var(--muted);
-      margin: 1.5rem 0;
+      gap: 0.55rem;
+      margin: 1.75rem 0;
       flex-wrap: wrap;
+      row-gap: 0.5rem;
     }
 
-    .loop-arrow span {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.35rem 0.9rem;
+    .loop-arrow .step {
       font-family: monospace;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
     }
 
-    .loop-arrow span.bad { border-color: rgba(200,80,80,0.5); color: #e07070; }
-    .loop-arrow span.good { border-color: var(--green); color: var(--green); }
-    .loop-arrow .arrow { color: var(--border-mid); font-size: 1.2rem; }
+    .loop-arrow .step.bad   { color: #e07070; }
+    .loop-arrow .step.good  { color: var(--green); }
+    .loop-arrow .step.struck {
+      color: var(--muted);
+      opacity: 0.4;
+      text-decoration: line-through;
+      text-decoration-color: #e07070;
+      text-decoration-thickness: 2px;
+    }
+
+    .loop-badge {
+      margin-left: 0.75rem;
+      background: rgba(152, 201, 72, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(152, 201, 72, 0.3);
+      border-radius: 999px;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .loop-arrow .arrow {
+      color: var(--muted);
+      opacity: 0.35;
+      font-size: 1rem;
+      line-height: 1;
+      user-select: none;
+    }
 
     /* ── Architecture ─────────────────────────────────────────────── */
     .arch-box {
@@ -319,8 +344,8 @@
     /* ── Features ─────────────────────────────────────────────────── */
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.5rem;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2rem;
       margin-top: 3rem;
     }
 
@@ -329,7 +354,7 @@
       border: 1px solid var(--border);
       border-left: 3px solid var(--blue);
       border-radius: 12px;
-      padding: 1.75rem;
+      padding: 2rem 2.25rem;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
@@ -453,6 +478,8 @@
       border-radius: 10px;
       overflow: hidden;
       transition: transform 0.2s, box-shadow 0.2s;
+      cursor: zoom-in;
+      position: relative;
     }
 
     .screenshot-card:hover {
@@ -462,52 +489,146 @@
 
     .screenshot-card img {
       width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      object-position: top left;
       display: block;
       border-bottom: 1px solid var(--border);
     }
 
     .screenshot-caption {
-      padding: 0.75rem 1rem;
+      padding: 0.6rem 1rem;
       font-size: 0.82rem;
       color: var(--muted);
     }
+
+    .screenshot-zoom-icon {
+      position: absolute;
+      bottom: 2.6rem;
+      right: 0.75rem;
+      width: 40px;
+      height: 40px;
+      background: rgba(21, 20, 35, 0.65);
+      backdrop-filter: blur(4px);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .screenshot-card:hover .screenshot-zoom-icon {
+      opacity: 1;
+    }
+
+    .screenshot-zoom-icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: rgba(255,255,255,0.95);
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ── Lightbox ─────────────────────────────────────────────────── */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(10, 9, 20, 0.92);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+
+    #lightbox.open { display: flex; }
+
+    #lightbox img {
+      max-width: 92vw;
+      max-height: 88vh;
+      border-radius: 10px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+      object-fit: contain;
+    }
+
+    #lightbox-close {
+      position: fixed;
+      top: 1.25rem;
+      right: 1.5rem;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    #lightbox-close:hover { color: var(--text); }
 
     /* ── Install ──────────────────────────────────────────────────── */
     #install { text-align: center; }
 
     .install-steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
       margin-top: 3rem;
       text-align: left;
+      max-width: 860px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .install-step {
+      display: grid;
+      grid-template-columns: 48px 1fr 1fr;
+      gap: 1.5rem 2rem;
+      align-items: start;
       background: var(--bg-card);
       border: 1px solid var(--border);
+      border-left: 3px solid var(--blue);
       border-radius: 12px;
-      padding: 1.75rem;
+      padding: 1.75rem 2rem;
+      transition: border-color 0.2s;
     }
 
+    .install-step:hover { border-left-color: var(--green); }
+
     .step-num {
-      display: inline-flex;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px; height: 28px;
+      width: 36px; height: 36px;
       background: var(--blue);
       color: #fff;
       border-radius: 50%;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
       font-weight: 700;
-      margin-bottom: 1rem;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
     }
 
-    .install-step h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
+    .install-step-body h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
       color: var(--text);
+    }
+
+    .install-step-body p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .install-step .code-block {
+      margin: 0;
     }
 
     /* ── Footer ───────────────────────────────────────────────────── */
@@ -543,6 +664,9 @@
       .hero-logo { width: 140px; height: 140px; justify-self: center; order: -1; }
       .hero-title { font-size: 2.2rem; }
       .problem-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .install-step { grid-template-columns: 36px 1fr; }
+      .install-step .code-block { grid-column: 1 / -1; }
       .nav-links { display: none; }
     }
   </style>
@@ -598,13 +722,24 @@
     </p>
 
     <div class="loop-arrow">
-      <span class="bad">edit</span>
+      <span class="step bad">edit</span>
       <span class="arrow">→</span>
-      <span class="bad">restart (30–120s)</span>
+      <span class="step bad">restart (30–120s)</span>
       <span class="arrow">→</span>
-      <span class="bad">observe</span>
+      <span class="step bad">observe</span>
       <span class="arrow">→</span>
-      <span class="bad">repeat</span>
+      <span class="step bad">repeat</span>
+    </div>
+
+    <div class="loop-arrow">
+      <span class="step good">edit</span>
+      <span class="arrow">→</span>
+      <span class="step struck">restart (30–120s)</span>
+      <span class="arrow">→</span>
+      <span class="step good">observe</span>
+      <span class="arrow">→</span>
+      <span class="step good">repeat</span>
+      <span class="loop-badge">⚡ zero restarts</span>
     </div>
 
     <div class="problem-grid">
@@ -637,14 +772,14 @@
       <div class="problem-card">
         <span class="emoji">🔁</span>
         <h3>The loop you actually want</h3>
-        <div class="loop-arrow" style="margin: 1rem 0 0; flex-wrap: wrap;">
-          <span class="good">observe</span>
+        <div class="loop-arrow" style="margin: 1rem 0 0;">
+          <span class="step good">observe</span>
           <span class="arrow">→</span>
-          <span class="good">hypothesise</span>
+          <span class="step good">hypothesise</span>
           <span class="arrow">→</span>
-          <span class="good">hot-swap</span>
+          <span class="step good">hot-swap</span>
           <span class="arrow">→</span>
-          <span class="good">verify</span>
+          <span class="step good">verify</span>
         </div>
       </div>
     </div>
@@ -809,20 +944,24 @@
     <p class="section-sub">Real sessions. Real apps. Real results.</p>
 
     <div class="screenshots-grid">
-      <div class="screenshot-card">
+      <div class="screenshot-card" onclick="openLightbox(this)">
         <img src="milestones/02-tracing-sql-of-service.png" alt="SQL tracing live" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
         <div class="screenshot-caption">SQL tracing a live service call</div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card" onclick="openLightbox(this)">
         <img src="milestones/04-detect-nplus1.png" alt="N+1 detection output" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
         <div class="screenshot-caption">detect-n+1 flagging the culprit</div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card" onclick="openLightbox(this)">
         <img src="milestones/03-pinpointing-the-smoking-gun.png" alt="Pinpointing the N+1 caller" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
         <div class="screenshot-caption">Pinpointing the exact N+1 caller</div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card" onclick="openLightbox(this)">
         <img src="milestones/13-hot-reload-of-Query-in-spring-data.png" alt="Hot-swapping a @Query" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
         <div class="screenshot-caption">Hot-swapping a @Query live</div>
       </div>
     </div>
@@ -839,7 +978,10 @@
     <div class="install-steps">
       <div class="install-step">
         <div class="step-num">1</div>
-        <h3>Add the dependency</h3>
+        <div class="install-step-body">
+          <h3>Add the dependency</h3>
+          <p>Add to your <code>pom.xml</code> or <code>build.gradle</code>.</p>
+        </div>
         <div class="code-block"><pre><span class="c">&lt;!-- Maven --&gt;</span>
 <span class="kw">&lt;dependency&gt;</span>
   &lt;groupId&gt;<span class="n">net.brdloush</span>&lt;/groupId&gt;
@@ -850,7 +992,10 @@
 
       <div class="install-step">
         <div class="step-num">2</div>
-        <h3>Enable it locally</h3>
+        <div class="install-step-body">
+          <h3>Enable it locally</h3>
+          <p>One property in your local profile. Never committed, never shipped.</p>
+        </div>
         <div class="code-block"><pre><span class="c"># application-local.properties</span>
 <span class="kw">livewire.enabled</span>=<span class="n">true</span>
 
@@ -860,10 +1005,11 @@
 
       <div class="install-step">
         <div class="step-num">3</div>
-        <h3>Connect &amp; probe</h3>
-        <div class="code-block"><pre><span class="c">;; From Claude Code / clojure-mcp</span>
-<span class="c">;; or any nREPL client on port 7888</span>
-<span class="p">(</span><span class="kw">require</span>
+        <div class="install-step-body">
+          <h3>Connect &amp; probe</h3>
+          <p>From Claude Code, clojure-mcp, or any nREPL client.</p>
+        </div>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">require</span>
   <span class="s">'[net.brdloush.livewire.core :as lw]</span>
   <span class="s">'[net.brdloush.livewire.trace :as trace]</span>
   <span class="s">'[net.brdloush.livewire.hot-queries :as hq]</span><span class="p">)</span>
@@ -887,6 +1033,31 @@
     </p>
   </div>
 </footer>
+
+<!-- ── Lightbox ──────────────────────────────────────────────────────── -->
+<div id="lightbox" role="dialog" aria-modal="true" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()" aria-label="Close">✕</button>
+  <img id="lightbox-img" src="" alt="" onclick="closeLightbox()" />
+</div>
+
+<script>
+  function openLightbox(card) {
+    const img = card.querySelector('img');
+    document.getElementById('lightbox-img').src = img.src;
+    document.getElementById('lightbox-img').alt = img.alt;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeLightbox();
+  });
+</script>
 
 </body>
 </html>

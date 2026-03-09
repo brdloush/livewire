@@ -1,38 +1,40 @@
 (ns net.brdloush.livewire.hot-queries
   "Live @Query swap engine for Spring Data JPA repositories.
 
-  Mutates the `queryString` Lazy field inside DefaultEntityQuery (held by
-  AbstractStringBasedJpaQuery) so that the original SimpleJpaQuery — with all
-  of Spring Data's result-type coercion intact — re-executes a new JPQL string
-  on every call. No ClassLoader manipulation, no reify wrappers, no reflection
-  on the hot path after the first swap.
+  Three-layer patch required for Spring Data JPA 4.x / Hibernate 7:
+
+  1. DeclaredQueries$JpqlQuery.jpql  — the String actually used at runtime
+  2. DefaultEntityQuery.queryString  — Lazy<String> cache; replaced with an
+                                       atom-backed Lazy so re-reads are live
+  3. Hibernate interpretation caches — hqlInterpretationCache + queryPlanCache
+                                        on QueryInterpretationCacheStandardImpl
+                                        must be cleared so Hibernate re-parses
+                                        the new JPQL on next execution
 
   Usage:
     (require '[net.brdloush.livewire.hot-queries :as hq])
 
-    ;; See all @Query methods on a repo
     (hq/list-queries \"bookRepository\")
-
-    ;; Swap a query live
-    (hq/hot-swap-query! \"bookRepository\" \"findByIdWithDetails\"
-      \"select b from Book b where b.id = :id\")
-
-    ;; See everything currently swapped
+    (hq/hot-swap-query! \"bookRepository\" \"findByIdWithDetails\" \"select b from Book b where 1=2\")
     (hq/list-swapped)
-
-    ;; Restore original
     (hq/reset-query! \"bookRepository\" \"findByIdWithDetails\")"
   (:require [net.brdloush.livewire.core :as core]))
 
 ;; ---------------------------------------------------------------------------
-;; Global registry  { [bean-name method-name] -> {:atom <jpql-atom> :original-lazy <Lazy>
-;;                                                 :qs-field <Field> :entity-q <DefaultEntityQuery>} }
+;; Global registry
+;; { [bean-name method-name] -> {:atom            <jpql-atom>
+;;                                :original-lazy   <original Lazy>
+;;                                :original-jpql   <original String>
+;;                                :qs-field        <Field queryString on DefaultEntityQuery>
+;;                                :jpql-field      <Field jpql on DeclaredQueries$JpqlQuery>
+;;                                :entity-q        <DefaultEntityQuery instance>
+;;                                :jpql-source     <DeclaredQueries$JpqlQuery instance>} }
 ;; ---------------------------------------------------------------------------
 
 (defonce ^:private registry (atom {}))
 
 ;; ---------------------------------------------------------------------------
-;; Private reflection helpers
+;; Private reflection helpers — Spring Data layer
 ;; ---------------------------------------------------------------------------
 
 (defn- get-interceptor
@@ -58,23 +60,56 @@
   (delay (Class/forName "org.springframework.data.jpa.repository.query.AbstractStringBasedJpaQuery")))
 
 (defn- get-entity-query
-  "Returns the EntityQuery (DefaultEntityQuery) from an AbstractStringBasedJpaQuery."
+  "Returns the DefaultEntityQuery held by an AbstractStringBasedJpaQuery."
   [rq]
   (.get (doto (.getDeclaredField @abstract-string-based-query-class "query")
           (.setAccessible true))
         rq))
 
+(defn- get-preprocessed-query
+  "Returns the PreprocessedQuery held by a DefaultEntityQuery."
+  [entity-q]
+  (.get (doto (.getDeclaredField (class entity-q) "query")
+          (.setAccessible true))
+        entity-q))
+
+(defn- get-jpql-source
+  "Returns the DeclaredQueries$JpqlQuery held as `source` inside a PreprocessedQuery."
+  [preprocessed-q]
+  (.get (doto (.getDeclaredField (class preprocessed-q) "source")
+          (.setAccessible true))
+        preprocessed-q))
+
+(defn- get-jpql-field
+  "Returns the accessible `jpql` String field on a DeclaredQueries$JpqlQuery."
+  [jpql-source]
+  (doto (.getDeclaredField (class jpql-source) "jpql")
+    (.setAccessible true)))
+
 (defn- get-query-string-field
-  "Returns the (accessible) `queryString` Lazy field from a DefaultEntityQuery."
+  "Returns the accessible `queryString` Lazy field on a DefaultEntityQuery."
   [entity-q]
   (doto (.getDeclaredField (class entity-q) "queryString")
     (.setAccessible true)))
 
-(defn- make-lazy-string
-  "Wraps `s` in a Spring Data Lazy<String>."
-  [s]
-  (org.springframework.data.util.Lazy/of
-    (reify java.util.function.Supplier (get [_] s))))
+;; ---------------------------------------------------------------------------
+;; Private reflection helpers — Hibernate cache layer
+;; ---------------------------------------------------------------------------
+
+(defn- clear-hibernate-caches!
+  "Clears Hibernate's hqlInterpretationCache and queryPlanCache so the new
+  JPQL string is re-parsed on the next execution."
+  []
+  (let [emf (core/bean "entityManagerFactory")
+        sfi (.unwrap emf org.hibernate.engine.spi.SessionFactoryImplementor)
+        ic  (.getInterpretationCache (.getQueryEngine sfi))
+        ic-class (class ic)]
+    (doto (.getDeclaredField ic-class "hqlInterpretationCache")
+      (.setAccessible true)
+      (-> (.get ic) .clear))
+    (doto (.getDeclaredField ic-class "queryPlanCache")
+      (.setAccessible true)
+      (-> (.get ic) .clear))))
 
 ;; ---------------------------------------------------------------------------
 ;; Public API
@@ -107,52 +142,71 @@
 (defn hot-swap-query!
   "Swaps the JPQL for `method-name` on `repo-bean-name` to `new-jpql`.
 
-  First call: reflects into the interceptor's queries map, finds the
-  SimpleJpaQuery, and replaces its internal `queryString` Lazy with an
-  atom-backed one. Registers original in the global registry for rollback.
+  First call: reflects into the Spring Data + Hibernate internals to wire up
+  an atom-backed Lazy (so re-reads are live) and patches the DeclaredQueries$JpqlQuery
+  string. Also clears Hibernate's interpretation caches so the new JPQL is
+  re-parsed immediately.
 
-  Subsequent calls for the same method: resets the atom only — no reflection.
+  Subsequent calls for the same method: resets the atom and clears caches only
+  — no structural reflection.
 
   Returns {:swapped [bean-name method-name] :query new-jpql}"
   [repo-bean-name method-name new-jpql]
   (let [reg-key [repo-bean-name method-name]]
     (if-let [entry (get @registry reg-key)]
-      ;; Already swapped — update atom; Lazy supplier reads it on next execute
+      ;; Already swapped — update both the atom (-> Lazy) and the raw jpql String field
       (do (reset! (:atom entry) new-jpql)
+          (.set (:jpql-field entry) (:jpql-source entry) new-jpql)
+          (clear-hibernate-caches!)
+          (println (str "[hot-queries] re-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})
-      ;; First swap — reflect and wire up the atom-backed Lazy
-      (let [repo        (core/bean repo-bean-name)
-            interceptor (get-interceptor repo)
-            qmap        (get-queries-map interceptor)
-            [_ rq]      (->> qmap
-                              (filter #(= method-name (.getName (key %))))
-                              first)]
+      ;; First swap — wire everything up
+      (let [repo          (core/bean repo-bean-name)
+            interceptor   (get-interceptor repo)
+            qmap          (get-queries-map interceptor)
+            [_ rq]        (->> qmap
+                                (filter #(= method-name (.getName (key %))))
+                                first)]
         (when-not rq
           (throw (IllegalArgumentException.
                    (str "No @Query method '" method-name "' found on bean '" repo-bean-name "'"))))
         (let [entity-q      (get-entity-query rq)
+              preprocessed  (get-preprocessed-query entity-q)
+              jpql-source   (get-jpql-source preprocessed)
+              jpql-field    (get-jpql-field jpql-source)
               qs-field      (get-query-string-field entity-q)
               original-lazy (.get qs-field entity-q)
+              original-jpql (.get jpql-field jpql-source)
               jpql-atom     (atom new-jpql)
               live-lazy     (org.springframework.data.util.Lazy/of
                               (reify java.util.function.Supplier
                                 (get [_] @jpql-atom)))]
+          ;; Layer 1: patch the raw JPQL string used at runtime
+          (.set jpql-field jpql-source new-jpql)
+          ;; Layer 2: replace the Lazy<String> cache with an atom-backed one
           (.set qs-field entity-q live-lazy)
+          ;; Layer 3: clear Hibernate's parse caches
+          (clear-hibernate-caches!)
           (swap! registry assoc reg-key {:atom          jpql-atom
                                          :original-lazy original-lazy
+                                         :original-jpql original-jpql
                                          :qs-field      qs-field
-                                         :entity-q      entity-q})
+                                         :jpql-field    jpql-field
+                                         :entity-q      entity-q
+                                         :jpql-source   jpql-source})
           (println (str "[hot-queries] hot-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})))))
 
 (defn reset-query!
   "Restores the original JPQL for `method-name` on `repo-bean-name`.
-  No-ops if the method was never swapped.
+  Clears Hibernate's interpretation caches so the original query is re-parsed.
   Returns :restored or :not-swapped."
   [repo-bean-name method-name]
   (let [reg-key [repo-bean-name method-name]]
-    (if-let [{:keys [original-lazy qs-field entity-q]} (get @registry reg-key)]
-      (do (.set qs-field entity-q original-lazy)
+    (if-let [{:keys [original-lazy original-jpql qs-field jpql-field entity-q jpql-source]} (get @registry reg-key)]
+      (do (.set jpql-field jpql-source original-jpql)
+          (.set qs-field entity-q original-lazy)
+          (clear-hibernate-caches!)
           (swap! registry dissoc reg-key)
           (println (str "[hot-queries] restored " repo-bean-name "#" method-name))
           :restored)

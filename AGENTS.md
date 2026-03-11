@@ -5,6 +5,26 @@ working on the Livewire project.
 
 ---
 
+## Clojure gotchas
+
+### `defonce` does not accept docstrings
+
+Unlike `def`, `defonce` only takes two arguments: the name and the init form.
+Passing a docstring as a second argument causes an `ArityException` at load time:
+
+```clojure
+;; ❌ Wrong — throws ArityException: Wrong number of args (3) passed to: clojure.core/defonce
+(defonce my-atom
+  "This docstring is not supported."
+  (atom {}))
+
+;; ✅ Correct — use a ;;; comment above the form instead
+;;; This atom holds ...
+(defonce my-atom (atom {}))
+```
+
+---
+
 ## Loading new Livewire code into a running app
 
 After editing and installing a new version of Livewire (`bb install`), the

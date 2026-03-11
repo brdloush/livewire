@@ -447,6 +447,47 @@
     .code-block .p  { color: var(--muted); }/* punctuation */
     .code-block .r  { color: #c47bdb; }   /* result output */
 
+    /* ── Human-friendly ───────────────────────────────────────────── */
+    .human-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      max-width: 860px;
+      margin: 3rem 0;
+    }
+    .human-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+    }
+    .human-card.agent { border-top: 3px solid var(--green); }
+    .human-card.human { border-top: 3px solid var(--blue); }
+    .human-card h3 {
+      font-size: 1.05rem;
+      margin-bottom: 0.6rem;
+      color: var(--text);
+    }
+    .human-card p {
+      font-size: 0.95rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .human-card .card-icon {
+      font-size: 1.6rem;
+      margin-bottom: 0.75rem;
+    }
+    .human-tagline {
+      max-width: 860px;
+      font-size: 1rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 0;
+    }
+    @media (max-width: 768px) {
+      .human-block { grid-template-columns: 1fr; }
+    }
+
     /* ── Story ────────────────────────────────────────────────────── */
     #story { position: relative; overflow: hidden; }
 
@@ -788,6 +829,7 @@
   <ul class="nav-links" id="nav-links">
     <li><a href="#problem">Problem</a></li>
     <li><a href="#features">Features</a></li>
+    <li><a href="#human">Human-friendly</a></li>
     <li><a href="#story">Story</a></li>
     <li><a href="#install">Install</a></li>
     <li><a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener">GitHub ↗</a></li>
@@ -1015,6 +1057,30 @@
       </div>
 
     </div>
+  </div>
+</section>
+
+<!-- ── Human-friendly ────────────────────────────────────────────────── -->
+<section id="human">
+  <div class="container">
+    <div class="section-label">No AI required</div>
+    <h2>Agents welcome. Humans too.</h2>
+    <p class="section-sub">An nREPL server embedded in your app — bring your own client.</p>
+
+    <div class="human-block">
+      <div class="human-card agent">
+        <div class="card-icon">🤖</div>
+        <h3>AI agent</h3>
+        <p>Claude, Cursor, or any coding assistant with an nREPL tool can connect, query beans, trace SQL, and hot-swap queries — autonomously, in a feedback loop.</p>
+      </div>
+      <div class="human-card human">
+        <div class="card-icon">🧑‍💻</div>
+        <h3>You</h3>
+        <p>Open Calva, CIDER, or any nREPL client and explore the live app yourself. Poke at beans, run transactions, trace a suspicious endpoint — no AI in the loop unless you want one.</p>
+      </div>
+    </div>
+
+    <p class="human-tagline">The experience is richer with an agent driving it, but the wire is open to everyone. Your curiosity is the only prerequisite.</p>
   </div>
 </section>
 

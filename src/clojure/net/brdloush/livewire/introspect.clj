@@ -28,6 +28,8 @@
          :consumes (mapv str consumes)
          :controller (.getName (.getBeanType hm))
          :handler-method (.getName m)
+         :pre-authorize (or (some-> (.getAnnotation m org.springframework.security.access.prepost.PreAuthorize) .value)
+                            (some-> (.getAnnotation (.getDeclaringClass m) org.springframework.security.access.prepost.PreAuthorize) .value))
          :parameters (mapv (fn [p]
                              {:name (.getParameterName p)
                               :type (.getName (.getParameterType p))})

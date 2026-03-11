@@ -25,10 +25,12 @@
 
   stop-serve
   {:doc "Kill the bbserve process on port 4000"
-   :task (if-let [pid (not-empty (.trim (:out (babashka.process/sh "lsof" "-ti:4000"))))]
-           (do (babashka.process/shell "kill" pid)
+   :task (let [pids (not-empty (filter not-empty (clojure.string/split (.trim (:out (babashka.process/sh "pgrep" "-f" "bbserve.*--port.*4000"))) (re-pattern "\\s+"))))]
+           (if pids
+             (doseq [pid pids]
+               (babashka.process/shell "kill" pid)
                (println (str "Stopped (pid " pid ")")))
-           (println "Nothing running on port 4000"))}
+             (println "No bbserve running on port 4000")))}
 
   serve
   {:doc "Serve web/ on port 4000 and print a QR code for the local URL"

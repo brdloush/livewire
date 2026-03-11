@@ -17,7 +17,8 @@
     (hq/list-queries \"bookRepository\")
     (hq/hot-swap-query! \"bookRepository\" \"findByIdWithDetails\" \"select b from Book b where 1=2\")
     (hq/list-swapped)
-    (hq/reset-query! \"bookRepository\" \"findByIdWithDetails\")"
+    (hq/reset-query! \"bookRepository\" \"findByIdWithDetails\")
+    (hq/reset-all!)                          ; restore every swapped query at once"
   (:require [net.brdloush.livewire.core :as core]))
 
 ;; ---------------------------------------------------------------------------
@@ -211,3 +212,20 @@
           (println (str "[hot-queries] restored " repo-bean-name "#" method-name))
           :restored)
       :not-swapped)))
+
+(defn reset-all!
+  "Restores the original JPQL for every currently hot-swapped query.
+  Clears Hibernate's interpretation caches once after all restores.
+  Returns a vector of the restored [bean-name method-name] keys, or [] if nothing was swapped."
+  []
+  (let [keys (keys @registry)]
+    (doseq [[bean-name method-name] keys]
+      (let [{:keys [original-lazy original-jpql qs-field jpql-field entity-q jpql-source]}
+            (get @registry [bean-name method-name])]
+        (.set jpql-field jpql-source original-jpql)
+        (.set qs-field entity-q original-lazy)
+        (swap! registry dissoc [bean-name method-name])
+        (println (str "[hot-queries] restored " bean-name "#" method-name))))
+    (when (seq keys)
+      (clear-hibernate-caches!))
+    (mapv vec keys)))

@@ -129,7 +129,8 @@ for the same method are reflection-free (just `reset!` the atom).
 | `(hq/list-queries "repoBean")` | Lists all `@Query` methods on the repo with their current JPQL |
 | `(hq/hot-swap-query! "repoBean" "method" new-jpql)` | Swaps the JPQL live; first call uses reflection, subsequent calls just `reset!` the atom |
 | `(hq/list-swapped)` | Shows all currently swapped queries across all repos |
-| `(hq/reset-query! "repoBean" "method")` | Restores the original JPQL |
+| `(hq/reset-query! "repoBean" "method")` | Restores the original JPQL for one method |
+| `(hq/reset-all!)` | Restores **every** currently swapped query at once; always call this to clean up after an exploratory session |
 
 ### When to use hot-queries
 
@@ -137,6 +138,26 @@ for the same method are reflection-free (just `reset!` the atom).
 - **Reproducing a query bug** by temporarily substituting a known-bad query.
 - **Testing a `JOIN FETCH` or `@EntityGraph`** addition before writing it to source.
 - Works best combined with `trace/trace-sql` to verify the resulting SQL.
+
+### ⚠️ Hot-swaps are persistent side effects — always clean up
+
+Unlike `lw/in-tx` (which always rolls back), hot-swapped queries **persist** in the live JVM for
+the entire lifetime of the process. If you leave a swap in place, the app continues running the
+patched query — which can silently affect other callers, tests, or monitoring.
+
+**Rule: always restore before ending an exploratory session.**
+
+```clojure
+;; Restore everything in one call
+(hq/reset-all!)
+;; => [["bookRepository" "findByIdWithDetails"] ...]   ← keys that were restored
+
+;; Or verify nothing is left swapped
+(hq/list-swapped)
+;; => []
+```
+
+---
 
 ```clojure
 ;; See what @Query methods exist on a repo
@@ -252,6 +273,52 @@ open var bookIsbn: Book? = null
 
 **Fix:** add an explicit `left join fetch` in the JPQL for the owning query so Hibernate
 loads the full entity (including its PK) in the main query instead of per-row selects.
+
+### Quick-test a service fix by re-implementing the core flow in Clojure
+
+When a fix involves service-layer logic (not just a JPQL change), you can prototype it
+directly in the REPL without restarting. The nREPL runs inside the same JVM, so it can
+call any Spring bean — repositories, services, anything. Write a temporary Clojure
+expression that reimplements the **core flow** of the service method with your candidate
+fix, wrap it in `trace/trace-sql`, and measure query count live against real data.
+
+The expression doesn't need to be a perfect replica — just enough to exercise the query
+pattern you're changing. Once `trace-sql` confirms the query count drops, write the real
+fix to Java and rebuild.
+
+```clojure
+;; Example: service currently does bookRepo.findAll() then lazy-loads genres/reviews/members
+;; (481 queries for 200 books). Candidate fix: two eager queries + manual grouping.
+;; Prototype in Clojure first:
+
+(import '[com.example.myapp.dto AuthorSummaryDto BookWithReviewsDto ReviewDto])
+
+(defn get-all-books-fixed []
+  (let [book-repo   (lw/bean "bookRepository")
+        review-repo (lw/bean "reviewRepository")
+        books       (.findAllWithAuthorAndGenres book-repo)
+        reviews-by-book-id
+          (->> (.findAllWithMember review-repo)
+               (group-by #(.getId (.getBook %)))
+               (into {} (map (fn [[k vs]] [k (mapv ReviewDto/from vs)]))))]
+    (mapv (fn [b]
+            (BookWithReviewsDto.
+              (.getId b) (.getTitle b)
+              (AuthorSummaryDto/from (.getAuthor b))
+              (->> (.getGenres b) (map #(.getName %)) sort vec)
+              (get reviews-by-book-id (.getId b) [])))
+          books)))
+
+;; Measure — zero restarts needed
+(let [res (trace/trace-sql (lw/in-readonly-tx (count (get-all-books-fixed))))]
+  (select-keys res [:count :duration-ms]))
+;; => {:count 2, :duration-ms 43}   ← was 481 queries, now 2
+```
+
+**Key points:**
+- Access `.getId()` on a lazy proxy is safe — Hibernate does not fire a query for PKs
+- `ReviewDto/from` works here because `JOIN FETCH r.member` already loaded member into L1 cache
+- The expression is throwaway — only the Java fix goes to source
 
 ### Use hot-swap to confirm a JPQL fix before touching source code
 Rather than edit → restart → retest, hot-swap the candidate fix, verify with `trace-sql`,

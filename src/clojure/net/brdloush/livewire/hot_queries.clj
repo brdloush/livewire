@@ -61,10 +61,12 @@
 
 (defonce ^:private registry (atom {}))
 
-;;; Current on-disk JPQL per [bean-name method-name].
-;;; Seeded at query-watcher startup via seed-disk-state!; kept in sync by
-;;; watcher-apply! and reset-query!/reset-all!.  The query-watcher diffs
-;;; against this atom instead of maintaining its own known-state.
+;;; Last-known JPQL per [bean-name method-name] — "last one wins" source of truth.
+;;; Updated by: seed-disk-state! (startup), hot-swap-query! (REPL swap),
+;;; watcher-apply! (disk change), and reset-query!/reset-all! (restore).
+;;; The query-watcher diffs against this atom: a change fires only when the
+;;; newly compiled JPQL differs from the last value we told the JVM to use,
+;;; regardless of whether that was set by the watcher or a REPL swap.
 (defonce disk-state (atom {}))
 
 (defn seed-disk-state!
@@ -246,6 +248,7 @@
           (.set (:enh-field entry) (:entity-q entry) (build-hql-enhancer new-jpql))
           (.set (:cached-q-field entry) (:sort-rewriter entry) nil)
           (swap! registry assoc-in [reg-key :manual?] true)
+          (swap! disk-state assoc reg-key new-jpql)
           (clear-hibernate-caches!)
           (println (str "[hot-queries] re-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})
@@ -298,48 +301,39 @@
                                          :sort-rewriter     sort-rewriter
                                          :entity-q          entity-q
                                          :jpql-source       jpql-source})
+          (swap! disk-state assoc reg-key new-jpql)
           (println (str "[hot-queries] hot-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})))))
 
 (defn watcher-apply!
   "Called by query-watcher when a .class change is detected with a new JPQL.
 
-  Always updates disk-state to record what is currently on disk.
+  Always updates disk-state and applies the new JPQL to the live query —
+  \"last one wins\": a recompile overrides any prior REPL pin.
 
-  If the query has been manually pinned by the user (`:manual? true` in the
-  registry), the live query is left alone — the user's REPL experiment takes
-  precedence.  The disk change is tracked silently; when the user later calls
-  reset-query! or reset-all!, disk-state is written back to original-jpql,
-  the watcher sees the diff on the next poll, and re-applies the disk JPQL.
+  The `:manual?` flag in the registry is set to false to record that the
+  watcher made this swap (informational only, used by list-swapped).
 
-  If the query is not manually pinned, swaps the live query exactly as
-  hot-swap-query! would, marking the registry entry as `:manual? false`.
-
-  Returns :tracked (manually pinned, live query unchanged) or the swap result map."
+  Returns the swap result map."
   [repo-bean-name method-name new-jpql]
-  (let [reg-key [repo-bean-name method-name]]
-    ;; Always record what is currently on disk regardless of swap outcome.
+  (let [reg-key [repo-bean-name method-name]
+        result  (if-let [entry (get @registry reg-key)]
+                  ;; Re-swap path (query was already swapped — update it)
+                  (do (reset! (:atom entry) new-jpql)
+                      (.set (:jpql-field entry) (:jpql-source entry) new-jpql)
+                      (.set (:enh-field entry) (:entity-q entry) (build-hql-enhancer new-jpql))
+                      (.set (:cached-q-field entry) (:sort-rewriter entry) nil)
+                      (swap! registry assoc-in [reg-key :manual?] false)
+                      (clear-hibernate-caches!)
+                      (println (str "[hot-queries] watcher re-swapped " repo-bean-name "#" method-name))
+                      {:swapped reg-key :query new-jpql})
+                  ;; First-swap path — delegate to hot-swap-query! then correct the :manual? flag
+                  (let [r (hot-swap-query! repo-bean-name method-name new-jpql)]
+                    (swap! registry assoc-in [reg-key :manual?] false)
+                    r))]
+    ;; disk-state updated after the swap so it reflects what is now live
     (swap! disk-state assoc reg-key new-jpql)
-    (if (-> @registry (get reg-key) :manual?)
-      (do (println (str "[hot-queries] watcher tracked (manual pin active) "
-                        repo-bean-name "#" method-name))
-          :tracked)
-      ;; Not manually pinned — apply the disk JPQL live, mark as watcher-initiated.
-      (let [result (if-let [entry (get @registry reg-key)]
-                     ;; Re-swap path (watcher had swapped before, now updating)
-                     (do (reset! (:atom entry) new-jpql)
-                         (.set (:jpql-field entry) (:jpql-source entry) new-jpql)
-                         (.set (:enh-field entry) (:entity-q entry) (build-hql-enhancer new-jpql))
-                         (.set (:cached-q-field entry) (:sort-rewriter entry) nil)
-                         (swap! registry assoc-in [reg-key :manual?] false)
-                         (clear-hibernate-caches!)
-                         (println (str "[hot-queries] watcher re-swapped " repo-bean-name "#" method-name))
-                         {:swapped reg-key :query new-jpql})
-                     ;; First-swap path — delegate to hot-swap-query! then correct the :manual? flag
-                     (let [r (hot-swap-query! repo-bean-name method-name new-jpql)]
-                       (swap! registry assoc-in [reg-key :manual?] false)
-                       r))]
-        result))))
+    result))
 
 (defn reset-query!
   "Restores the original JPQL for `method-name` on `repo-bean-name`.

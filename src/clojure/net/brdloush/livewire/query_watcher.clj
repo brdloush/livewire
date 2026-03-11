@@ -153,8 +153,8 @@
      3. Resolve the Spring bean name.
      4. Diff each method's JPQL against hq/disk-state (shared source of truth).
      5. Call hq/watcher-apply! for every changed entry.
-        watcher-apply! updates disk-state and either swaps live or tracks silently
-        if the query is currently manually pinned by the user."
+        watcher-apply! always applies the new JPQL — last one wins.
+        A recompile overrides any prior REPL pin."
   [^Path abs-path ^String asm-class-name]
   (try
     (let [path-str (.toString abs-path)]

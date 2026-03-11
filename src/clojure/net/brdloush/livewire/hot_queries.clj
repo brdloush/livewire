@@ -73,6 +73,13 @@
   [state-map]
   (reset! disk-state state-map))
 
+(defn- trigger-rescan!
+  "Calls query-watcher/force-rescan! if the watcher is loaded, via late-bound
+  resolve to avoid a circular dependency between hot-queries and query-watcher."
+  []
+  (when-let [f (resolve 'net.brdloush.livewire.query-watcher/force-rescan!)]
+    (f)))
+
 ;; ---------------------------------------------------------------------------
 ;; Private reflection helpers — Spring Data layer
 ;; ---------------------------------------------------------------------------
@@ -355,6 +362,7 @@
           ;; if the .class file on disk actually has a different (newer) JPQL.
           (swap! disk-state assoc reg-key original-jpql)
           (println (str "[hot-queries] restored " repo-bean-name "#" method-name))
+          (trigger-rescan!)
           :restored)
       :not-swapped)))
 
@@ -381,5 +389,6 @@
         (swap! disk-state assoc reg-key original-jpql)
         (println (str "[hot-queries] restored " bean-name "#" method-name))))
     (when (seq keys)
-      (clear-hibernate-caches!))
+      (clear-hibernate-caches!)
+      (trigger-rescan!))
     (mapv vec keys)))

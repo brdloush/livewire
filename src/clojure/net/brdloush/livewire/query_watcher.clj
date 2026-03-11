@@ -44,19 +44,16 @@
 ;; State atoms
 ;; ---------------------------------------------------------------------------
 
-(defonce ^:private watcher-atom
-  "Holds the running WatchService, or nil if the watcher is not active."
-  (atom nil))
+;;; Holds the running WatchService, or nil if the watcher is not active.
+(defonce ^:private watcher-atom (atom nil))
 
-(defonce ^:private watch-thread-atom
-  "Holds the watcher Thread, or nil."
-  (atom nil))
+;;; Holds the watcher Thread, or nil.
+(defonce ^:private watch-thread-atom (atom nil))
 
-(defonce ^:private known-state
-  "Registry of the last-known JPQL per [bean-name method-name] pair.
-   Initialised at watcher startup from hot-queries/list-queries over all beans.
-   Updated on every successful hot-swap."
-  (atom {}))
+;;; Registry of the last-known JPQL per [bean-name method-name] pair.
+;;; Initialised at watcher startup from hot-queries/list-queries over all beans.
+;;; Updated on every successful hot-swap.
+(defonce ^:private known-state (atom {}))
 
 ;; ---------------------------------------------------------------------------
 ;; ASM bytecode reader — no classloading, pure bytecode inspection
@@ -70,8 +67,8 @@
   (try
     (let [bytes (Files/readAllBytes (Paths/get class-file-path (make-array String 0)))
           needle query-annotation-guard-bytes
-          n      (count needle)
-          limit  (- (count bytes) n)]
+          n (count needle)
+          limit (- (count bytes) n)]
       (loop [i 0]
         (cond
           (> i limit) false
@@ -86,19 +83,19 @@
    Uses Spring's repackaged ASM — no classloading, no ClassLoader pollution."
   [^String class-file-path]
   (let [result (atom {})
-        cr     (ClassReader. (java.io.FileInputStream. class-file-path))]
+        cr (ClassReader. (java.io.FileInputStream. class-file-path))]
     (.accept
-      cr
-      (proxy [ClassVisitor] [Opcodes/ASM9]
-        (visitMethod [_access method-name _desc _signature _exceptions]
-          (proxy [MethodVisitor] [Opcodes/ASM9]
-            (visitAnnotation [ann-desc _visible]
-              (when (= ann-desc query-annotation-desc)
-                (proxy [AnnotationVisitor] [Opcodes/ASM9]
-                  (visit [attr-name value]
-                    (when (= attr-name "value")
-                      (swap! result assoc method-name value)))))))))
-      0)
+     cr
+     (proxy [ClassVisitor] [Opcodes/ASM9]
+       (visitMethod [_access method-name _desc _signature _exceptions]
+         (proxy [MethodVisitor] [Opcodes/ASM9]
+           (visitAnnotation [ann-desc _visible]
+             (when (= ann-desc query-annotation-desc)
+               (proxy [AnnotationVisitor] [Opcodes/ASM9]
+                 (visit [attr-name value]
+                   (when (= attr-name "value")
+                     (swap! result assoc method-name value)))))))))
+     0)
     @result))
 
 ;; ---------------------------------------------------------------------------
@@ -114,8 +111,8 @@
     (->> (core/bean-names)
          (keep (fn [bean-name]
                  (try
-                   (let [b      (.getBean (core/ctx) ^String bean-name)
-                         klass  (class b)]
+                   (let [b (.getBean (core/ctx) ^String bean-name)
+                         klass (class b)]
                      (when (some #(= fqn (.getName ^Class %))
                                  (ancestors klass))
                        bean-name))
@@ -159,11 +156,11 @@
   (try
     (let [path-str (.toString abs-path)]
       (when (contains-query-annotation? path-str)
-        (let [queries   (read-queries-from-class path-str)
+        (let [queries (read-queries-from-class path-str)
               bean-name (class-name->bean-name asm-class-name)]
           (when (and (seq queries) bean-name)
             (doseq [[method-name new-jpql] queries]
-              (let [reg-key      [bean-name method-name]
+              (let [reg-key [bean-name method-name]
                     current-jpql (get @known-state reg-key)]
                 (when (not= current-jpql new-jpql)
                   (println (str "[query-watcher] hot-swapping " bean-name "#" method-name))
@@ -199,18 +196,18 @@
   [^WatchService ws ^Path dir]
   (let [result (java.util.concurrent.ConcurrentHashMap.)]
     (Files/walkFileTree
-      dir
-      (reify java.nio.file.FileVisitor
-        (preVisitDirectory [_ d _attrs]
-          (let [^WatchKey k (.register d ws
-                              (into-array [StandardWatchEventKinds/ENTRY_CREATE
-                                           StandardWatchEventKinds/ENTRY_MODIFY]))]
+     dir
+     (reify java.nio.file.FileVisitor
+       (preVisitDirectory [_ d _attrs]
+         (let [^WatchKey k (.register d ws
+                                      (into-array [StandardWatchEventKinds/ENTRY_CREATE
+                                                   StandardWatchEventKinds/ENTRY_MODIFY]))]
             ;; Store the watchable (which equals the registered path) as the key
-            (.put result (.watchable k) d))
-          java.nio.file.FileVisitResult/CONTINUE)
-        (visitFile          [_ _f _a] java.nio.file.FileVisitResult/CONTINUE)
-        (visitFileFailed    [_ _f _e] java.nio.file.FileVisitResult/CONTINUE)
-        (postVisitDirectory [_ _d _e] java.nio.file.FileVisitResult/CONTINUE)))
+           (.put result (.watchable k) d))
+         java.nio.file.FileVisitResult/CONTINUE)
+       (visitFile [_ _f _a] java.nio.file.FileVisitResult/CONTINUE)
+       (visitFileFailed [_ _f _e] java.nio.file.FileVisitResult/CONTINUE)
+       (postVisitDirectory [_ _d _e] java.nio.file.FileVisitResult/CONTINUE)))
     (into {} result)))
 
 (defn- watch-loop!
@@ -230,8 +227,8 @@
                 (when watch-dir
                   (doseq [^WatchEvent ev (.pollEvents k)]
                     (let [^Path rel-path (.context ev)
-                          abs-path       (.resolve watch-dir rel-path)
-                          path-str       (.toString rel-path)]
+                          abs-path (.resolve watch-dir rel-path)
+                          path-str (.toString rel-path)]
                       (when (str/ends-with? path-str ".class")
                         (let [asm-name (str/replace (str/replace path-str ".class" "") "\\" "/")]
                           (handle-class-change! abs-path asm-name)))))))
@@ -241,7 +238,7 @@
                 (.reset k)))
             (recur)))))
     (catch Exception e
-      (println (str "[query-watcher] fatal error, watcher stopped: " (.getMessage e)))))))
+      (println (str "[query-watcher] fatal error, watcher stopped: " (.getMessage e))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Public lifecycle API
@@ -264,16 +261,16 @@
         (println "[query-watcher] no output directories found — watcher not started")
         (do
           (reset! known-state (build-initial-registry))
-          (let [ws      (.newWatchService (FileSystems/getDefault))
+          (let [ws (.newWatchService (FileSystems/getDefault))
                 dir-map (reduce (fn [m ^Path d]
                                   (let [registered (register-dir-recursive! ws d)]
                                     (merge m registered)))
                                 {}
                                 dirs)
-                thread  (doto (Thread. ^Runnable #(watch-loop! ws dir-map))
-                          (.setName "livewire-query-watcher")
-                          (.setDaemon true)
-                          (.start))]
+                thread (doto (Thread. ^Runnable #(watch-loop! ws dir-map))
+                         (.setName "livewire-query-watcher")
+                         (.setDaemon true)
+                         (.start))]
             (reset! watcher-atom ws)
             (reset! watch-thread-atom thread)
             (println (str "[query-watcher] started — watching " (count dirs) " dir(s), "
@@ -295,6 +292,6 @@
   "Returns a map describing the current watcher state:
    {:running? true/false :dirs [...] :registry-size N}"
   []
-  {:running?      (some? @watcher-atom)
+  {:running? (some? @watcher-atom)
    :registry-size (count @known-state)
-   :known-state   @known-state})
+   :known-state @known-state})

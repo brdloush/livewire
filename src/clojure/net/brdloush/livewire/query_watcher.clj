@@ -15,8 +15,7 @@
   (:require [net.brdloush.livewire.core :as core]
             [net.brdloush.livewire.hot-queries :as hq]
             [clojure.string :as str])
-  (:import [java.nio.file FileSystems Files Path Paths LinkOption
-            StandardWatchEventKinds WatchEvent WatchKey WatchService]
+  (:import [java.nio.file Files LinkOption Path Paths]
            [org.springframework.asm
             AnnotationVisitor ClassReader ClassVisitor MethodVisitor Opcodes]))
 
@@ -44,8 +43,8 @@
 ;; State atoms
 ;; ---------------------------------------------------------------------------
 
-;;; Holds the running WatchService, or nil if the watcher is not active.
-(defonce ^:private watcher-atom (atom nil))
+;;; Holds the running flag atom, or nil if the watcher is not active.
+(defonce ^:private running-atom (atom nil))
 
 ;;; Holds the watcher Thread, or nil.
 (defonce ^:private watch-thread-atom (atom nil))
@@ -54,6 +53,12 @@
 ;;; Initialised at watcher startup from hot-queries/list-queries over all beans.
 ;;; Updated on every successful hot-swap.
 (defonce ^:private known-state (atom {}))
+
+;;; Poll interval in milliseconds.
+(def ^:private poll-interval-ms 500)
+
+;;; Tracks the last-seen mtime (millis) per absolute .class file path string.
+(defonce ^:private mtime-cache (atom {}))
 
 ;; ---------------------------------------------------------------------------
 ;; ASM bytecode reader — no classloading, pure bytecode inspection
@@ -185,58 +190,51 @@
        vec))
 
 ;; ---------------------------------------------------------------------------
-;; WatchService loop
+;; Polling loop — scans output dirs for changed .class files every 500 ms.
+;; Uses mtime comparison rather than WatchService because Maven's Eclipse
+;; compiler (ecj) writes .class files in a way that does not trigger inotify
+;; events on Linux.
 ;; ---------------------------------------------------------------------------
 
-(defn- register-dir-recursive!
-  "Registers `dir` and all subdirectories under the WatchService `ws`
-   for ENTRY_CREATE and ENTRY_MODIFY events.
-   Returns a map of registered-Path -> that same Path (used as the dir-map
-   in watch-loop! so WatchKey.watchable() can be looked up directly)."
-  [^WatchService ws ^Path dir]
-  (let [result (java.util.concurrent.ConcurrentHashMap.)]
-    (Files/walkFileTree
-     dir
-     (reify java.nio.file.FileVisitor
-       (preVisitDirectory [_ d _attrs]
-         (let [^WatchKey k (.register d ws
-                                      (into-array [StandardWatchEventKinds/ENTRY_CREATE
-                                                   StandardWatchEventKinds/ENTRY_MODIFY]))]
-            ;; Store the watchable (which equals the registered path) as the key
-           (.put result (.watchable k) d))
-         java.nio.file.FileVisitResult/CONTINUE)
-       (visitFile [_ _f _a] java.nio.file.FileVisitResult/CONTINUE)
-       (visitFileFailed [_ _f _e] java.nio.file.FileVisitResult/CONTINUE)
-       (postVisitDirectory [_ _d _e] java.nio.file.FileVisitResult/CONTINUE)))
-    (into {} result)))
+(defn- scan-dir!
+  "Walks `dir` recursively, checks every .class file's mtime against
+   `mtime-cache`, and calls `handle-class-change!` for any that changed."
+  [^Path dir]
+  (try
+    (Files/walkFileTree dir
+      (reify java.nio.file.FileVisitor
+        (preVisitDirectory [_ _d _a] java.nio.file.FileVisitResult/CONTINUE)
+        (visitFile [_ file _attrs]
+          (let [path-str (.toString file)]
+            (when (str/ends-with? path-str ".class")
+              (try
+                (let [mtime (.toMillis (Files/getLastModifiedTime file (make-array LinkOption 0)))
+                      prev  (get @mtime-cache path-str)]
+                  (when (not= prev mtime)
+                    (swap! mtime-cache assoc path-str mtime)
+                    (let [rel      (.toString (.relativize dir file))
+                          asm-name (str/replace (str/replace rel ".class" "") java.io.File/separator "/")]
+                      (handle-class-change! file asm-name))))
+                (catch Exception e
+                  (println (str "[query-watcher] error scanning " path-str ": " (.getMessage e)))))))
+          java.nio.file.FileVisitResult/CONTINUE)
+        (visitFileFailed [_ _f _e] java.nio.file.FileVisitResult/CONTINUE)
+        (postVisitDirectory [_ _d _e] java.nio.file.FileVisitResult/CONTINUE)))
+    (catch Exception e
+      (println (str "[query-watcher] error walking " dir ": " (.getMessage e))))))
 
-(defn- watch-loop!
-  "Blocking loop that polls the WatchService `ws` and dispatches .class change
-   events to handle-class-change!.  Returns when the thread is interrupted or
-   the WatchService is closed."
-  [^WatchService ws ^java.util.Map dir->path-map]
+(defn- poll-loop!
+  "Repeatedly scans all `dirs` for changed .class files until the running
+   flag is set to false or the thread is interrupted."
+  [dirs running?]
   (try
     (loop []
-      (when-not (.isInterrupted (Thread/currentThread))
-        (let [^WatchKey k (try (.take ws)
-                               (catch java.nio.file.ClosedWatchServiceException _ nil)
-                               (catch InterruptedException _ nil))]
-          (when k
-            (try
-              (let [^Path watch-dir (get dir->path-map (.watchable k))]
-                (when watch-dir
-                  (doseq [^WatchEvent ev (.pollEvents k)]
-                    (let [^Path rel-path (.context ev)
-                          abs-path (.resolve watch-dir rel-path)
-                          path-str (.toString rel-path)]
-                      (when (str/ends-with? path-str ".class")
-                        (let [asm-name (str/replace (str/replace path-str ".class" "") "\\" "/")]
-                          (handle-class-change! abs-path asm-name)))))))
-              (catch Exception e
-                (println (str "[query-watcher] error in watch loop: " (.getMessage e))))
-              (finally
-                (.reset k)))
-            (recur)))))
+      (when (and @running? (not (.isInterrupted (Thread/currentThread))))
+        (doseq [^Path d dirs]
+          (scan-dir! d))
+        (try (Thread/sleep poll-interval-ms)
+             (catch InterruptedException _ (.interrupt (Thread/currentThread))))
+        (recur)))
     (catch Exception e
       (println (str "[query-watcher] fatal error, watcher stopped: " (.getMessage e))))))
 
@@ -251,47 +249,44 @@
    Steps:
      1. Detect all existing output directories.
      2. Build the initial known-state registry from live Spring beans.
-     3. Register all dirs (recursively) with a WatchService.
-     4. Spawn a daemon thread running the watch loop."
+     3. Seed the mtime-cache with current timestamps (no false positives on start).
+     4. Spawn a daemon thread running the poll loop."
   []
-  (if @watcher-atom
+  (if @running-atom
     (println "[query-watcher] already running — skipping start")
     (let [dirs (detect-output-dirs)]
       (if (empty? dirs)
         (println "[query-watcher] no output directories found — watcher not started")
         (do
           (reset! known-state (build-initial-registry))
-          (let [ws (.newWatchService (FileSystems/getDefault))
-                dir-map (reduce (fn [m ^Path d]
-                                  (let [registered (register-dir-recursive! ws d)]
-                                    (merge m registered)))
-                                {}
-                                dirs)
-                thread (doto (Thread. ^Runnable #(watch-loop! ws dir-map))
-                         (.setName "livewire-query-watcher")
-                         (.setDaemon true)
-                         (.start))]
-            (reset! watcher-atom ws)
+          ;; Seed mtime-cache so the first scan doesn't re-fire everything
+          (doseq [^Path d dirs]
+            (scan-dir! d))
+          (let [running? (atom true)
+                thread   (doto (Thread. ^Runnable #(poll-loop! dirs running?))
+                           (.setName "livewire-query-watcher")
+                           (.setDaemon true)
+                           (.start))]
+            (reset! running-atom running?)
             (reset! watch-thread-atom thread)
             (println (str "[query-watcher] started — watching " (count dirs) " dir(s), "
                           (count @known-state) " @Query method(s) in registry"))))))))
 
 (defn stop-watcher!
-  "Stops the query-watcher: closes the WatchService and interrupts the watch
-   thread.  Idempotent — calling when not running is a no-op."
+  "Stops the query-watcher: sets the running flag to false and interrupts
+   the poll thread.  Idempotent — calling when not running is a no-op."
   []
-  (when-let [ws @watcher-atom]
-    (.close ws)
-    (reset! watcher-atom nil))
+  (when-let [running? @running-atom]
+    (reset! running? false)
+    (reset! running-atom nil))
   (when-let [^Thread t @watch-thread-atom]
     (.interrupt t)
     (reset! watch-thread-atom nil))
   (println "[query-watcher] stopped"))
 
 (defn status
-  "Returns a map describing the current watcher state:
-   {:running? true/false :dirs [...] :registry-size N}"
+  "Returns a map describing the current watcher state."
   []
-  {:running? (some? @watcher-atom)
+  {:running?      (some? @running-atom)
    :registry-size (count @known-state)
-   :known-state @known-state})
+   :known-state   @known-state})

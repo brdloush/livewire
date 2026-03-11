@@ -194,6 +194,12 @@
 ;; Uses mtime comparison rather than WatchService because Maven's Eclipse
 ;; compiler (ecj) writes .class files in a way that does not trigger inotify
 ;; events on Linux.
+;;
+;; Note: Spring Boot DevTools ships a FileSystemWatcher that does the same
+;; thing and is battle-tested, but spring-boot-devtools is not reliably on
+;; the classpath (it's typically excluded from production JARs). Depending
+;; on it would make Livewire fragile for anyone not using devtools. The
+;; hand-rolled mtime scan is equivalent and keeps Livewire self-contained.
 ;; ---------------------------------------------------------------------------
 
 (defn- scan-dir!

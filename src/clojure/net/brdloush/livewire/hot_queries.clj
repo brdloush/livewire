@@ -1,15 +1,25 @@
 (ns net.brdloush.livewire.hot-queries
   "Live @Query swap engine for Spring Data JPA repositories.
 
-  Three-layer patch required for Spring Data JPA 4.x / Hibernate 7:
+  Four-layer patch required for Spring Data JPA 4.x / Hibernate 7:
 
   1. DeclaredQueries$JpqlQuery.jpql  — the String actually used at runtime
   2. DefaultEntityQuery.queryString  — Lazy<String> cache; replaced with an
                                        atom-backed Lazy so re-reads are live
-  3. Hibernate interpretation caches — hqlInterpretationCache + queryPlanCache
+  3. DefaultEntityQuery.queryEnhancer — JpaQueryEnhancer holds a pre-parsed ANTLR
+                                        AST of the original HQL. Used for
+                                        createCountQueryFor, detectAlias, getProjection,
+                                        and rewrite (pagination/sorting). Must be
+                                        rebuilt via JpaQueryEnhancer/forHql(new-jpql)
+                                        so any sort/page/count paths see the new query.
+  4. Hibernate interpretation caches — hqlInterpretationCache + queryPlanCache
                                         on QueryInterpretationCacheStandardImpl
                                         must be cleared so Hibernate re-parses
                                         the new JPQL on next execution
+
+  Note: UnsortedCachingQuerySortRewriter.cachedQuery is derived from queryString
+  (layer 2) so it self-corrects automatically when the atom-backed Lazy is swapped.
+  No explicit null-out needed.
 
   Usage:
     (require '[net.brdloush.livewire.hot-queries :as hq])
@@ -23,13 +33,15 @@
 
 ;; ---------------------------------------------------------------------------
 ;; Global registry
-;; { [bean-name method-name] -> {:atom            <jpql-atom>
-;;                                :original-lazy   <original Lazy>
-;;                                :original-jpql   <original String>
-;;                                :qs-field        <Field queryString on DefaultEntityQuery>
-;;                                :jpql-field      <Field jpql on DeclaredQueries$JpqlQuery>
-;;                                :entity-q        <DefaultEntityQuery instance>
-;;                                :jpql-source     <DeclaredQueries$JpqlQuery instance>} }
+;; { [bean-name method-name] -> {:atom              <jpql-atom>
+;;                                :original-lazy     <original Lazy<String>>
+;;                                :original-jpql     <original String>
+;;                                :original-enhancer <original JpaQueryEnhancer>
+;;                                :qs-field          <Field queryString on DefaultEntityQuery>
+;;                                :jpql-field        <Field jpql on DeclaredQueries$JpqlQuery>
+;;                                :enh-field         <Field queryEnhancer on DefaultEntityQuery>
+;;                                :entity-q          <DefaultEntityQuery instance>
+;;                                :jpql-source       <DeclaredQueries$JpqlQuery instance>} }
 ;; ---------------------------------------------------------------------------
 
 (defonce ^:private registry (atom {}))
@@ -93,6 +105,24 @@
   (doto (.getDeclaredField (class entity-q) "queryString")
     (.setAccessible true)))
 
+(defn- get-query-enhancer-field
+  "Returns the accessible `queryEnhancer` field on a DefaultEntityQuery."
+  [entity-q]
+  (doto (.getDeclaredField (class entity-q) "queryEnhancer")
+    (.setAccessible true)))
+
+(def ^:private jpa-query-enhancer-class
+  (delay (Class/forName "org.springframework.data.jpa.repository.query.JpaQueryEnhancer")))
+
+(defn- build-hql-enhancer
+  "Creates a fresh JpaQueryEnhancer$HqlQueryParser by parsing `jpql` via
+  the JpaQueryEnhancer/forHql(String) static factory method."
+  [jpql]
+  (let [method (doto (.getDeclaredMethod @jpa-query-enhancer-class "forHql"
+                                         (into-array Class [String]))
+                 (.setAccessible true))]
+    (.invoke method nil (object-array [jpql]))))
+
 ;; ---------------------------------------------------------------------------
 ;; Private reflection helpers — Hibernate cache layer
 ;; ---------------------------------------------------------------------------
@@ -155,9 +185,10 @@
   [repo-bean-name method-name new-jpql]
   (let [reg-key [repo-bean-name method-name]]
     (if-let [entry (get @registry reg-key)]
-      ;; Already swapped — update both the atom (-> Lazy) and the raw jpql String field
+      ;; Already swapped — update atom (-> Lazy), raw jpql String, and queryEnhancer AST
       (do (reset! (:atom entry) new-jpql)
           (.set (:jpql-field entry) (:jpql-source entry) new-jpql)
+          (.set (:enh-field entry) (:entity-q entry) (build-hql-enhancer new-jpql))
           (clear-hibernate-caches!)
           (println (str "[hot-queries] re-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})
@@ -171,30 +202,37 @@
         (when-not rq
           (throw (IllegalArgumentException.
                    (str "No @Query method '" method-name "' found on bean '" repo-bean-name "'"))))
-        (let [entity-q      (get-entity-query rq)
-              preprocessed  (get-preprocessed-query entity-q)
-              jpql-source   (get-jpql-source preprocessed)
-              jpql-field    (get-jpql-field jpql-source)
-              qs-field      (get-query-string-field entity-q)
-              original-lazy (.get qs-field entity-q)
-              original-jpql (.get jpql-field jpql-source)
-              jpql-atom     (atom new-jpql)
-              live-lazy     (org.springframework.data.util.Lazy/of
-                              (reify java.util.function.Supplier
-                                (get [_] @jpql-atom)))]
+        (let [entity-q          (get-entity-query rq)
+              preprocessed      (get-preprocessed-query entity-q)
+              jpql-source       (get-jpql-source preprocessed)
+              jpql-field        (get-jpql-field jpql-source)
+              qs-field          (get-query-string-field entity-q)
+              enh-field         (get-query-enhancer-field entity-q)
+              original-lazy     (.get qs-field entity-q)
+              original-jpql     (.get jpql-field jpql-source)
+              original-enhancer (.get enh-field entity-q)
+              jpql-atom         (atom new-jpql)
+              live-lazy         (org.springframework.data.util.Lazy/of
+                                  (reify java.util.function.Supplier
+                                    (get [_] @jpql-atom)))]
           ;; Layer 1: patch the raw JPQL string used at runtime
           (.set jpql-field jpql-source new-jpql)
           ;; Layer 2: replace the Lazy<String> cache with an atom-backed one
           (.set qs-field entity-q live-lazy)
-          ;; Layer 3: clear Hibernate's parse caches
+          ;; Layer 3: rebuild the queryEnhancer (holds a pre-parsed ANTLR AST) so that
+          ;; sort/page/count paths see the new JPQL, not the original AST
+          (.set enh-field entity-q (build-hql-enhancer new-jpql))
+          ;; Layer 4: clear Hibernate's parse caches
           (clear-hibernate-caches!)
-          (swap! registry assoc reg-key {:atom          jpql-atom
-                                         :original-lazy original-lazy
-                                         :original-jpql original-jpql
-                                         :qs-field      qs-field
-                                         :jpql-field    jpql-field
-                                         :entity-q      entity-q
-                                         :jpql-source   jpql-source})
+          (swap! registry assoc reg-key {:atom              jpql-atom
+                                         :original-lazy     original-lazy
+                                         :original-jpql     original-jpql
+                                         :original-enhancer original-enhancer
+                                         :qs-field          qs-field
+                                         :jpql-field        jpql-field
+                                         :enh-field         enh-field
+                                         :entity-q          entity-q
+                                         :jpql-source       jpql-source})
           (println (str "[hot-queries] hot-swapped " repo-bean-name "#" method-name))
           {:swapped reg-key :query new-jpql})))))
 
@@ -204,9 +242,12 @@
   Returns :restored or :not-swapped."
   [repo-bean-name method-name]
   (let [reg-key [repo-bean-name method-name]]
-    (if-let [{:keys [original-lazy original-jpql qs-field jpql-field entity-q jpql-source]} (get @registry reg-key)]
+    (if-let [{:keys [original-lazy original-jpql original-enhancer
+                     qs-field jpql-field enh-field entity-q jpql-source]}
+             (get @registry reg-key)]
       (do (.set jpql-field jpql-source original-jpql)
           (.set qs-field entity-q original-lazy)
+          (.set enh-field entity-q original-enhancer)
           (clear-hibernate-caches!)
           (swap! registry dissoc reg-key)
           (println (str "[hot-queries] restored " repo-bean-name "#" method-name))
@@ -220,10 +261,12 @@
   []
   (let [keys (keys @registry)]
     (doseq [[bean-name method-name] keys]
-      (let [{:keys [original-lazy original-jpql qs-field jpql-field entity-q jpql-source]}
+      (let [{:keys [original-lazy original-jpql original-enhancer
+                    qs-field jpql-field enh-field entity-q jpql-source]}
             (get @registry [bean-name method-name])]
         (.set jpql-field jpql-source original-jpql)
         (.set qs-field entity-q original-lazy)
+        (.set enh-field entity-q original-enhancer)
         (swap! registry dissoc [bean-name method-name])
         (println (str "[hot-queries] restored " bean-name "#" method-name))))
     (when (seq keys)

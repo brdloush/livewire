@@ -41,6 +41,16 @@ the JVM beats static analysis every time.
    re-reads the same old class already on the classpath. Instead, evaluate the
    new `ns` form and function bodies directly into the live REPL.
 
+6. **After writing a source-code fix:** Once a hypothesis has been validated in
+   the REPL and the fix has been written to source, remind the user that a
+   restart may be required before the new code takes effect — unless the change
+   is limited to `@Query` JPQL strings that the query-watcher can pick up
+   automatically on recompile. For structural changes (new methods, service
+   logic, new beans), a friendly nudge is appropriate:
+   > The fix is in source. If the change involves new methods or service logic,
+   > a restart will be needed to activate it. Once you restart, we can continue
+   > from the live REPL.
+
 ---
 
 ## Core API — `net.brdloush.livewire.core`
@@ -105,6 +115,32 @@ the real secured code path — including AOP advice, `@PostAuthorize` filters, e
 | `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, params, `:pre-authorize`) |
 | `(intro/list-entities)` | All Hibernate-managed entities (simple name + FQN) |
 | `(intro/inspect-entity "Name")` | Table name, columns, and relations for one entity |
+
+### Inspecting entity structure
+
+**Prefer `intro/list-entities` + `intro/inspect-entity` over raw SQL schema queries** when
+exploring entity mappings, table names, columns, or relations. The introspection API reads
+directly from Hibernate's metamodel — it reflects the actual JPA mapping including column
+overrides, join tables, and relation types, without needing to know the DB dialect or schema name.
+
+```clojure
+;; ✅ preferred: list all entities, then inspect one
+(->> (intro/list-entities) (map :name) (filter #(re-find #"Book" %)))
+;; => ("Book")
+
+(intro/inspect-entity "Book")
+;; => {:table-name "book",
+;;     :identifier {:name "id", :columns ["id"], :type "long"},
+;;     :properties [{:name "title", :columns ["title"], :type "string"} ...],
+;;     :relations [{:name "author", :type :many-to-one, :target "Author"} ...]}
+
+;; ✅ also fine: raw SQL for schema questions the metamodel can't answer
+;;    (e.g. indexes, constraints, DB-level defaults)
+(lw/in-readonly-tx (q/sql "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'book'"))
+```
+
+Raw SQL schema queries are a valid fallback for DB-level details (indexes, constraints,
+sequences) that are outside Hibernate's metamodel.
 
 ### Calling controller methods from the REPL
 

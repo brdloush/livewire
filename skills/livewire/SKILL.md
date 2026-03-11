@@ -101,9 +101,31 @@ the real secured code path — including AOP advice, `@PostAuthorize` filters, e
 
 | Expression | What it returns |
 |---|---|
-| `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, params) |
+| `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, params, `:pre-authorize`) |
 | `(intro/list-entities)` | All Hibernate-managed entities (simple name + FQN) |
 | `(intro/inspect-entity "Name")` | Table name, columns, and relations for one entity |
+
+### Calling controller methods from the REPL
+
+When you discover an endpoint via `list-endpoints`, check its `:pre-authorize` value before calling it.
+If one is present, **always wrap the call in `lw/run-as`** — without it the REPL has no
+`SecurityContext` and Spring Security throws `AuthenticationCredentialsNotFoundException`.
+
+```clojure
+;; Discover what auth an endpoint requires
+(->> (intro/list-endpoints)
+     (filter #(re-find #"books" (str (:paths %))))
+     (mapv #(select-keys % [:paths :handler-method :pre-authorize])))
+;; => [{:paths ["/api/books"], :handler-method "getBooks", :pre-authorize "hasRole('MEMBER')"}
+;;     ...]
+
+;; Call it with the appropriate role
+(lw/run-as "member1"
+  (.getBooks (lw/bean "bookController")))
+```
+
+`:pre-authorize` reflects both method-level and class-level `@PreAuthorize` annotations —
+so it's always populated when security is in play, regardless of where the annotation lives.
 
 ---
 

@@ -144,6 +144,20 @@ sequences) that are outside Hibernate's metamodel.
 
 ### Calling controller methods from the REPL
 
+#### ⚠️ Never invoke mutating endpoints without explicit user instruction
+
+Only call controller methods that correspond to **read-only (`GET`) endpoints** on your own
+initiative. `GET` endpoints are expected to be side-effect free and are safe to invoke for
+inspection or debugging.
+
+For any **mutating endpoint** (`POST`, `PUT`, `PATCH`, `DELETE`, or anything else that writes,
+deletes, or triggers side effects), you **must not** call it unless one of the following is true:
+
+- The user has **explicitly instructed** you to call it (e.g. "go ahead and create that record").
+- You have **asked the user for permission** and received confirmation.
+
+If in doubt, describe what you would call and why, and wait for the user's go-ahead.
+
 When you discover an endpoint via `list-endpoints`, check its `:pre-authorize` value before calling it.
 If one is present, **always wrap the call in `lw/run-as`** — without it the REPL has no
 `SecurityContext` and Spring Security throws `AuthenticationCredentialsNotFoundException`.

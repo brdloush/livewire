@@ -21,7 +21,8 @@ the JVM beats static analysis every time.
    (require '[net.brdloush.livewire.core :as lw]
             '[net.brdloush.livewire.introspect :as intro]
             '[net.brdloush.livewire.trace :as trace]
-            '[net.brdloush.livewire.hot-queries :as hq])
+            '[net.brdloush.livewire.hot-queries :as hq]
+            '[net.brdloush.livewire.query-watcher :as qw])
    ```
 
 3. **Evaluate** snippets iteratively — the session persists between calls:
@@ -161,13 +162,30 @@ for the same method are reflection-free (just `reset!` the atom).
 - **Testing a `JOIN FETCH` or `@EntityGraph`** addition before writing it to source.
 - Works best combined with `trace/trace-sql` to verify the resulting SQL.
 
-### ⚠️ Hot-swaps are persistent side effects — always clean up
+### Last-one-wins swap policy
 
-Unlike `lw/in-tx` (which always rolls back), hot-swapped queries **persist** in the live JVM for
-the entire lifetime of the process. If you leave a swap in place, the app continues running the
-patched query — which can silently affect other callers, tests, or monitoring.
+**A recompile always overrides a REPL pin.** When the query-watcher detects a `.class` file
+change, it applies the new JPQL regardless of whether you had previously swapped the query
+from the REPL. Similarly, a subsequent REPL swap overrides whatever the watcher last applied.
+Whoever wrote last wins — no manual cleanup required between iterations.
 
-**Rule: always restore before ending an exploratory session.**
+`(hq/list-swapped)` shows `:manual? true` for REPL-initiated swaps and `:manual? false` for
+watcher-initiated ones — informational only, it no longer blocks overwrites.
+
+```clojure
+(hq/list-swapped)
+;; => [{:bean "bookRepository", :method "findByIdWithDetails",
+;;      :manual? true, :jpql "select b from Book b where b.id = :id"}]
+```
+
+### ⚠️ Hot-swaps are persistent side effects — clean up when done
+
+Unlike `lw/in-tx` (which always rolls back), hot-swapped queries **persist** in the live JVM.
+A recompile will override your swap automatically (last-one-wins), but if you finish an
+exploratory session without recompiling, the patched query stays live and can silently affect
+other callers or monitoring.
+
+**Rule: call `reset-all!` when you're done experimenting.**
 
 ```clojure
 ;; Restore everything in one call
@@ -209,6 +227,24 @@ patched query — which can silently affect other callers, tests, or monitoring.
 (hq/reset-query! "bookRepository" "findByIdWithDetails")
 ;; => :restored
 ```
+
+---
+
+## Query Watcher API — `net.brdloush.livewire.query-watcher`
+
+The query-watcher runs automatically in the background (started by Livewire on boot). It polls
+compiled output directories (`target/classes`, `build/classes/…`) every 500 ms, detects `.class`
+file changes via mtime, and auto-applies updated `@Query` JPQL strings live — no restart needed.
+
+| Expression | What it does |
+|---|---|
+| `(qw/status)` | Returns `{:running? true/false, :disk-state-size N, :disk-state {...}}` |
+| `(qw/start-watcher!)` | Starts the watcher (idempotent — called automatically on boot) |
+| `(qw/stop-watcher!)` | Stops the watcher |
+| `(qw/force-rescan!)` | Clears the mtime cache — next poll re-examines every `.class` file |
+
+`qw/force-rescan!` is rarely needed manually. `hq/reset-all!` and `hq/reset-query!` call it
+automatically after restoring a query so the watcher immediately re-applies whatever is on disk.
 
 ---
 

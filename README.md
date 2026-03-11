@@ -13,7 +13,7 @@ the running JVM — beans, queries, transactions and all.
 Build and install to your local Maven repository:
 
 ```bash
-lein with-profile +provided install
+bb install
 ```
 
 Then add to your Spring Boot project:
@@ -314,8 +314,9 @@ the hot path.
 |---|---|
 | `(hq/list-queries "repoBean")` | Lists all `@Query`-annotated methods on a repository bean with their current JPQL |
 | `(hq/hot-swap-query! "repoBean" "methodName" new-jpql)` | Swaps the JPQL live; first call uses reflection, subsequent calls just `reset!` the atom |
-| `(hq/list-swapped)` | Shows all currently hot-swapped queries across all repos |
-| `(hq/reset-query! "repoBean" "methodName")` | Restores the original JPQL |
+| `(hq/list-swapped)` | Shows all currently hot-swapped queries; `:manual? true` = REPL-initiated, `false` = watcher-initiated |
+| `(hq/reset-query! "repoBean" "methodName")` | Restores the original JPQL for one method |
+| `(hq/reset-all!)` | Restores **every** currently hot-swapped query at once |
 
 ### Hot Queries example
 
@@ -344,15 +345,54 @@ the hot path.
   "select b from Book b where b.id = :id")
 ;; => {:swapped ["bookRepository" "findByIdWithDetails"], :query "..."}
 
-;; Check what's currently swapped
+;; Check what's currently swapped (:manual? true = REPL, false = watcher)
 (hq/list-swapped)
-;; => [{:bean "bookRepository", :method "findByIdWithDetails", :jpql "select c from Contract c ..."}]
+;; => [{:bean "bookRepository", :method "findByIdWithDetails",
+;;      :manual? true, :jpql "select c from Contract c ..."}]
 
 ;; Restore the original
 (hq/reset-query! "bookRepository" "findByIdWithDetails")
 ;; [hot-queries] restored bookRepository#findByIdWithDetails
 ;; => :restored
+
+;; Restore everything at once
+(hq/reset-all!)
+;; => [["bookRepository" "findByIdWithDetails"]]
 ```
+
+### Last-one-wins
+
+REPL swaps and recompiles freely override each other — **whoever wrote last wins**:
+
+- You REPL-swap to a test query → it goes live immediately.
+- You recompile with a new `@Query` → the watcher detects the `.class` change and applies it,
+  overriding your REPL swap automatically.
+- You REPL-swap again after the recompile → your new swap wins.
+
+This means you can iterate freely between editor and REPL without calling `reset-all!` between
+each cycle. Call `reset-all!` only at the end of a session to ensure nothing is left patched.
+
+---
+
+## Query Watcher (`net.brdloush.livewire.query-watcher`)
+
+The query-watcher starts automatically on boot. It polls compiled output directories
+(`target/classes`, `build/classes/…`) every 500 ms, detects `.class` file changes via
+mtime, and hot-applies updated `@Query` JPQL strings without a restart.
+
+```clojure
+(require '[net.brdloush.livewire.query-watcher :as qw])
+```
+
+| Function | Description |
+|---|---|
+| `(qw/status)` | `{:running? true/false, :disk-state-size N, :disk-state {...}}` |
+| `(qw/start-watcher!)` | Starts the watcher (idempotent — called automatically on boot) |
+| `(qw/stop-watcher!)` | Stops the watcher |
+| `(qw/force-rescan!)` | Clears the mtime cache so the next poll re-examines all `.class` files |
+
+`force-rescan!` is rarely needed manually — `reset-all!` and `reset-query!` call it
+automatically after restoring a query.
 
 ---
 

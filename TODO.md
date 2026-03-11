@@ -48,6 +48,37 @@ Console output on swap:
 [query-watcher] hot-swapping OrderRepository#findActiveByUserId
 ```
 
+#### Todo
+
+- [ ] **Add ASM dependency** — declare `org.ow2.asm/asm` in `project.clj` (don't rely on the
+  transitive copy bundled inside Spring/Hibernate JARs).
+- [ ] **ASM bytecode reader** — implement a fn that reads a `.class` file path and returns a map
+  of `method-name → jpql-string` for every `@Query` annotation found; no classloading, pure
+  bytecode inspection.
+- [ ] **Class→bean-name resolver** — given an ASM-extracted class name (e.g.
+  `com/example/BookRepository`), map it to the matching Spring bean name via
+  `core/beans-of-type` (or equivalent); needed before calling `hot-swap-query!`.
+- [ ] **Known-state registry** — define a `defonce` atom; populate it at watcher startup by
+  scanning all repository beans via `hot-queries/list-queries` to establish the baseline
+  `{[bean method] → jpql}` snapshot.
+- [ ] **Output directory auto-detection** — at startup, check all four candidate paths
+  (`target/classes`, `build/classes/java/main`, `build/classes/kotlin/main`,
+  `out/production/classes`) and collect every one that exists (watch all, not just the first).
+- [ ] **File watcher core** — implement `start-watcher!` using `java.nio.file.WatchService`
+  over the detected dirs; on each `.class` change: run ASM reader → diff result against
+  registry → call `hot-swap-query!` for each changed method → update registry entry.
+- [ ] **Fast guard for non-repository classes** — skip ASM parse entirely when the changed
+  `.class` file clearly doesn't contain `@Query` annotations (e.g. check constant-pool string
+  presence before full parse).
+- [ ] **Console logging** — emit `[query-watcher] hot-swapping Repo#method` to stdout for
+  each successful swap.
+- [ ] **Lifecycle hookup** — wire `start-watcher!` into `boot/start!`; make it idempotent
+  (`defonce` thread/guard); implement `stop-watcher!` that closes the `WatchService` and
+  terminates the watch thread cleanly.
+- [ ] **Validate in Bloated Shelf** — edit a `@Query` annotation in the demo app, hit
+  Recompile (Ctrl+F9), confirm the live query updates within milliseconds with zero REPL
+  interaction.
+
 ---
 
 ## ✅ Done

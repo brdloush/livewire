@@ -10,10 +10,6 @@ Spec: `specs/01-initial-project-scope.md` → Component 4
 - **`(hibernate-stats)`** — Snapshot of Hibernate's `Statistics` object: cache hit/miss ratios,
   entity load counts, collection fetch counts, slow queries.
 
-- **`(call-service bean-name method-sym & args)`** — Invoke a service method via reflection,
-  inside a read-only transaction, with full Spring AOP active (security interceptors, transaction
-  advice, etc.). The key tool for "exercise the real code path and observe."
-
 ---
 
 ## 🔜 Planned (fully spec'd, not yet started)

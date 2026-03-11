@@ -4,5 +4,6 @@
 /.lein-*
 /.clj-kondo
 /.cpcache
+/.lsp
 *.class
 *.jar

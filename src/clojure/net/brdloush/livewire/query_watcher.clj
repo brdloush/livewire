@@ -49,11 +49,6 @@
 ;;; Holds the watcher Thread, or nil.
 (defonce ^:private watch-thread-atom (atom nil))
 
-;;; Registry of the last-known JPQL per [bean-name method-name] pair.
-;;; Initialised at watcher startup from hot-queries/list-queries over all beans.
-;;; Updated on every successful hot-swap.
-(defonce ^:private known-state (atom {}))
-
 ;;; Poll interval in milliseconds.
 (def ^:private poll-interval-ms 500)
 
@@ -125,12 +120,13 @@
          first)))
 
 ;; ---------------------------------------------------------------------------
-;; Known-state registry
+;; Initial disk-state builder
 ;; ---------------------------------------------------------------------------
 
-(defn- build-initial-registry
+(defn- build-initial-disk-state
   "Scans all Spring beans for @Query methods via hot-queries/list-queries and
-   returns the full {[bean-name method-name] -> jpql-string} baseline map."
+   returns the full {[bean-name method-name] -> jpql-string} baseline map.
+   Passed to hq/seed-disk-state! at watcher startup."
   []
   (->> (core/bean-names)
        (mapcat (fn [bean-name]
@@ -155,8 +151,10 @@
      1. Fast guard: skip if no @Query descriptor in raw bytes.
      2. ASM-parse the file to get method -> JPQL map.
      3. Resolve the Spring bean name.
-     4. Diff each method's JPQL against known-state.
-     5. Call hot-swap-query! for every changed entry; update known-state."
+     4. Diff each method's JPQL against hq/disk-state (shared source of truth).
+     5. Call hq/watcher-apply! for every changed entry.
+        watcher-apply! updates disk-state and either swaps live or tracks silently
+        if the query is currently manually pinned by the user."
   [^Path abs-path ^String asm-class-name]
   (try
     (let [path-str (.toString abs-path)]
@@ -166,11 +164,10 @@
           (when (and (seq queries) bean-name)
             (doseq [[method-name new-jpql] queries]
               (let [reg-key [bean-name method-name]
-                    current-jpql (get @known-state reg-key)]
+                    current-jpql (get @hq/disk-state reg-key)]
                 (when (not= current-jpql new-jpql)
-                  (println (str "[query-watcher] hot-swapping " bean-name "#" method-name))
-                  (hq/hot-swap-query! bean-name method-name new-jpql)
-                  (swap! known-state assoc reg-key new-jpql))))))))
+                  (println (str "[query-watcher] detected change " bean-name "#" method-name))
+                  (hq/watcher-apply! bean-name method-name new-jpql))))))))
     (catch Exception e
       (println (str "[query-watcher] error processing " (.toString abs-path) ": " (.getMessage e))))))
 
@@ -264,7 +261,7 @@
       (if (empty? dirs)
         (println "[query-watcher] no output directories found — watcher not started")
         (do
-          (reset! known-state (build-initial-registry))
+          (hq/seed-disk-state! (build-initial-disk-state))
           ;; Seed mtime-cache so the first scan doesn't re-fire everything
           (doseq [^Path d dirs]
             (scan-dir! d))
@@ -276,7 +273,7 @@
             (reset! running-atom running?)
             (reset! watch-thread-atom thread)
             (println (str "[query-watcher] started — watching " (count dirs) " dir(s), "
-                          (count @known-state) " @Query method(s) in registry"))))))))
+                          (count @hq/disk-state) " @Query method(s) in registry"))))))))
 
 (defn stop-watcher!
   "Stops the query-watcher: sets the running flag to false and interrupts
@@ -293,6 +290,6 @@
 (defn status
   "Returns a map describing the current watcher state."
   []
-  {:running?      (some? @running-atom)
-   :registry-size (count @known-state)
-   :known-state   @known-state})
+  {:running?       (some? @running-atom)
+   :disk-state-size (count @hq/disk-state)
+   :disk-state     @hq/disk-state})

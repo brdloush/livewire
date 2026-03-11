@@ -743,6 +743,7 @@
     <li><a href="#features">Features</a></li>
     <li><a href="#story">Story</a></li>
     <li><a href="#install">Install</a></li>
+    <li><a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener">GitHub ↗</a></li>
   </ul>
 </nav>
 
@@ -754,7 +755,7 @@
         <div class="hero-warning">⚡ Dev only &nbsp;·&nbsp; You've been warned</div>
         <h1 class="hero-title">
           Stop guessing.<br>
-          Ask the <span class="live">live</span> app.
+          Ask the <span class="live">live</span> Spring app.
         </h1>
         <p class="hero-tagline">
           Livewire embeds a Clojure nREPL server inside your running Spring Boot app —
@@ -764,6 +765,7 @@
         <div class="hero-cta">
           <a href="#install" class="btn btn-primary">⚡ Get started</a>
           <a href="#features" class="btn btn-ghost">See what it can do →</a>
+          <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" class="btn btn-ghost">GitHub ↗</a>
         </div>
       </div>
       <img src="logo-transparent.png" alt="Livewire" class="hero-logo" />
@@ -841,7 +843,10 @@
           <span class="step good">hot-swap</span>
           <span class="arrow">→</span>
           <span class="step good">verify</span>
+          <span class="arrow">→</span>
+          <span class="step good">recompile</span>
         </div>
+        <p style="margin-top:0.85rem; font-size:0.85rem; color:var(--muted)">Recompile and the watcher applies your <code>@Query</code> changes live — no REPL call needed.</p>
       </div>
     </div>
   </div>
@@ -864,7 +869,8 @@
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">core</span> &nbsp;&nbsp;· beans, transactions, run-as<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">trace</span> &nbsp;· SQL tracing, N+1 detection<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query</span> &nbsp;· JPQL / SQL execution<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
       <br>
       <span class="hl-green">Claude Code</span> <span style="color:var(--border-mid)">→</span> <span class="hl-blue">clojure_eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
     </div>
@@ -946,6 +952,19 @@
 ;;     :identifier {:name "id", ...},
 ;;     :properties [{:name "accounts",
 ;;                   :fetch "SELECT", ...}]}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">👁️</div>
+        <h3>Query Watcher — Auto-apply on Recompile</h3>
+        <p>Livewire watches your compiled output directory and automatically applies any changed <code>@Query</code> JPQL to the live JVM within 500 ms of a recompile — no REPL call needed. <strong>Last one wins:</strong> a recompile overrides a REPL swap, and a new REPL swap overrides the last recompile.</p>
+        <div class="code-block"><pre><span class="c">;; just recompile — watcher applies the change</span>
+<span class="c">;; [query-watcher] detected change</span>
+<span class="c">;; bookRepository#findByIdWithDetails</span>
+<span class="c">;; [hot-queries] watcher re-swapped ✓</span>
+
+<span class="p">(</span><span class="kw">qw/status</span><span class="p">)</span>
+<span class="r">;; => {:running? true, :disk-state-size 8}</span></pre></div>
       </div>
 
     </div>
@@ -1073,9 +1092,10 @@
         <div class="code-block"><pre><span class="p">(</span><span class="kw">require</span>
   <span class="s">'[net.brdloush.livewire.core :as lw]</span>
   <span class="s">'[net.brdloush.livewire.trace :as trace]</span>
-  <span class="s">'[net.brdloush.livewire.hot-queries :as hq]</span><span class="p">)</span>
+  <span class="s">'[net.brdloush.livewire.hot-queries :as hq]</span>
+  <span class="s">'[net.brdloush.livewire.query-watcher :as qw]</span><span class="p">)</span>
 
-<span class="p">(</span><span class="kw">lw/info</span><span class="p">)</span> <span class="c">; you're in</span></pre></div>
+<span class="p">(</span><span class="kw">lw/info</span><span class="p">)</span> <span class="c">; you're in — query-watcher already running</span></pre></div>
       </div>
     </div>
   </div>
@@ -1091,6 +1111,9 @@
     <p class="footer-warning">
       <strong>Dev only. Not for production.</strong>
       You've been warned.
+    </p>
+    <p style="margin-top:1rem; font-size:0.85rem;">
+      <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" style="color:var(--muted);">GitHub ↗</a>
     </p>
   </div>
 </footer>

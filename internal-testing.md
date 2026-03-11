@@ -16,4 +16,4 @@ This snippet was used to trace a service call that uncovered a severe N+1 query 
                       25))
 ```
 
-*Note: Use this snippet to verify performance fixes (e.g., adding `JOIN FETCH` or `@EntityGraph` to the repository method) once the underlying code is modified.*
+*Note: The N+1 fix is tracked in [TODO.md](TODO.md).*

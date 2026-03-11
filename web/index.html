@@ -119,6 +119,28 @@
     .nav-links a { color: var(--muted); transition: color 0.2s; }
     .nav-links a:hover { color: var(--text); }
 
+    .nav-hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.4rem;
+      color: var(--text);
+      flex-direction: column;
+      gap: 5px;
+    }
+    .nav-hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 2px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
     /* ── Hero ─────────────────────────────────────────────────────── */
     #hero {
       min-height: 100vh;
@@ -704,7 +726,23 @@
       nav { height: 64px; }
       .nav-brand img { width: 44px; height: 44px; }
       .nav-brand { font-size: 1.25rem; }
-      .nav-links { display: none; }
+      .nav-hamburger { display: flex; }
+      .nav-links {
+        display: none;
+        position: fixed;
+        top: 64px;
+        left: 0; right: 0;
+        background: rgba(21, 20, 35, 0.97);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        flex-direction: column;
+        gap: 0;
+        padding: 0.5rem 0 1rem;
+        z-index: 99;
+      }
+      .nav-links.open { display: flex; }
+      .nav-links li { padding: 0; }
+      .nav-links a { display: block; padding: 0.85rem 1.5rem; font-size: 1rem; }
       .hero-inner { grid-template-columns: 1fr; }
       .hero-logo { width: 140px; height: 140px; justify-self: center; order: -1; }
       .hero-title { font-size: 2.2rem; }
@@ -718,7 +756,7 @@
     @media (max-width: 480px) {
       nav { height: 64px; padding: 0 1.25rem; }
       .nav-brand img { width: 44px; height: 44px; }
-      .nav-brand { font-size: 1.1rem; gap: 0.5rem; }
+      .nav-brand { font-size: 1.1rem; gap: 0.75rem; }
       .hero-title { font-size: 1.75rem; }
       #hero { padding: 5.5rem 0 3rem; }
       h2 { font-size: 1.75rem; }
@@ -741,7 +779,10 @@
     <img src="logo-transparent.png" alt="Livewire logo" />
     Livewire
   </a>
-  <ul class="nav-links">
+  <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+  <ul class="nav-links" id="nav-links">
     <li><a href="#problem">Problem</a></li>
     <li><a href="#features">Features</a></li>
     <li><a href="#story">Story</a></li>
@@ -1142,7 +1183,28 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'Escape') { closeLightbox(); closeMenu(); }
+  });
+
+  const hamburger = document.getElementById('nav-hamburger');
+  const navLinks  = document.getElementById('nav-links');
+
+  function closeMenu() {
+    hamburger.classList.remove('open');
+    navLinks.classList.remove('open');
+  }
+
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    navLinks.classList.toggle('open');
+  });
+
+  // Close menu when a link is tapped
+  navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+
+  // Close menu when clicking outside the nav
+  document.addEventListener('click', e => {
+    if (!e.target.closest('nav')) closeMenu();
   });
 </script>
 

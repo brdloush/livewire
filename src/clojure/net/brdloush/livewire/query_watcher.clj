@@ -287,9 +287,18 @@
     (reset! watch-thread-atom nil))
   (println "[query-watcher] stopped"))
 
+(defn force-rescan!
+  "Clears the mtime-cache so the next poll cycle re-examines every .class file
+  and re-fires handle-class-change! for any whose JPQL differs from disk-state.
+  Call this after hq/reset-all! or hq/reset-query! to immediately re-apply
+  whatever is currently on disk."
+  []
+  (reset! mtime-cache {})
+  (println "[query-watcher] mtime-cache cleared — next poll will rescan all .class files"))
+
 (defn status
   "Returns a map describing the current watcher state."
   []
-  {:running?       (some? @running-atom)
+  {:running?        (some? @running-atom)
    :disk-state-size (count @hq/disk-state)
-   :disk-state     @hq/disk-state})
+   :disk-state      @hq/disk-state})

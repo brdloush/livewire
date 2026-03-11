@@ -2,6 +2,7 @@
   "Bootstrap namespace: starts and stops the nREPL server.
    Called by the Spring LivewireBootstrapBean via clojure.java.api.Clojure."
   (:require [net.brdloush.livewire.core :as core]
+            [net.brdloush.livewire.query-watcher :as query-watcher]
             [nrepl.server :as nrepl]))
 
 ;;; defonce so repeated calls to start! (e.g. hot-reload of this ns) don't
@@ -21,7 +22,9 @@
       (eval '(require '[net.brdloush.livewire.core :as lw]
                       '[net.brdloush.livewire.query :as q]
                       '[net.brdloush.livewire.introspect :as intro]
-                      '[net.brdloush.livewire.trace :as trace])))
+                      '[net.brdloush.livewire.trace :as trace]
+                      '[net.brdloush.livewire.query-watcher :as qw]
+                      '[net.brdloush.livewire.hot-queries :as hq])))
     (catch Exception e
       (println "[livewire] Warning: Failed to auto-alias namespaces in user ns:" (.getMessage e)))))
 
@@ -35,7 +38,8 @@
     (let [server (nrepl/start-server :port port)]
       (reset! server-atom server)
       (init-user-ns!)
-      (println (str "[livewire] nREPL server started on port " port " with user aliases (lw, q, intro, trace)")))))
+      (query-watcher/start-watcher!)
+      (println (str "[livewire] nREPL server started on port " port " with user aliases (lw, q, intro, trace, qw, hq)")))))
 
 (defn stop!
   "Stops the nREPL server if it is running."

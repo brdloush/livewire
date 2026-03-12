@@ -19,6 +19,11 @@ Beans, queries, transactions, security context, and all.
 
 481 queries. For a list page. Now you know. Now you can fix it — without restarting the app.
 
+> **Not a Clojure developer?** Don't worry about the syntax above — the agent writes and runs it for you.
+> The parentheses look foreign at first, but the language is actually small, consistent, and surprisingly
+> readable once your eyes adjust. If you ever feel curious enough to type a snippet yourself,
+> the basics take an afternoon. You won't regret it. But you don't have to.
+
 ---
 
 ## The problem

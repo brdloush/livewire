@@ -1,7 +1,13 @@
 {:min-bb-version "0.8.0"
 
  :tasks
- {clean
+ {:init (defn file-hex-digest [algorithm file]
+          (let [bytes (java.nio.file.Files/readAllBytes (.toPath (java.io.File. file)))
+                md    (doto (java.security.MessageDigest/getInstance algorithm)
+                        (.update bytes))]
+            (apply str (map (fn [b] (format "%02x" (bit-and b 0xff))) (.digest md)))))
+
+  clean
   {:doc "Remove build artifacts (target/ directory)"
    :task (shell "lein clean")}
 
@@ -68,22 +74,27 @@
                base     (str "net/brdloush/livewire/" version)
                bnd-dir  (str "target/bundle/" base)
                zip-out  (str "target/livewire-" version "-bundle.zip")
-               stems    [(str "livewire-" version)
-                         (str "livewire-" version "-sources")
-                         (str "livewire-" version "-javadoc")]
-               pom-stem (str "livewire-" version)]
+               ;; All artifact stems: JARs and POM
+               art-stems (mapv (fn [suffix] (str "livewire-" version suffix))
+                               ["" "-sources" "-javadoc"])
+               pom-stem  (str "livewire-" version)]
+           (babashka.fs/delete-tree "target/bundle")
            (babashka.fs/create-dirs bnd-dir)
-           ;; Copy JARs + signatures
-           (doseq [stem stems
-                   ext  [".jar" ".jar.asc"]]
-             (babashka.fs/copy (str src-dir "/" stem ext)
-                               (str bnd-dir "/" stem ext)
-                               {:replace-existing true}))
-           ;; Copy POM + signature
-           (doseq [ext [".pom" ".pom.asc"]]
-             (babashka.fs/copy (str src-dir "/" pom-stem ext)
-                               (str bnd-dir "/" pom-stem ext)
-                               {:replace-existing true}))
+           ;; Copy JARs + .asc signatures + generate md5/sha1 checksums
+           (doseq [stem art-stems]
+             (let [src (str src-dir "/" stem ".jar")
+                   dst (str bnd-dir "/" stem ".jar")]
+               (babashka.fs/copy src dst {:replace-existing true})
+               (babashka.fs/copy (str src ".asc") (str dst ".asc") {:replace-existing true})
+               (spit (str dst ".md5")  (file-hex-digest "MD5"   dst))
+               (spit (str dst ".sha1") (file-hex-digest "SHA-1" dst))))
+           ;; Copy POM + .asc signature + generate md5/sha1 checksums
+           (let [src (str src-dir "/" pom-stem ".pom")
+                 dst (str bnd-dir "/" pom-stem ".pom")]
+             (babashka.fs/copy src dst {:replace-existing true})
+             (babashka.fs/copy (str src ".asc") (str dst ".asc") {:replace-existing true})
+             (spit (str dst ".md5")  (file-hex-digest "MD5"   dst))
+             (spit (str dst ".sha1") (file-hex-digest "SHA-1" dst)))
            ;; Zip the bundle/ tree (Central Portal expects the full group/artifact/version path inside)
            (babashka.fs/delete-if-exists zip-out)
            (let [abs-zip (str (babashka.fs/absolutize zip-out))]

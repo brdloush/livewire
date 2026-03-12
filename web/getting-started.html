@@ -383,14 +383,14 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
                   to call, how to avoid pitfalls, and how to run the full
                   inspect → trace → fix → verify loop.
                 </p>
-                <p style="margin-top: 0.6rem;">
+                <p style="margin-top: 0.6rem; overflow-wrap: break-word;">
                   The skill is designed for agents that support slash-command skills
                   (such as <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>
                   or <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>).
-                  Place it at <code>.claude/skills/livewire/SKILL.md</code> — both tools pick it
+                  Place it at <code style="word-break: break-all;">.claude/skills/livewire/SKILL.md</code> — both tools pick it
                   up from there. Other agents can read it directly as context.
                 </p>
-                <div class="code-block" style="margin-top: 0.85rem;"><pre><span class="c"># from the Livewire source root:</span>
+                <div class="code-block" style="margin-top: 0.85rem;"><pre style="white-space: pre-wrap; word-break: break-all;"><span class="c"># from the Livewire source root:</span>
 cp skills/livewire/SKILL.md <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire/SKILL.md</pre></div>
               </div>
             </div>

@@ -336,6 +336,7 @@ The Livewire nREPL comes up on **port 7888**.
 - 🔒 **Test auth boundaries**: call the same endpoint under different roles with `lw/run-as`, see what changes
 - 📊 **Profile and compare**: trace the naive N+1 endpoints against the clean aggregation queries in `adminController`
 - 🧪 **Prototype in Clojure, ship in Java**: re-implement a service method as a REPL expression, validate query count, *then* write the real fix
+- 💬 **Ask nontrivial questions about your data**: *"Which genre has the most overdue loans?"*, *"Who are the top reviewers and what do they have in common?"* — the agent will introspect the entity model, figure out the schema, iterate on queries, and come back with an actual answer. Powerful BI in an agentic chat, no dashboard required
 - 🤖 **Let the agent loose**: point a capable agent at the nREPL, give it `SKILL.md` as context, and watch what it does with the freedom
 
 The app ships with an [`AGENTS.md`](https://github.com/brdloush/bloated-shelf/blob/main/AGENTS.md)

@@ -32,6 +32,11 @@
      (sql \"SELECT * FROM user_identity WHERE id = ?\" 1)
      (sql \"SELECT * FROM books WHERE active = ? LIMIT ?\" true 5)"
   [query & params]
+  ;; Intentionally bypasses Spring's transaction management: we acquire a raw
+  ;; JDBC connection directly from the DataSource so that ad-hoc REPL queries
+  ;; are fully independent of any surrounding Spring transaction.  This is the
+  ;; desired behaviour for a dev-time exploration tool — do not wrap this in a
+  ;; TransactionTemplate.
   (let [ds (core/bean javax.sql.DataSource)]
     (with-open [conn (.getConnection ds)]
       (.setReadOnly conn true)

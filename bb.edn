@@ -25,16 +25,24 @@
 
   stop-serve
   {:doc "Kill the bbserve process on port 4000"
-   :task (let [pids (not-empty (filter not-empty (clojure.string/split (.trim (:out (babashka.process/sh "pgrep" "-f" "bbserve.*--port.*4000"))) (re-pattern "\\s+"))))]
-           (if pids
-             (doseq [pid pids]
-               (babashka.process/shell "kill" pid)
-               (println (str "Stopped (pid " pid ")")))
+   :task (let [procs (->> (java.lang.ProcessHandle/allProcesses)
+                          .iterator
+                          iterator-seq
+                          (filter (fn [p]
+                                    (let [cmd (-> p .info .commandLine)]
+                                      (and (.isPresent cmd)
+                                           (re-find (re-pattern "bbserve.*--port.*4000") (.get cmd)))))))]
+           (if (seq procs)
+             (doseq [p procs]
+               (.destroy p)
+               (println (str "Stopped (pid " (.pid p) ")")))
              (println "No bbserve running on port 4000")))}
 
   serve
   {:doc "Serve web/ on port 4000 and print a QR code for the local URL"
-   :task (let [ip   (first (.split (.trim (:out (babashka.process/sh "hostname" "-I"))) " "))
+   :task (let [ip   (with-open [s (java.net.DatagramSocket.)]
+                      (.connect s (java.net.InetAddress/getByName "8.8.8.8") 53)
+                      (.. s getLocalAddress getHostAddress))
                port 4000
                url  (str "http://" ip ":" port)]
            (println (str "→ " url))

@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Livewire — Live nREPL wire into your Spring Boot app</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
 <!-- ── Nav ──────────────────────────────────────────────────────────── -->
 <nav>
   <a class="nav-brand" href="#">
-    <img src="logo-transparent.png" alt="Livewire logo" />
+    <img src="images/logo-transparent.png" alt="Livewire logo" />
   </a>
   <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
     <span></span><span></span><span></span>
@@ -47,7 +47,7 @@
           <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" class="btn btn-ghost">GitHub ↗</a>
         </div>
       </div>
-      <img src="logo-transparent.png" alt="Livewire" class="hero-logo" />
+      <img src="images/logo-transparent.png" alt="Livewire" class="hero-logo" />
     </div>
   </div>
 </section>
@@ -281,33 +281,35 @@
 <section id="story">
   <div class="container">
     <div class="section-label">Real-world story</div>
-    <h2>From Sentry alert to confirmed fix.<br>Zero restarts.</h2>
+    <h2>From "I heard it's slow"<br>to confirmed fix. 72 seconds.</h2>
 
     <div class="story-box">
       <p>
-        A performance regression landed in Sentry — suspiciously high query counts on a
-        books endpoint. The AI agent connected to the live app via Livewire,
-        traced the service call with <strong>trace-sql</strong>, and found nothing suspicious at first.
-        It tried several book IDs.
+        "Call the <code>getBooksByGenre</code> endpoint — I heard it's a slow one. Investigate."
+        The agent connected via Livewire, listed all endpoints to orient itself, then
+        grabbed a valid genre ID from the live database and started tracing.
       </p>
       <p>
-        One of them triggered <strong>30+ SQL queries</strong> for a single request.
-        <strong>detect-n+1</strong> immediately flagged the culprit: a
-        <strong>@ManyToOne(LAZY)</strong> relation with <strong>referencedColumnName</strong>
-        pointing to a non-PK column — Hibernate can't proxy without the PK, so it fires an
-        immediate SELECT per row regardless of the LAZY declaration.
+        First attempt hit an <strong>AuthorizationDeniedException</strong> — the endpoint
+        requires <code>ROLE_MEMBER</code>, not admin. The agent corrected its
+        <code>run-as</code> call and retried. <strong>detect-n+1</strong> came back
+        with <strong>98 queries for 20 books</strong>: genres, reviews, authors, and each
+        reviewer's member record all loading separately in a loop.
       </p>
       <p>
-        The agent used <strong>hot-swap-query!</strong> to inject a JOIN FETCH fix live,
-        re-ran the trace, and confirmed the query count dropped from 30 to 1.
-        Then it wrote the fix back to the source file.
+        <strong>hq/list-queries</strong> showed the culprit immediately —
+        <code>findByGenreId</code> had a bare JPQL with no <code>JOIN FETCH</code> at all.
+        The agent wrote a fix and hot-swapped it live. First attempt bounced with a
+        JPQL grammar error; the agent self-corrected and swapped again. Query count:
+        <strong>98 → 1</strong>. Verified across five genres. Fix written to
+        <code>BookRepository.java</code>, hot-swap reset.
       </p>
-      <div class="result">One REPL session. Zero restarts. Bug confirmed and fixed.</div>
+      <div class="result">72 seconds. Zero restarts. Root cause found, verified, and fixed.</div>
     </div>
 
     <div class="story-stats">
       <div class="stat">
-        <span class="stat-num">30→1</span>
+        <span class="stat-num">98→1</span>
         <div class="stat-label">SQL queries per request</div>
       </div>
       <div class="stat">
@@ -315,8 +317,8 @@
         <div class="stat-label">App restarts needed</div>
       </div>
       <div class="stat">
-        <span class="stat-num">1</span>
-        <div class="stat-label">REPL session</div>
+        <span class="stat-num">72s</span>
+        <div class="stat-label">Total investigation time</div>
       </div>
     </div>
   </div>
@@ -449,7 +451,7 @@
 <footer>
   <div class="container">
     <div class="footer-logo">
-      <img src="logo-transparent.png" alt="Livewire" />
+      <img src="images/logo-transparent.png" alt="Livewire" />
       Livewire
     </div>
     <p class="footer-warning">

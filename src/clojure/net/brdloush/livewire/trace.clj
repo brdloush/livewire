@@ -58,7 +58,11 @@
    (detect-n+1 trace-result 3))
   ([trace-result threshold]
    (let [queries (:queries trace-result)
-         ;; Group by identical sql+caller signature
+         ;; Group by identical sql+caller signature (both fields together).
+         ;; Using sql alone would merge queries that happen to have the same text
+         ;; but originate from different call sites, masking the true source of
+         ;; each repetition.  Keeping the caller in the key means each distinct
+         ;; (sql, caller) pair is counted independently — intentional.
          freqs (frequencies queries)
          suspicious (->> freqs
                          (filter (fn [[_ count]] (> count threshold)))

@@ -17,13 +17,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install Leiningen
+      - name: Install Leiningen and Babashka
         uses: DeLaGuardo/setup-clojure@13
         with:
           lein: latest
-
-      - name: Install Babashka
-        uses: borkdude/setup-babashka@v1
+          bb: latest
 
       - name: Build and install
         run: bb clean-install

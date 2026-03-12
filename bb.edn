@@ -23,6 +23,44 @@
    :depends [clean]
    :task (shell "lein with-profile +provided install")}
 
+  source-jar
+  {:doc "Build the sources JAR (-sources.jar, required by Maven Central)"
+   :task (let [version (nth (read-string (slurp "project.clj")) 2)
+               out-dir "target/provided"
+               out     (str out-dir "/livewire-" version "-sources.jar")]
+           (babashka.fs/create-dirs out-dir)
+           (apply shell ["jar" "cf" out "-C" "src/clojure" "." "-C" "src/java" "."])
+           (println (str "Created " out)))}
+
+  javadoc-jar
+  {:doc "Build a placeholder javadoc JAR (-javadoc.jar, required by Maven Central)"
+   :task (let [version (nth (read-string (slurp "project.clj")) 2)
+               out-dir "target/provided"
+               out     (str out-dir "/livewire-" version "-javadoc.jar")
+               doc-dir "target/javadoc"]
+           (babashka.fs/create-dirs out-dir)
+           (babashka.fs/create-dirs doc-dir)
+           (spit (str doc-dir "/README.md")
+                 (str "Livewire API documentation is available at "
+                      "https://github.com/brdloush/livewire\n"))
+           (apply shell ["jar" "cf" out "-C" doc-dir "."])
+           (println (str "Created " out)))}
+
+  pom
+  {:doc "Generate pom.xml from project.clj"
+   :task (shell "lein with-profile +provided pom")}
+
+  release-jars
+  {:doc "Build all release artifacts: main JAR, sources JAR, javadoc JAR, and POM"
+   :depends [clean jar source-jar javadoc-jar pom]
+   :task (let [version (nth (read-string (slurp "project.clj")) 2)]
+           (println (str "\nRelease artifacts ready for " version ":"))
+           (doseq [f [(str "target/provided/livewire-" version ".jar")
+                      (str "target/provided/livewire-" version "-sources.jar")
+                      (str "target/provided/livewire-" version "-javadoc.jar")
+                      "pom.xml"]]
+             (println (str "  " f " — " (if (babashka.fs/exists? f) "✅" "❌")))))}
+
   stop-serve
   {:doc "Kill the bbserve process on port 4000"
    :task (let [procs (->> (java.lang.ProcessHandle/allProcesses)

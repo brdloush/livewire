@@ -302,9 +302,18 @@ you explicitly tell it to. That's a guardrail, not a permission slip.
 
 ## Try it — the Bloated Shelf playground
 
-[**Bloated Shelf**](https://github.com/brdloush/bloated-shelf) is a self-contained
-Spring Boot + Hibernate library app that intentionally demonstrates the JPA N+1 problem at scale.
-It's the primary dogfood app for Livewire development — and a ready-made playground.
+[**Bloated Shelf**](https://github.com/brdloush/bloated-shelf) is a real Spring Boot app —
+Spring Security, JPA, PostgreSQL, multiple roles, a handful of controllers and services,
+a domain model with real relationships. It happens to have an N+1 problem baked in,
+but that's just one reason to visit.
+
+The real reason: it's a safe, self-contained Spring app you can hand to an AI agent
+along with a live Livewire nREPL and just... see what happens.
+
+**You will be surprised.** Give an agent live, responsive tools with a fast feedback loop
+and it stops guessing. It starts *exploring*. It asks questions. It forms hypotheses,
+tests them in seconds, and builds on what it learns. The creativity that comes out of
+a well-equipped agent with shiny new toys is something you have to see to believe.
 
 **30 authors · 200 books · 50 members · ~5 reviews/book · all lazily loaded**
 
@@ -321,15 +330,17 @@ The Livewire nREPL comes up on **port 7888**.
 
 ### Things to try
 
-- 🔎 **Confirm the N+1**: call `GET /api/books` equivalent via `bookController` and watch `trace-sql` report 481 queries
-- 🧭 **Discover the app's structure**: `intro/list-entities`, `intro/list-endpoints`, `intro/inspect-entity "Book"`
-- 🔥 **Hot-swap a fix**: use `hq/hot-swap-query!` to add a `JOIN FETCH` to `findAllWithAuthorAndGenres` and watch the query count drop
-- 🔒 **Exercise auth paths**: call the same endpoint under different roles with `lw/run-as` and see what changes
-- 📊 **Profile real queries**: wrap `adminController` calls in `trace-sql` and compare the clean aggregation queries against the N+1 ones
-- 🧪 **Prototype fixes in Clojure**: re-implement a service method as a REPL expression, measure query count, *then* write the Java fix
+- 🔎 **Hunt the N+1**: call the `bookController` and watch `trace-sql` report 481 queries — then fix it without restarting
+- 🧭 **Discover the app cold**: ask an agent to map out the domain model, endpoints, and auth rules using only the live REPL — no source reading
+- 🔥 **Hot-swap queries**: iterate on JPQL live, measure each variant with `trace-sql`, find the winner, commit
+- 🔒 **Test auth boundaries**: call the same endpoint under different roles with `lw/run-as`, see what changes
+- 📊 **Profile and compare**: trace the naive N+1 endpoints against the clean aggregation queries in `adminController`
+- 🧪 **Prototype in Clojure, ship in Java**: re-implement a service method as a REPL expression, validate query count, *then* write the real fix
+- 🤖 **Let the agent loose**: point a capable agent at the nREPL, give it `SKILL.md` as context, and watch what it does with the freedom
 
-The app ships with an `AGENTS.md` that has worked REPL examples, bean names, credentials,
-and a quick smoke-test — a good starting point for agentic sessions.
+The app ships with an [`AGENTS.md`](https://github.com/brdloush/bloated-shelf/blob/main/AGENTS.md)
+covering worked REPL examples, bean names, credentials, and a quick smoke-test —
+a solid starting point for an agentic session.
 
 ---
 

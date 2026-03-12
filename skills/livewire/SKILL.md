@@ -94,9 +94,9 @@ Use `run-as` whenever calling a bean that is protected by Spring Security (`@Pre
 (lw/run-as "admin"
   (lw/in-readonly-tx
     (->> (.findAll (lw/bean "bookRepository")
-                   (org.springframework.data.domain.PageRequest/of 0 20))
+                   (org.springframework.data.domain.PageRequest/of 0 3))
          .getContent
-         (mapv #(select-keys (clojure.core/bean %) [:id :email])))))
+         (mapv #(select-keys (clojure.core/bean %) [:id :title :isbn])))))
 
 ;; Use a specific role set when the method checks for a non-admin role
 (lw/run-as ["auditor@example.com" "ROLE_AUDITOR"]
@@ -315,7 +315,7 @@ transaction boundary.**
   (-> (.findById (lw/bean "bookRepository") 1)
       .get
       clojure.core/bean                              ; all getter properties → map
-      (select-keys [:id :email :status :active])))   ; narrow to what you need
+      (select-keys [:id :title :isbn])))             ; narrow to what you need
 ```
 
 `clojure.core/bean` introspects all getter methods and returns a Clojure map.
@@ -332,13 +332,13 @@ clause** when querying for sample data, example IDs, or exploratory results. The
 
 ```clojure
 ;; ❌ may return millions of rows and hang the REPL
-(lw/in-readonly-tx (q/sql "SELECT id FROM books"))
+(lw/in-readonly-tx (q/sql "SELECT id FROM book"))
 
-;; ✅ safe — cap at 20
-(lw/in-readonly-tx (q/sql "SELECT TOP 20 id, email FROM books"))
+;; ✅ safe — cap at 20 (PostgreSQL / most dialects)
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 20"))
 
-;; ✅ also fine with LIMIT (depends on DB dialect)
-(lw/in-readonly-tx (q/sql "SELECT id, email FROM books LIMIT 20"))
+;; ✅ also fine with FETCH FIRST (SQL standard)
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book FETCH FIRST 20 ROWS ONLY"))
 ```
 
 Apply the same discipline to JPQL queries via `EntityManager` and to repository calls —
@@ -359,10 +359,9 @@ before concluding there is no N+1.
 (mapv (fn [id]
         (let [res (trace/trace-sql
                     (lw/run-as "admin"
-                      (.myEndpoint (lw/bean "myController")
-                                   (java.util.UUID/fromString id))))]
+                      (.myEndpoint (lw/bean "myController") id)))]
           {:id id :total-queries (:count res) :suspicious (count (:suspicious-queries (trace/detect-n+1 res)))}))
-      ["uuid-1" "uuid-2" "uuid-3" "uuid-4" "uuid-5"])
+      [1 2 3 4 5])
 ;; => look for outliers — the problematic ID will stand out with a much higher :total-queries count
 ```
 
@@ -474,10 +473,10 @@ Always pass a `PageRequest` to cap results, or use a more specific query method.
 (->> (.findAll (lw/bean "bookRepository")
                (org.springframework.data.domain.PageRequest/of 0 20))
      .getContent
-     (mapv #(select-keys (clojure.core/bean %) [:id :email])))
+     (mapv #(select-keys (clojure.core/bean %) [:id :title :isbn])))
 
 ;; ✅ or use a native/JPQL query with an explicit limit
-(lw/in-readonly-tx (q/sql "SELECT TOP 20 id, email FROM books"))
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 20"))
 ```
 
 ### `lw/bean SomeClass` only resolves Spring beans, not JPA entities
@@ -536,43 +535,47 @@ Ensure the app is running with a current Livewire JAR.
 ;; Query a repository safely — always page or limit (see pitfalls)
 (lw/in-readonly-tx
   (->> (.findAll (lw/bean "bookRepository")
-                 (org.springframework.data.domain.PageRequest/of 0 20))
+                 (org.springframework.data.domain.PageRequest/of 0 3))
        .getContent
-       (mapv #(select-keys (clojure.core/bean %) [:id :email :status :active]))))
-;; => [{:id 1, :email "test@example.com", :status "PENDING", :active false}]
+       (mapv #(select-keys (clojure.core/bean %) [:id :title :isbn]))))
+;; => [{:id 1, :title "All the King's Men", :isbn "..."}
+;;     {:id 2, :title "A Handful of Dust", :isbn "..."}
+;;     {:id 3, :title "Butter In a Lordly Dish", :isbn "..."}]
 
 ;; Mutate safely — rolls back automatically
 ;; (count here is intentional — we want the total, not a page of rows)
 (lw/in-tx
-  (.save (lw/bean "userRepository") (->User "test@example.com"))
-  (.count (lw/bean "userRepository")))
+  (.save (lw/bean "bookRepository") (->Book "New Title"))
+  (.count (lw/bean "bookRepository")))
 
 ;; Capture the SQL a service method fires
 (trace/trace-sql
   (lw/in-readonly-tx
-    (.count (lw/bean "userRepository"))))
-;; => {:result 42, :queries [{:sql "select count(*) ...", :caller "..."}], :count 1, :duration-ms 15}
+    (.count (lw/bean "bookRepository"))))
+;; => {:result 200, :queries [{:sql "select count(*) ...", :caller "..."}], :count 1, :duration-ms 15}
 
 ;; Hunt for N+1 queries
 (trace/detect-n+1
   (trace/trace-sql
-    (.getAllBooks (lw/bean "bookController")
-                        25)))
-;; => {:suspicious-queries [{:sql "select ...", :caller "...", :count 18}],
-;;     :total-queries 30, :duration-ms 1271}
+    (lw/run-as "member1"
+      (.getBooks (lw/bean "bookController")))))
+;; => {:suspicious-queries [{:sql "select ...", :caller "...", :count 200} ...],
+;;     :total-queries 481, :duration-ms 1271}
 
 ;; Discover all HTTP endpoints
 (first (intro/list-endpoints))
-;; => {:methods ["PUT"], :paths ["/api/v1/clients/segments"], :controller "...ApiController", ...}
+;; => {:methods ["GET"], :paths ["/api/authors/{id}"], :controller "AuthorController", ...}
 
 ;; Inspect a Hibernate entity's DB mappings
 (intro/inspect-entity "Book")
-;; => {:table-name "books", :identifier {:name "id", :columns ["id"], :type "uuid"}, :properties [...]}
+;; => {:table-name "book", :identifier {:name "id", :columns ["id"], :type "long"},
+;;     :properties [{:name "title", :columns ["title"], :type "string"} ...],
+;;     :relations [{:name "author", :type :many-to-one, :target "Author"} ...]}
 
 ;; Call a @PreAuthorize-guarded controller method directly
 (lw/run-as "admin"
   (.getBookById (lw/bean "bookController") 25))
-;; => #object[QuestionnaireDto ...]
+;; => #object[BookDto ...]
 
 ;; Live-swap a JPQL query, verify with trace-sql, then restore
 (hq/hot-swap-query! "bookRepository" "findByIdWithDetails"

@@ -7,7 +7,10 @@
    when the nREPL server starts)."
   (:import [org.springframework.core.env ConfigurableEnvironment EnumerablePropertySource]
            [org.springframework.transaction PlatformTransactionManager TransactionDefinition]
-           [org.springframework.transaction.support TransactionTemplate TransactionCallback]))
+           [org.springframework.transaction.support TransactionTemplate TransactionCallback]
+           [org.springframework.security.core.context SecurityContextHolder SecurityContextImpl]
+           [org.springframework.security.authentication UsernamePasswordAuthenticationToken]
+           [org.springframework.security.core.authority SimpleGrantedAuthority]))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Context atom — populated by boot.clj on startup
@@ -157,32 +160,28 @@
 
 (defn ->authentication
   "Coerces a string, vector, or existing Authentication object into a
-   UsernamePasswordAuthenticationToken for use with `run-as`.
-   Returns nil if Spring Security is not on the classpath."
+   UsernamePasswordAuthenticationToken for use with `run-as`."
   [user-or-auth]
-  (let [auth-class (try (Class/forName "org.springframework.security.core.Authentication") (catch Exception _ nil))]
-    (cond
-      (not auth-class)
-      (throw (IllegalStateException. "Spring Security is not on the classpath."))
+  (cond
+    ;; Already an Authentication object — pass through unchanged
+    (instance? org.springframework.security.core.Authentication user-or-auth)
+    user-or-auth
 
-      ;; If it's already an Authentication object
-      (instance? auth-class user-or-auth)
-      user-or-auth
+    ;; Vector form: [username "ROLE_X" "ROLE_Y"]
+    (vector? user-or-auth)
+    (let [username (first user-or-auth)
+          roles    (mapv #(SimpleGrantedAuthority. (str %)) (rest user-or-auth))]
+      (UsernamePasswordAuthenticationToken. username "password" roles))
 
-      ;; If it's a vector [username "ROLE_ADMIN" "ROLE_USER"]
-      (vector? user-or-auth)
-      (let [username (first user-or-auth)
-            roles (mapv #(org.springframework.security.core.authority.SimpleGrantedAuthority. (str %)) (rest user-or-auth))]
-        (org.springframework.security.authentication.UsernamePasswordAuthenticationToken. username "password" roles))
+    ;; Plain string: grant ROLE_USER + ROLE_ADMIN
+    (string? user-or-auth)
+    (let [roles [(SimpleGrantedAuthority. "ROLE_USER")
+                 (SimpleGrantedAuthority. "ROLE_ADMIN")]]
+      (UsernamePasswordAuthenticationToken. user-or-auth "password" roles))
 
-      ;; If it's a simple string, give them a generic token with USER and ADMIN
-      (string? user-or-auth)
-      (let [roles [(org.springframework.security.core.authority.SimpleGrantedAuthority. "ROLE_USER")
-                   (org.springframework.security.core.authority.SimpleGrantedAuthority. "ROLE_ADMIN")]]
-        (org.springframework.security.authentication.UsernamePasswordAuthenticationToken. user-or-auth "password" roles))
-
-      :else
-      (throw (IllegalArgumentException. "run-as requires a String, Vector [user role1], or Authentication object")))))
+    :else
+    (throw (IllegalArgumentException.
+             "run-as requires a String, Vector [user role1 role2], or Authentication object"))))
 
 (defmacro run-as
   "Runs body with the given user context set in the Spring SecurityContextHolder.
@@ -193,12 +192,10 @@
    Restores the original SecurityContext afterwards. Essential for authorization debugging."
   [user-or-auth & body]
   `(let [auth-obj# (net.brdloush.livewire.core/->authentication ~user-or-auth)
-         ctx-class# (Class/forName "org.springframework.security.core.context.SecurityContextImpl")
-         ctx#       (clojure.lang.Reflector/invokeConstructor ctx-class# (object-array [auth-obj#]))
-         holder#    (Class/forName "org.springframework.security.core.context.SecurityContextHolder")
-         old-ctx#   (clojure.lang.Reflector/invokeStaticMethod holder# "getContext" (object-array []))]
-     (clojure.lang.Reflector/invokeStaticMethod holder# "setContext" (object-array [ctx#]))
+         ctx#      (SecurityContextImpl. auth-obj#)
+         old-ctx#  (SecurityContextHolder/getContext)]
+     (SecurityContextHolder/setContext ctx#)
      (try
        (do ~@body)
        (finally
-         (clojure.lang.Reflector/invokeStaticMethod holder# "setContext" (object-array [old-ctx#]))))))
+         (SecurityContextHolder/setContext old-ctx#)))))

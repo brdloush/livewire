@@ -301,7 +301,9 @@
     <div class="prereq-row">
       <span class="prereq-badge">☕ Java 17+</span>
       <span class="prereq-badge">🍃 Spring Boot 3.x</span>
-      <span class="prereq-badge">🤖 Claude Code + clojure-mcp</span>
+      <span class="prereq-badge">🤖 Claude Code</span>
+      <span class="prereq-badge">🍺 bbin</span>
+      <span class="prereq-badge">⚡ clj-nrepl-eval</span>
     </div>
   </div>
 </section>
@@ -349,6 +351,27 @@
 <span class="kw">livewire</span><span class="p">:</span>
   <span class="kw">enabled</span><span class="p">:</span> <span class="n">true</span>
   <span class="c"># nrepl.port: 7888  # optional</span></pre></div>
+            </div>
+
+            <div class="gs-substep full-width">
+              <div>
+                <div class="gs-substep-label">Install clj-nrepl-eval</div>
+                <p>
+                  Livewire's Claude Code skill uses
+                  <a href="https://github.com/bhauman/clojure-mcp-light" target="_blank" rel="noopener">clojure-mcp-light</a>'s
+                  <code>clj-nrepl-eval</code> CLI to talk to the nREPL server.
+                  Install it once via <a href="https://github.com/babashka/bbin" target="_blank" rel="noopener">bbin</a>
+                  (Babashka's binary installer):
+                </p>
+                <div class="code-block" style="margin-top: 0.85rem;"><pre><span class="c"># 1. Install bbin itself (once)</span>
+brew install babashka/brew/bbin
+
+<span class="c"># 2. Install clj-nrepl-eval (once)</span>
+bbin install https://github.com/bhauman/clojure-mcp-light.git \
+  --tag v0.2.1 \
+  --as clj-nrepl-eval \
+  --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'</pre></div>
+              </div>
             </div>
 
             <div class="gs-substep full-width">

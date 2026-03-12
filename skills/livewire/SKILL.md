@@ -7,6 +7,32 @@ the JVM beats static analysis every time.
 
 ---
 
+## Prerequisites
+
+This skill relies on `clj-nrepl-eval` — a lightweight CLI from
+[clojure-mcp-light](https://github.com/bhauman/clojure-mcp-light) that lets
+Claude evaluate Clojure expressions against a running nREPL server.
+
+Install it once with [bbin](https://github.com/babashka/bbin):
+
+```bash
+# Install bbin (if not already installed — e.g. via Homebrew)
+brew install babashka/brew/bbin
+
+# Install clj-nrepl-eval
+bbin install https://github.com/bhauman/clojure-mcp-light.git \
+  --tag v0.2.1 \
+  --as clj-nrepl-eval \
+  --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'
+```
+
+Verify it works:
+```bash
+clj-nrepl-eval --discover-ports
+```
+
+---
+
 ## Workflow
 
 1. **Discover** whether a Livewire nREPL is available:

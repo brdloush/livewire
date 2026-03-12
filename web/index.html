@@ -658,6 +658,57 @@
 
     #lightbox-close:hover { color: var(--text); }
 
+    /* ── Warning ──────────────────────────────────────────────────── */
+    #warning {
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(255,180,0,0.03) 0px,
+        rgba(255,180,0,0.03) 2px,
+        transparent 2px,
+        transparent 12px
+      );
+      border-top: 1px solid rgba(255,180,0,0.2);
+      border-bottom: 1px solid rgba(255,180,0,0.2);
+    }
+
+    .warning-box {
+      border: 1px solid rgba(255,180,0,0.35);
+      border-left: 4px solid #ffb400;
+      border-radius: 12px;
+      background: rgba(255,180,0,0.05);
+      padding: 2.5rem;
+      max-width: 780px;
+    }
+
+    .warning-box .warning-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffb400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .warning-box p {
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.8;
+      margin-bottom: 1rem;
+    }
+
+    .warning-box p:last-child { margin-bottom: 0; }
+    .warning-box strong { color: var(--text); }
+
+    .warning-verdict {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,180,0,0.2);
+      color: #ffb400;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+    }
+
     /* ── Install ──────────────────────────────────────────────────── */
     #install { text-align: center; }
 
@@ -1159,6 +1210,43 @@
         <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
         <div class="screenshot-caption">Verifying the hypothesis and hot-fixing live</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Warning ───────────────────────────────────────────────────────── -->
+<section id="warning">
+  <div class="container">
+    <div class="section-label">⚠ Before you proceed</div>
+    <h2>Know what you're wiring up.</h2>
+
+    <div class="warning-box">
+      <div class="warning-title">⚠ Data sensitivity</div>
+      <p>
+        When an AI agent drives Livewire, <strong>everything it observes gets sent to a remote model</strong>
+        — query results, entity field values, stack traces, bean state. If your dev database contains
+        real customer data, PII, credentials, or anything sensitive, the AI will see it and transmit it.
+        Use <strong>anonymized seed data</strong>. Always.
+      </p>
+      <p>
+        The screenshots on this page were taken against a synthetic dataset built specifically for this purpose.
+        Build yours too.
+      </p>
+
+      <div class="warning-title" style="margin-top:1.5rem">⚠ Execution power</div>
+      <p>
+        nREPL is not a read-only probe. It is a <strong>full code execution environment</strong>
+        — equivalent to shell access to your running JVM. An agent (or a human) can read files,
+        write to the database, call external services, or do anything the JVM process is allowed to do.
+      </p>
+      <p>
+        <strong>Bring your own security.</strong>
+        <strong>Bring your own sandbox.</strong>
+        <strong>Bring your own brain.</strong>
+        Think about what you expose, to whom, and why.
+      </p>
+
+      <div class="warning-verdict">Dev only. You have been warned.</div>
     </div>
   </div>
 </section>

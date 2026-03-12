@@ -1,10 +1,48 @@
-# Livewire
+# ⚡ Livewire
 
-> *Live nREPL wire into your Spring Boot app. Dev only. You've been warned.*
+> *A live nREPL wire into your running Spring Boot app. Dev only. You've been warned.*
 
-Embeds a Clojure nREPL server inside a running Spring Boot application, giving
-an agentic coding assistant (or a curious developer) a live, stateful probe into
-the running JVM — beans, queries, transactions and all.
+Your AI agent can read your code. What it **can't** do is ask your app a question.
+
+Livewire fixes that. It embeds a Clojure nREPL server inside a running Spring Boot application —
+giving an AI agent (or a curious developer) a live, stateful probe into the JVM.
+Beans, queries, transactions, security context, and all.
+
+```clojure
+;; How many queries does /api/books actually fire?
+(trace/detect-n+1
+  (trace/trace-sql
+    (lw/run-as "member1"
+      (.getBooks (lw/bean "bookController")))))
+;; => {:total-queries 481, :suspicious-queries [{...} {:count 200} ...]}
+```
+
+481 queries. For a list page. Now you know. Now you can fix it — without restarting the app.
+
+---
+
+## The problem
+
+Modern Spring Boot development has a fundamental feedback loop problem.
+AI agents make it worse.
+
+```
+edit → restart (30–120s) → observe → repeat
+```
+
+Agents reason **statically**. They read the code, form a hypothesis, and apply a fix —
+but they can't observe the running system. So they guess. And when they're wrong,
+you restart again.
+
+Livewire breaks the loop:
+
+```
+observe → hypothesise → hot-swap → verify → recompile
+         (zero restarts ──────────────────────────────)
+```
+
+Recompile and the query-watcher auto-applies your `@Query` changes live.
+No REPL call needed — no restart either.
 
 ---
 
@@ -16,7 +54,7 @@ Build and install to your local Maven repository:
 bb install
 ```
 
-Then add to your Spring Boot project:
+Then add the dependency to your Spring Boot project:
 
 **Maven**
 ```xml
@@ -41,14 +79,13 @@ Livewire auto-configures itself when **two conditions are met**:
 1. The JAR is on the classpath
 2. The property `livewire.enabled=true` is set
 
-Add it to whichever local properties file your project already uses — no
-profile name convention required:
+Add it to whichever local properties file your project already uses:
 
 ```properties
-# application-local.properties  (or -dev, -sandbox, whatever you use)
+# application-local.properties  (or -dev, -sandbox, whatever you call it)
 livewire.enabled=true
 
-# optional: override the default nREPL port (7888)
+# Optional: override the default nREPL port
 livewire.nrepl.port=7888
 ```
 
@@ -57,6 +94,8 @@ You'll see this in the logs on startup:
 [livewire] nREPL server started on port 7888
 ```
 
+That's it. No annotations, no Spring profiles to configure, no code changes.
+
 ---
 
 ## Connecting
@@ -64,23 +103,16 @@ You'll see this in the logs on startup:
 ### CIDER (Emacs)
 
 ```
-M-x cider-connect-clj
-  Host: localhost
-  Port: 7888
+M-x cider-connect-clj  →  localhost  →  7888
 ```
 
-Once the REPL buffer is open, require the Livewire namespaces:
+Then require the namespaces you need:
 
 ```clojure
 (require '[net.brdloush.livewire.core :as lw]
-         '[net.brdloush.livewire.query :as q])
-```
-
-Then you're ready to go:
-
-```clojure
-(q/sql "SELECT count(1) FROM book")
-;; => [{:count 200}]
+         '[net.brdloush.livewire.trace :as trace]
+         '[net.brdloush.livewire.hot-queries :as hq]
+         '[net.brdloush.livewire.introspect :as intro])
 ```
 
 ### Terminal
@@ -90,334 +122,233 @@ clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version "1.3.1"}}}' \
         -M -m nrepl.cmdline --connect --host 127.0.0.1 --port 7888
 ```
 
-### clojure-mcp (agentic use)
+### AI agents (clojure-mcp)
 
-Point it at port 7888 — the AI assistant can then use `clojure_eval` to
-probe the live app directly.
-
----
-
-## Core API (`net.brdloush.livewire.core`)
-
-Once connected, require the namespace:
-
-```clojure
-(require '[net.brdloush.livewire.core :as lw])
-```
-
-| Function / Macro | Description |
-|---|---|
-| `(lw/ctx)` | Returns the live `ApplicationContext` |
-| `(lw/info)` | Basic env info (Spring, Java, OS, active profiles) |
-| `(lw/bean "name")` | Get a bean by name |
-| `(lw/bean MyService)` | Get a bean by type |
-| `(lw/beans-of-type DataSource)` | All beans of a type → map |
-| `(lw/bean-names)` | All registered bean names |
-| `(lw/find-beans-matching ".*Repo.*")` | Filter bean names by regex |
-| `(lw/all-properties)` | All resolved environment properties → map |
-| `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
-| `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
-| `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
-| `(lw/run-as user & body)` | Run body with a specific Spring `SecurityContext` — essential for calling `@PreAuthorize`-guarded beans from the REPL |
-
-### `run-as` — calling secured beans from the REPL
-
-Without a security context, calling any `@PreAuthorize`-guarded bean from the REPL throws
-`AuthenticationCredentialsNotFoundException`. `run-as` temporarily sets the
-`SecurityContextHolder` for the duration of the body, then restores it.
-
-`user` accepts three forms:
-
-| Form | Effect |
-|---|---|
-| `"alice"` | Creates a token for `alice` with `ROLE_USER` + `ROLE_ADMIN` |
-| `["alice" "ROLE_READ" "ROLE_WRITE"]` | Creates a token with exactly the specified roles |
-| an `Authentication` object | Uses it as-is |
-
-```clojure
-;; Call a @PreAuthorize-guarded controller method directly
-(lw/run-as "admin"
-  (.getBookById (lw/bean "bookController") 25))
-
-;; Verify what principal and roles are active inside the body
-(lw/run-as ["alice" "ROLE_READ"]
-  (let [auth (-> (org.springframework.security.core.context.SecurityContextHolder/getContext)
-                 .getAuthentication)]
-    {:principal (.getName auth)
-     :roles     (mapv str (.getAuthorities auth))}))
-;; => {:principal "alice", :roles ["ROLE_READ"]}
-```
+Point the MCP server at port 7888. The agent can then use `clojure_eval` to
+probe the live app directly — no HTTP, no mocking, no guessing.
 
 ---
 
-## Introspection API (`net.brdloush.livewire.introspect`)
+## What you can do
 
-Once connected, require the namespace:
-
-```clojure
-(require '[net.brdloush.livewire.introspect :as intro])
-```
-
-| Function | Description |
-|---|---|
-| `(intro/list-endpoints)` | Returns all registered HTTP endpoints (path, method, controller, params) |
-| `(intro/list-entities)` | Lists all Hibernate-managed entities (simple name and FQN) |
-| `(intro/inspect-entity "Name")` | Deeply inspects an entity's mapped table, columns, and relations |
-
-### Introspection examples
+### 🔍 Inspect beans and properties
 
 ```clojure
-;; Discover available HTTP endpoints
-(first (intro/list-endpoints))
-;; => {:methods ["GET"],
-;;     :paths ["/api/authors/{id}"],
-;;     :controller "com.example.bloatedshelf.web.AuthorController",
-;;     :handler-method "getAuthorById",
-;;     :pre-authorize "hasRole('VIEWER')",
-;;     :parameters [{:name nil, :type "java.lang.Long"}]}
-
-;; Find entities managed by Hibernate
-(take 3 (intro/list-entities))
-;; => ({:name "Author", :class "com.example.bloatedshelf.domain.Author"}
-;;     {:name "Book",   :class "com.example.bloatedshelf.domain.Book"}
-;;     {:name "Genre",  :class "com.example.bloatedshelf.domain.Genre"})
-
-;; Inspect a specific entity to see its exact database mappings and relations
-(intro/inspect-entity "Book")
-;; => {:entity-name "com.example.bloatedshelf.domain.Book",
-;;     :table-name "book",
-;;     :identifier {:name "id", :columns ["id"], :type "long"},
-;;     :properties [{:name "author",  :columns ["author_id"], :is-association true,  :target-entity "...Author", :fetch "SELECT"}
-;;                  {:name "genres",  :columns ["id"],        :is-association true,  :collection true, :target-entity "...Genre", :fetch "SELECT"}
-;;                  {:name "reviews", :columns ["id"],        :is-association true,  :collection true, :target-entity "...Review", :fetch "SELECT"}
-;;                  {:name "title",   :columns ["title"],     :is-association false, ...}
-;;                  ...]}
-```
-
----
-
-## Trace API (`net.brdloush.livewire.trace`)
-
-Once connected, require the namespaces:
-
-```clojure
-(require '[net.brdloush.livewire.core :as lw]
-         '[net.brdloush.livewire.trace :as trace])
-```
-
-| Function / Macro | Description |
-|---|---|
-| `(trace/trace-sql & body)` | Wraps body and captures every SQL statement fired by Hibernate on the current thread. |
-| `(trace/trace-sql-global & body)` | Same as above, but captures SQL across *all* threads globally (useful for `@Async`). |
-| `(trace/detect-n+1 trace-res)` | Analyzes a trace result and groups repeatedly fired queries to find N+1 problems. |
-
-### Trace examples
-
-```clojure
-;; Run a repository method and see the actual SQL that gets executed
-(trace/trace-sql
-  (lw/in-readonly-tx
-    (.count (lw/bean "bookRepository"))))
-;; => {:result 200,
-;;     :queries [{:sql "select count(*) from book b1_0",
-;;                :caller "clojure.lang.Reflector.invokeMatchingMethod:196"}],
-;;     :count 1,
-;;     :duration-ms 8}
-
-;; Automatically hunt for N+1 queries by passing the trace result to detect-n+1
-(trace/detect-n+1
-  (trace/trace-sql
-    (lw/run-as ["member1" "ROLE_MEMBER" "ROLE_VIEWER"]
-      (lw/in-readonly-tx
-        (.getBooks (lw/bean "bookController"))))))
-;; => {:suspicious-queries [{:sql "select g1_0.book_id,... from book_genre g1_0 ...",
-;;                           :caller "com.example.bloatedshelf.dto.BookWithReviewsDto.from:12",
-;;                           :count 200}
-;;                          {:sql "select r1_0.book_id,... from review r1_0 ...",
-;;                           :caller "com.example.bloatedshelf.dto.BookWithReviewsDto.from:15",
-;;                           :count 200}
-;;                          {:sql "select lm1_0.id,... from library_member lm1_0 ...",
-;;                           :caller "...LibraryMember$HibernateProxy.getFullName:-1",
-;;                           :count 50}
-;;                          {:sql "select a1_0.id,... from author a1_0 ...",
-;;                           :caller "...Author$HibernateProxy.getFirstName:-1",
-;;                           :count 30}],
-;;     :total-queries 481,
-;;     :duration-ms 190}
-```
-
----
-
-## Example session
-
-```clojure
-;; What datasource URL is actually in use?
-(lw/props-matching "spring\\.datasource\\.url")
-;; => {"spring.datasource.url" "jdbc:postgresql://localhost:5432/myapp"}
-
-;; Find all repository beans
+;; What repos are registered?
 (lw/find-beans-matching ".*Repository.*")
-;; => ("bookRepository" "authorRepository" ...)
+;; => ("bookRepository" "authorRepository" "reviewRepository" ...)
 
-;; Query via a repository — always page or limit; never call .findAll on a large table
-;; ❌ danger: may return millions of rows
-;; (.findAll (lw/bean "bookRepository"))
-;; ✅ use findAll with a Pageable to cap results
+;; What DB URL is the app actually talking to?
+(lw/props-matching "spring\\.datasource\\.url")
+;; => {"spring.datasource.url" "jdbc:postgresql://localhost:32808/test"}
+
+;; Runtime environment summary
+(lw/info)
+;; => {:spring-boot "4.0.1", :spring "7.0.2", :hibernate "7.2.0.Final", :java "25", ...}
+```
+
+### 🗄️ Run queries safely
+
+```clojure
+;; Raw SQL through the live DataSource — always cap results
+(lw/in-readonly-tx
+  (q/sql "SELECT id, title FROM book LIMIT 5"))
+;; => [{:id 1, :title "All the King's Men"} ...]
+
+;; Repository calls — always page, never call .findAll without a Pageable
 (lw/in-readonly-tx
   (->> (.findAll (lw/bean "bookRepository")
                  (org.springframework.data.domain.PageRequest/of 0 3))
        .getContent
        (mapv #(select-keys (clojure.core/bean %) [:id :title :isbn]))))
-;; => [{:id 1, :title "All the King's Men",       :isbn "979-0-925405-37-0"}
-;;     {:id 2, :title "A Handful of Dust",         :isbn "978-1-9539361-5-8"}
-;;     {:id 3, :title "Butter In a Lordly Dish",   :isbn "978-0-909789-17-6"}]
+;; => [{:id 1, :title "All the King's Men", :isbn "979-0-925405-37-0"} ...]
 
-;; Safely mutate — the transaction rolls back automatically
+;; Mutations roll back automatically — safe to experiment
 (lw/in-tx
-  (let [repo (lw/bean "bookRepository")]
-    {:count-before (.count repo)}))
-;; => {:count-before 200}
+  (.save (lw/bean "bookRepository") ...)
+  (.count (lw/bean "bookRepository")))
+;; => 201  (and then silently rolled back)
 ```
 
-### ⚠️ Never call `.findAll` without a `Pageable`
+### 🔒 Call security-guarded methods
 
-`.findAll()` with no arguments fetches every row in the table. On large datasets this
-hangs the REPL and can OOM the JVM. Always cap results with a `PageRequest`:
+Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll throw
+`AuthenticationCredentialsNotFoundException` the moment you call anything `@PreAuthorize`-guarded.
+`run-as` sets one for the duration of the call:
 
 ```clojure
-;; ❌ danger: loads every row
-(.findAll (lw/bean "bookRepository"))
+;; Pass a username → gets ROLE_USER + ROLE_ADMIN by default
+(lw/run-as "admin"
+  (.getBookById (lw/bean "bookController") 25))
 
-;; ✅ cap at 3 rows
-(->> (.findAll (lw/bean "bookRepository")
-               (org.springframework.data.domain.PageRequest/of 0 3))
-     .getContent
-     (mapv #(select-keys (clojure.core/bean %) [:id :title])))
+;; Or specify exact roles
+(lw/run-as ["alice" "ROLE_VIEWER"]
+  (.getAuthors (lw/bean "authorController")))
 ```
 
-### ⚠️ Hibernate lazy loading and transaction boundaries
-
-Returning a raw Hibernate entity from `in-tx` / `in-readonly-tx` will cause
-a `LazyInitializationException` when Clojure tries to print it — the session
-is already closed by the time the REPL renders the result.
-
-**Always convert to a plain Clojure map inside the transaction boundary:**
+### 🔬 Trace SQL and detect N+1
 
 ```clojure
-;; ❌ will blow up — entity printed after session closes
-(lw/in-readonly-tx
-  (.findById (lw/bean "bookRepository") 1))
+;; See every SQL a call fires — wrap it and look
+(trace/trace-sql
+  (lw/in-readonly-tx
+    (.count (lw/bean "bookRepository"))))
+;; => {:result 200, :count 1, :duration-ms 8,
+;;     :queries [{:sql "select count(*) from book b1_0", :caller "..."}]}
 
-;; ✅ convert eagerly while the session is still open
-(lw/in-readonly-tx
-  (-> (.findById (lw/bean "bookRepository") 1)
-      .get
-      clojure.core/bean          ; converts all Java bean properties to a map
-      (select-keys [:id :title :isbn])))  ; narrow to what you need
+;; Detect N+1 automatically
+(trace/detect-n+1
+  (trace/trace-sql
+    (lw/run-as "member1"
+      (.getBooks (lw/bean "bookController")))))
+;; => {:total-queries 481,
+;;     :suspicious-queries [{:sql "select ... from book_genre ...", :count 200}
+;;                          {:sql "select ... from review ...",     :count 200}
+;;                          {:sql "select ... from library_member", :count 50}
+;;                          {:sql "select ... from author ...",     :count 30}]}
 ```
 
-`clojure.core/bean` introspects all getter methods and returns a Clojure map.
-Wrap it in `select-keys` to avoid triggering lazy associations you don't care
-about.
+481 queries for one endpoint. Four N+1 suspects flagged automatically.
+Now let's fix it.
 
----
+### 🔥 Hot-swap a `@Query` live
 
-## Hot Queries API (`net.brdloush.livewire.hot-queries`)
-
-Swap a Spring Data JPA `@Query` annotation live — without restarting the app.
-Mutates the `queryString` inside the `SimpleJpaQuery` held by
-`QueryExecutorMethodInterceptor`, so all of Spring Data's result-type coercion
-stays intact. On subsequent swaps, only an atom is `reset!` — no reflection on
-the hot path.
+No restart needed. Swap the JPQL, verify with `trace-sql`, iterate, commit the fix:
 
 ```clojure
-(require '[net.brdloush.livewire.hot-queries :as hq])
-```
-
-| Function | Description |
-|---|---|
-| `(hq/list-queries "repoBean")` | Lists all `@Query`-annotated methods on a repository bean with their current JPQL |
-| `(hq/hot-swap-query! "repoBean" "methodName" new-jpql)` | Swaps the JPQL live; first call uses reflection, subsequent calls just `reset!` the atom |
-| `(hq/list-swapped)` | Shows all currently hot-swapped queries; `:manual? true` = REPL-initiated, `false` = watcher-initiated |
-| `(hq/reset-query! "repoBean" "methodName")` | Restores the original JPQL for one method |
-| `(hq/reset-all!)` | Restores **every** currently hot-swapped query at once |
-
-### Hot Queries example
-
-```clojure
-;; See what @Query methods are on the repository
+;; See what @Query methods exist on a repo
 (hq/list-queries "bookRepository")
 ;; => ({:method "findAllWithAuthorAndGenres",
-;;      :query-class "SimpleJpaQuery",
-;;      :jpql "SELECT DISTINCT b FROM Book b\nJOIN FETCH b.author\nLEFT JOIN FETCH b.genres\n"}
-;;     {:method "findByGenreId",
-;;      :query-class "SimpleJpaQuery",
-;;      :jpql "SELECT b FROM Book b JOIN b.genres g WHERE g.id = :genreId"}
-;;     {:method "findTop10MostLoaned",
-;;      :query-class "SimpleJpaQuery",
-;;      :jpql "SELECT b.title, a.lastName, COUNT(lr)\nFROM Book b\nJOIN b.author a\n..."})
+;;      :jpql "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres"}
+;;     {:method "findByGenreId", ...} ...)
 
-;; Swap the query to return nothing (useful for testing / debugging)
+;; Swap to a candidate fix
 (hq/hot-swap-query! "bookRepository" "findAllWithAuthorAndGenres"
-  "SELECT b FROM Book b WHERE 1=2")
-;; [hot-queries] hot-swapped bookRepository#findAllWithAuthorAndGenres
-;; => {:swapped ["bookRepository" "findAllWithAuthorAndGenres"],
-;;     :query "SELECT b FROM Book b WHERE 1=2"}
+  "SELECT DISTINCT b FROM Book b JOIN FETCH b.author
+   LEFT JOIN FETCH b.genres LEFT JOIN FETCH b.reviews")
 
-;; Confirm it's live — call the repo method, get empty result
-(lw/run-as ["member1" "ROLE_MEMBER" "ROLE_VIEWER"]
-  (lw/in-readonly-tx
-    (.findAllWithAuthorAndGenres (lw/bean "bookRepository"))))
-;; => []
+;; Verify — does the query count drop?
+(trace/trace-sql
+  (lw/run-as "member1"
+    (.getBooks (lw/bean "bookController"))))
 
-;; Check what's currently swapped (:manual? true = REPL, false = watcher)
-(hq/list-swapped)
-;; => [{:bean "bookRepository", :method "findAllWithAuthorAndGenres",
-;;      :manual? true, :jpql "SELECT b FROM Book b WHERE 1=2"}]
-
-;; Restore the original
-(hq/reset-query! "bookRepository" "findAllWithAuthorAndGenres")
-;; [hot-queries] restored bookRepository#findAllWithAuthorAndGenres
-;; => :restored
-
-;; Restore everything at once
+;; Restore when done — don't leave swapped queries hanging
 (hq/reset-all!)
 ;; => [["bookRepository" "findAllWithAuthorAndGenres"]]
 ```
 
-### Last-one-wins
+Alternatively: just edit the `@Query` in your IDE, recompile, and the query-watcher
+picks it up automatically — same result, no REPL call.
 
-REPL swaps and recompiles freely override each other — **whoever wrote last wins**:
+### 🧭 Introspect the app's structure
 
-- You REPL-swap to a test query → it goes live immediately.
-- You recompile with a new `@Query` → the watcher detects the `.class` change and applies it,
-  overriding your REPL swap automatically.
-- You REPL-swap again after the recompile → your new swap wins.
+```clojure
+;; All HTTP endpoints with their auth requirements
+(->> (intro/list-endpoints)
+     (filter #(re-find #"books" (str (:paths %))))
+     (mapv #(select-keys % [:paths :methods :handler-method :pre-authorize])))
+;; => [{:paths ["/api/books"], :methods ["GET"],
+;;      :handler-method "getBooks", :pre-authorize "hasRole('MEMBER')"}]
 
-This means you can iterate freely between editor and REPL without calling `reset-all!` between
-each cycle. Call `reset-all!` only at the end of a session to ensure nothing is left patched.
+;; All Hibernate-managed entities
+(map :name (intro/list-entities))
+;; => ("Author" "Book" "Genre" "LoanRecord" "LibraryMember" "Review")
+
+;; Entity schema straight from Hibernate's metamodel
+(intro/inspect-entity "Book")
+;; => {:table-name "book",
+;;     :identifier {:name "id", :type "long"},
+;;     :properties [{:name "title", :columns ["title"], :type "string"} ...],
+;;     :relations  [{:name "author",  :type :many-to-one,  :target "Author"}
+;;                  {:name "genres",  :type :many-to-many, :target "Genre"}
+;;                  {:name "reviews", :type :one-to-many,  :target "Review"}]}
+```
 
 ---
 
-## Query Watcher (`net.brdloush.livewire.query-watcher`)
+## ⚠️ Security and data — read this
 
-The query-watcher starts automatically on boot. It polls compiled output directories
-(`target/classes`, `build/classes/…`) every 500 ms, detects `.class` file changes via
-mtime, and hot-applies updated `@Query` JPQL strings without a restart.
+Livewire is a **dev-only** tool and is intentionally not subtle about it.
 
-```clojure
-(require '[net.brdloush.livewire.query-watcher :as qw])
+### Your data is reachable
+
+The nREPL can query any table, call any service, and access anything the JVM can touch.
+This is the point — and the risk. **Never enable Livewire against a production database
+or any environment with real user data.**
+
+Use it with:
+- A local development database seeded with anonymized or synthetic data
+- A sandbox / staging environment that is completely isolated from production
+- Testcontainers-spun databases (like the Bloated Shelf playground below)
+
+### The nREPL can execute arbitrary code
+
+There is no sandbox. Connecting to port 7888 means executing arbitrary JVM code.
+Exposing this port outside localhost is equivalent to handing over the JVM process.
+
+```properties
+# ✅ default — localhost only
+livewire.nrepl.bind=127.0.0.1
+
+# ❌ please don't
+livewire.nrepl.bind=0.0.0.0
 ```
 
-| Function | Description |
-|---|---|
-| `(qw/status)` | `{:running? true/false, :disk-state-size N, :disk-state {...}}` |
-| `(qw/start-watcher!)` | Starts the watcher (idempotent — called automatically on boot) |
-| `(qw/stop-watcher!)` | Stops the watcher |
-| `(qw/force-rescan!)` | Clears the mtime cache so the next poll re-examines all `.class` files |
+Livewire defaults to `127.0.0.1` and will not bind to a broader interface unless
+you explicitly tell it to. That's a guardrail, not a permission slip.
 
-`force-rescan!` is rarely needed manually — `reset-all!` and `reset-query!` call it
-automatically after restoring a query.
+---
+
+## Try it — the Bloated Shelf playground
+
+[**Bloated Shelf**](https://github.com/brdloush/bloated-shelf) is a self-contained
+Spring Boot + Hibernate library app that intentionally demonstrates the JPA N+1 problem at scale.
+It's the primary dogfood app for Livewire development — and a ready-made playground.
+
+**30 authors · 200 books · 50 members · ~5 reviews/book · all lazily loaded**
+
+### Start it
+
+```bash
+git clone https://github.com/brdloush/bloated-shelf
+cd bloated-shelf
+mvn spring-boot:run -Dspring-boot.run.profiles=dev,seed
+```
+
+Testcontainers spins up a PostgreSQL 16 container automatically. No external database needed.
+The Livewire nREPL comes up on **port 7888**.
+
+### Things to try
+
+- 🔎 **Confirm the N+1**: call `GET /api/books` equivalent via `bookController` and watch `trace-sql` report 481 queries
+- 🧭 **Discover the app's structure**: `intro/list-entities`, `intro/list-endpoints`, `intro/inspect-entity "Book"`
+- 🔥 **Hot-swap a fix**: use `hq/hot-swap-query!` to add a `JOIN FETCH` to `findAllWithAuthorAndGenres` and watch the query count drop
+- 🔒 **Exercise auth paths**: call the same endpoint under different roles with `lw/run-as` and see what changes
+- 📊 **Profile real queries**: wrap `adminController` calls in `trace-sql` and compare the clean aggregation queries against the N+1 ones
+- 🧪 **Prototype fixes in Clojure**: re-implement a service method as a REPL expression, measure query count, *then* write the Java fix
+
+The app ships with an `AGENTS.md` that has worked REPL examples, bean names, credentials,
+and a quick smoke-test — a good starting point for agentic sessions.
+
+---
+
+## API reference
+
+Full API docs, detailed examples, and gotchas live in
+[`skills/livewire/SKILL.md`](skills/livewire/SKILL.md) — written for AI agents
+but readable by humans too. Covers all six namespaces, known pitfalls, and escalation
+strategies for debugging without restarts.
+
+Quick namespace cheatsheet:
+
+| Namespace | Require as | What it does |
+|---|---|---|
+| `net.brdloush.livewire.core` | `lw` | Beans, transactions, run-as, properties |
+| `net.brdloush.livewire.query` | `q` | Raw SQL / JPQL execution |
+| `net.brdloush.livewire.trace` | `trace` | SQL tracing, N+1 detection |
+| `net.brdloush.livewire.hot-queries` | `hq` | Live `@Query` swap + restore |
+| `net.brdloush.livewire.query-watcher` | `qw` | Auto-apply `@Query` on recompile |
+| `net.brdloush.livewire.introspect` | `intro` | Endpoints, entities, schema |
 
 ---
 
@@ -426,6 +357,5 @@ automatically after restoring a query.
 See [TODO.md](TODO.md) for open tasks, planned components, and ideas.
 
 ---
-
 
 *Don't touch live wires in production. But in dev? Grab on.*

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="web/logo-transparent.png" alt="Livewire" width="160" />
+  <img src="web/images/logo-transparent.png" alt="Livewire" width="160" />
 </div>
 
 # ⚡ Livewire

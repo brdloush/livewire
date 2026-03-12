@@ -1,7 +1,18 @@
 (defproject net.brdloush/livewire "0.2.0-SNAPSHOT"
   :description "Live nREPL wire into your Spring Boot app. Dev only. You've been warned."
   :url "https://github.com/brdloush/livewire"
-  :license {:name "MIT"}
+  :license {:name "MIT License"
+            :url  "https://opensource.org/licenses/MIT"}
+
+  :scm {:name "git"
+        :url  "https://github.com/brdloush/livewire"}
+
+  :pom-addition [:developers
+                 [:developer
+                  [:id "brdloush"]
+                  [:name "Tomas Brejla"]
+                  [:email "brdloush@gmail.com"]
+                  [:url "https://github.com/brdloush"]]]
 
   :source-paths      ["src/clojure"]
   :java-source-paths ["src/java"]
@@ -23,7 +34,13 @@
      [org.hibernate.orm/hibernate-core "6.5.3.Final"
       :scope "provided"]
      [org.ow2.asm/asm "9.7.1"
-      :scope "provided"]]}}
+      :scope "provided"]
+     [org.springframework.security/spring-security-core "6.3.4"
+      :scope "provided"]]}
+
+   :release
+   {:global-vars {*warn-on-reflection* true}
+    :plugins [[lein-shell "0.5.0"]]}}
 
   :javac-options ["--release" "17" "-Xlint:unchecked"]
 

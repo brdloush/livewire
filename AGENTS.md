@@ -15,6 +15,18 @@ sense earlier — confirm the specific commit/push action each time.
 
 ---
 
+## No force pushes
+
+Never use `git push --force` or `git push --force-with-lease` on the
+`livewire` repository. The repo is public; force-pushing rewrites
+history that others may have already fetched.
+
+The only exception is the `gh-pages` branch, which is always
+assembled fresh from `web/` by `bb deploy-pages` and has no shared
+history worth preserving.
+
+---
+
 ## Clojure gotchas
 
 ### `defonce` does not accept docstrings

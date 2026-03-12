@@ -79,8 +79,8 @@ Once the REPL buffer is open, require the Livewire namespaces:
 Then you're ready to go:
 
 ```clojure
-(q/sql "SELECT count(1) FROM books")
-;; => [{:count 0}]
+(q/sql "SELECT count(1) FROM book")
+;; => [{:count 200}]
 ```
 
 ### Terminal
@@ -136,7 +136,7 @@ Without a security context, calling any `@PreAuthorize`-guarded bean from the RE
 
 ```clojure
 ;; Call a @PreAuthorize-guarded controller method directly
-(lw/run-as "superadmin@example.com"
+(lw/run-as "admin"
   (.getBookById (lw/bean "bookController") 25))
 
 ;; Verify what principal and roles are active inside the body
@@ -169,19 +169,29 @@ Once connected, require the namespace:
 ```clojure
 ;; Discover available HTTP endpoints
 (first (intro/list-endpoints))
-;; => {:methods ["PUT"], :paths ["/api/v1/clients/segments"], :controller "com.example.bloatedshelf.controller.BookController", ...}
+;; => {:methods ["GET"],
+;;     :paths ["/api/authors/{id}"],
+;;     :controller "com.example.bloatedshelf.web.AuthorController",
+;;     :handler-method "getAuthorById",
+;;     :pre-authorize "hasRole('VIEWER')",
+;;     :parameters [{:name nil, :type "java.lang.Long"}]}
 
 ;; Find entities managed by Hibernate
-(take 2 (intro/list-entities))
-;; => ({:name "AccountBalance", :class "eu...AccountBalance"}
-;;     {:name "AcknowledgeNotification", :class "eu...AcknowledgeNotification"})
+(take 3 (intro/list-entities))
+;; => ({:name "Author", :class "com.example.bloatedshelf.domain.Author"}
+;;     {:name "Book",   :class "com.example.bloatedshelf.domain.Book"}
+;;     {:name "Genre",  :class "com.example.bloatedshelf.domain.Genre"})
 
 ;; Inspect a specific entity to see its exact database mappings and relations
 (intro/inspect-entity "Book")
-;; => {:entity-name "com.example.bloatedshelf.entity.Book",
-;;     :table-name "books",
-;;     :identifier {:name "id", :columns ["id"], :type "uuid"},
-;;     :properties [{:name "clientAddresses", :is-association true, :collection true, :target-entity "...", :fetch "SELECT", ...}]}
+;; => {:entity-name "com.example.bloatedshelf.domain.Book",
+;;     :table-name "book",
+;;     :identifier {:name "id", :columns ["id"], :type "long"},
+;;     :properties [{:name "author",  :columns ["author_id"], :is-association true,  :target-entity "...Author", :fetch "SELECT"}
+;;                  {:name "genres",  :columns ["id"],        :is-association true,  :collection true, :target-entity "...Genre", :fetch "SELECT"}
+;;                  {:name "reviews", :columns ["id"],        :is-association true,  :collection true, :target-entity "...Review", :fetch "SELECT"}
+;;                  {:name "title",   :columns ["title"],     :is-association false, ...}
+;;                  ...]}
 ```
 
 ---
@@ -207,22 +217,33 @@ Once connected, require the namespaces:
 ;; Run a repository method and see the actual SQL that gets executed
 (trace/trace-sql
   (lw/in-readonly-tx
-    (.count (lw/bean "userRepository"))))
-;; => {:result 42,
-;;     :queries [{:sql "select ...", :caller "com.example.MyService:42"}],
+    (.count (lw/bean "bookRepository"))))
+;; => {:result 200,
+;;     :queries [{:sql "select count(*) from book b1_0",
+;;                :caller "clojure.lang.Reflector.invokeMatchingMethod:196"}],
 ;;     :count 1,
-;;     :duration-ms 15}
+;;     :duration-ms 8}
 
 ;; Automatically hunt for N+1 queries by passing the trace result to detect-n+1
 (trace/detect-n+1
   (trace/trace-sql
-    (.getAllBooks (lw/bean "bookController")
-                        25)))
-;; => {:suspicious-queries [{:sql "select ... from loan_records ...",
-;;                           :caller "com.example.bloatedshelf.service.BookService:52",
-;;                           :count 18}],
-;;     :total-queries 30,
-;;     :duration-ms 1271}
+    (lw/run-as ["member1" "ROLE_MEMBER" "ROLE_VIEWER"]
+      (lw/in-readonly-tx
+        (.getBooks (lw/bean "bookController"))))))
+;; => {:suspicious-queries [{:sql "select g1_0.book_id,... from book_genre g1_0 ...",
+;;                           :caller "com.example.bloatedshelf.dto.BookWithReviewsDto.from:12",
+;;                           :count 200}
+;;                          {:sql "select r1_0.book_id,... from review r1_0 ...",
+;;                           :caller "com.example.bloatedshelf.dto.BookWithReviewsDto.from:15",
+;;                           :count 200}
+;;                          {:sql "select lm1_0.id,... from library_member lm1_0 ...",
+;;                           :caller "...LibraryMember$HibernateProxy.getFullName:-1",
+;;                           :count 50}
+;;                          {:sql "select a1_0.id,... from author a1_0 ...",
+;;                           :caller "...Author$HibernateProxy.getFirstName:-1",
+;;                           :count 30}],
+;;     :total-queries 481,
+;;     :duration-ms 190}
 ```
 
 ---
@@ -244,15 +265,18 @@ Once connected, require the namespaces:
 ;; ✅ use findAll with a Pageable to cap results
 (lw/in-readonly-tx
   (->> (.findAll (lw/bean "bookRepository")
-                 (org.springframework.data.domain.PageRequest/of 0 20))
+                 (org.springframework.data.domain.PageRequest/of 0 3))
        .getContent
-       (mapv #(select-keys (clojure.core/bean %) [:id :email :status :active]))))
-;; => [{:id 1, :email "test@example.com", :status "PENDING", :active false}]
+       (mapv #(select-keys (clojure.core/bean %) [:id :title :isbn]))))
+;; => [{:id 1, :title "All the King's Men",       :isbn "979-0-925405-37-0"}
+;;     {:id 2, :title "A Handful of Dust",         :isbn "978-1-9539361-5-8"}
+;;     {:id 3, :title "Butter In a Lordly Dish",   :isbn "978-0-909789-17-6"}]
 
 ;; Safely mutate — the transaction rolls back automatically
 (lw/in-tx
-  (.save (lw/bean "userRepository") (->User "test@example.com"))
-  (count (.findAll (lw/bean "userRepository"))))
+  (let [repo (lw/bean "bookRepository")]
+    {:count-before (.count repo)}))
+;; => {:count-before 200}
 ```
 
 ### ⚠️ Never call `.findAll` without a `Pageable`
@@ -264,11 +288,11 @@ hangs the REPL and can OOM the JVM. Always cap results with a `PageRequest`:
 ;; ❌ danger: loads every row
 (.findAll (lw/bean "bookRepository"))
 
-;; ✅ cap at 20 rows
+;; ✅ cap at 3 rows
 (->> (.findAll (lw/bean "bookRepository")
-               (org.springframework.data.domain.PageRequest/of 0 20))
+               (org.springframework.data.domain.PageRequest/of 0 3))
      .getContent
-     (mapv #(select-keys (clojure.core/bean %) [:id :email])))
+     (mapv #(select-keys (clojure.core/bean %) [:id :title])))
 ```
 
 ### ⚠️ Hibernate lazy loading and transaction boundaries
@@ -289,7 +313,7 @@ is already closed by the time the REPL renders the result.
   (-> (.findById (lw/bean "bookRepository") 1)
       .get
       clojure.core/bean          ; converts all Java bean properties to a map
-      (select-keys [:id :email :status :active])))  ; narrow to what you need
+      (select-keys [:id :title :isbn])))  ; narrow to what you need
 ```
 
 `clojure.core/bean` introspects all getter methods and returns a Clojure map.
@@ -323,41 +347,42 @@ the hot path.
 ```clojure
 ;; See what @Query methods are on the repository
 (hq/list-queries "bookRepository")
-;; => ({:method "findByIdWithDetails",
+;; => ({:method "findAllWithAuthorAndGenres",
 ;;      :query-class "SimpleJpaQuery",
-;;      :jpql "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres WHERE b.id = :id"}
-;;     ...)
+;;      :jpql "SELECT DISTINCT b FROM Book b\nJOIN FETCH b.author\nLEFT JOIN FETCH b.genres\n"}
+;;     {:method "findByGenreId",
+;;      :query-class "SimpleJpaQuery",
+;;      :jpql "SELECT b FROM Book b JOIN b.genres g WHERE g.id = :genreId"}
+;;     {:method "findTop10MostLoaned",
+;;      :query-class "SimpleJpaQuery",
+;;      :jpql "SELECT b.title, a.lastName, COUNT(lr)\nFROM Book b\nJOIN b.author a\n..."})
 
 ;; Swap the query to return nothing (useful for testing / debugging)
-(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
-  "select b from Book b where 1=2")
-;; [hot-queries] hot-swapped bookRepository#findByIdWithDetails
-;; => {:swapped ["bookRepository" "findByIdWithDetails"], :query "select b from Book b where 1=2"}
+(hq/hot-swap-query! "bookRepository" "findAllWithAuthorAndGenres"
+  "SELECT b FROM Book b WHERE 1=2")
+;; [hot-queries] hot-swapped bookRepository#findAllWithAuthorAndGenres
+;; => {:swapped ["bookRepository" "findAllWithAuthorAndGenres"],
+;;     :query "SELECT b FROM Book b WHERE 1=2"}
 
 ;; Confirm it's live — call the repo method, get empty result
-(lw/run-as "admin"
+(lw/run-as ["member1" "ROLE_MEMBER" "ROLE_VIEWER"]
   (lw/in-readonly-tx
-    (.findByIdWithDetails (lw/bean "bookRepository") 25)))
+    (.findAllWithAuthorAndGenres (lw/bean "bookRepository"))))
 ;; => []
-
-;; Subsequent swap is reflection-free (just resets the atom)
-(hq/hot-swap-query! "bookRepository" "findByIdWithDetails"
-  "select b from Book b where b.id = :id")
-;; => {:swapped ["bookRepository" "findByIdWithDetails"], :query "..."}
 
 ;; Check what's currently swapped (:manual? true = REPL, false = watcher)
 (hq/list-swapped)
-;; => [{:bean "bookRepository", :method "findByIdWithDetails",
-;;      :manual? true, :jpql "select c from Contract c ..."}]
+;; => [{:bean "bookRepository", :method "findAllWithAuthorAndGenres",
+;;      :manual? true, :jpql "SELECT b FROM Book b WHERE 1=2"}]
 
 ;; Restore the original
-(hq/reset-query! "bookRepository" "findByIdWithDetails")
-;; [hot-queries] restored bookRepository#findByIdWithDetails
+(hq/reset-query! "bookRepository" "findAllWithAuthorAndGenres")
+;; [hot-queries] restored bookRepository#findAllWithAuthorAndGenres
 ;; => :restored
 
 ;; Restore everything at once
 (hq/reset-all!)
-;; => [["bookRepository" "findByIdWithDetails"]]
+;; => [["bookRepository" "findAllWithAuthorAndGenres"]]
 ```
 
 ### Last-one-wins

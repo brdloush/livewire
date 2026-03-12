@@ -307,6 +307,10 @@ livewire.nrepl.bind=0.0.0.0
 Livewire defaults to `127.0.0.1` and will not bind to a broader interface unless
 you explicitly tell it to. That's a guardrail, not a permission slip.
 
+> Livewire is provided as-is under the [MIT license](LICENSE). The authors accept
+> no liability for misuse, data exposure, or any damage resulting from use outside
+> its intended scope.
+
 ---
 
 ## Try it — the Bloated Shelf playground

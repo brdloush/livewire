@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started — Livewire</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* ── Getting Started page extras ─────────────────────────── */
+    .gs-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 4rem;
+      margin-top: 3.5rem;
+    }
+
+    .gs-step {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 0 2.25rem;
+      align-items: start;
+    }
+
+    .gs-step-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+      box-shadow: 0 0 20px rgba(87,133,202,0.35);
+    }
+
+    .gs-step-body {
+      min-width: 0;
+    }
+
+    .gs-step-body h3 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .gs-step-body > p {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 1.5rem;
+      max-width: 680px;
+    }
+
+    .gs-substeps {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .gs-substep {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--blue);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem 2rem;
+      align-items: start;
+      min-width: 0;
+      transition: border-color 0.2s;
+    }
+
+    .gs-substep:hover { border-left-color: var(--green); }
+
+    .gs-substep-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 0.3rem;
+    }
+
+    .gs-substep p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    .gs-substep p code {
+      color: var(--blue);
+    }
+
+    .gs-substep .code-block {
+      margin: 0;
+    }
+
+    .gs-substep.full-width {
+      grid-template-columns: 1fr;
+    }
+
+    /* log line */
+    .gs-log {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1.25rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: var(--green);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    /* Try-it prompts */
+    .try-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .try-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.85rem 1.25rem;
+      align-items: start;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      min-width: 0;
+    }
+
+    .try-card:hover {
+      border-color: var(--blue);
+      box-shadow: 0 4px 24px rgba(87,133,202,0.1);
+    }
+
+    .try-tag {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      margin-top: 0.15rem;
+    }
+
+    .tag-explore { background: rgba(87,133,202,0.15); color: var(--blue); }
+    .tag-diagnose { background: rgba(255,180,0,0.12); color: #ffb400; }
+    .tag-query { background: rgba(196,123,219,0.15); color: #c47bdb; }
+    .tag-fix { background: rgba(152,201,72,0.13); color: var(--green); }
+
+    .try-card-text h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.3rem;
+    }
+
+    .try-prompt {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #e6a95a;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.8rem;
+      margin: 0.45rem 0 0.3rem;
+      display: block;
+      white-space: pre-wrap;
+    }
+
+    .try-card-text p {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* skill box */
+    .skill-box {
+      background: var(--bg-code);
+      border: 1px solid rgba(152,201,72,0.3);
+      border-left: 4px solid var(--green);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.88rem;
+      color: var(--text);
+      margin-top: 1.25rem;
+    }
+
+    .skill-box .skill-cmd {
+      color: var(--green);
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    .skill-box p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* prereq badge */
+    .prereq-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .prereq-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-mid);
+      color: var(--muted);
+    }
+
+    /* step connector line */
+    .gs-step-connector {
+      grid-column: 1;
+      justify-self: center;
+      width: 2px;
+      height: 3rem;
+      background: linear-gradient(to bottom, var(--blue), transparent);
+      margin: 0.35rem 0;
+    }
+
+    /* responsive */
+    @media (max-width: 680px) {
+      .gs-substep {
+        grid-template-columns: 1fr;
+      }
+      .gs-step {
+        grid-template-columns: 40px 1fr;
+        gap: 0 1.25rem;
+      }
+      .gs-step-num {
+        width: 36px;
+        height: 36px;
+        font-size: 0.95rem;
+      }
+      .try-card {
+        grid-template-columns: 1fr;
+      }
+      .try-tag { justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav>
+  <a class="nav-brand" href="index.html">
+    <img src="images/logo-transparent.png" alt="Livewire logo" />
+  </a>
+  <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+  <ul class="nav-links" id="nav-links">
+    <li><a href="index.html#problem">Problem</a></li>
+    <li><a href="index.html#features">Features</a></li>
+    <li><a href="index.html#story">Story</a></li>
+    <li><a href="getting-started.html" style="color: var(--text)">Get started</a></li>
+    <li><a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener">GitHub ↗</a></li>
+  </ul>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section id="hero" style="min-height: 0; padding: 8rem 0 4rem;">
+  <div class="container">
+    <div class="section-label">Getting started</div>
+    <h1 class="hero-title" style="font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem;">
+      Up and running in<br><span class="live">five minutes.</span>
+    </h1>
+    <p class="hero-tagline" style="font-size: 1.1rem;">
+      Bring your Spring Boot app. Add one dependency, copy one file, and ask Claude
+      to dig in. No restarts. No boilerplate.
+    </p>
+
+    <div class="prereq-row">
+      <span class="prereq-badge">☕ Java 17+</span>
+      <span class="prereq-badge">🍃 Spring Boot 3.x</span>
+      <span class="prereq-badge">🤖 Claude Code + clojure-mcp</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Steps ─────────────────────────────────────────────────────────── -->
+<section id="steps" style="padding-top: 2rem;">
+  <div class="container">
+    <div class="gs-steps">
+
+      <!-- ── Step 1 ── -->
+      <div class="gs-step">
+        <div class="gs-step-num">1</div>
+        <div class="gs-step-body">
+          <h3>Add Livewire to your project</h3>
+          <p>
+            Three small changes: the Maven dependency, one property to enable it locally,
+            and the Claude Code skill file that tells the agent exactly what Livewire can do.
+          </p>
+
+          <div class="gs-substeps">
+            <div class="gs-substep">
+              <div>
+                <div class="gs-substep-label">pom.xml</div>
+                <p>
+                  Add Livewire as a dependency. Scope it to your dev profile so it
+                  never ships to production.
+                </p>
+              </div>
+              <div class="code-block"><pre><span class="kw">&lt;dependency&gt;</span>
+  &lt;groupId&gt;<span class="n">net.brdloush</span>&lt;/groupId&gt;
+  &lt;artifactId&gt;<span class="n">livewire</span>&lt;/artifactId&gt;
+  &lt;version&gt;<span class="n">0.1.0</span>&lt;/version&gt;
+<span class="kw">&lt;/dependency&gt;</span></pre></div>
+            </div>
+
+            <div class="gs-substep">
+              <div>
+                <div class="gs-substep-label">application-local.yml (or .properties)</div>
+                <p>
+                  Enable Livewire in your local-only config. Don't commit this file —
+                  it should already be in your <code>.gitignore</code>.
+                </p>
+              </div>
+              <div class="code-block"><pre><span class="c"># application-local.yml</span>
+<span class="kw">livewire</span><span class="p">:</span>
+  <span class="kw">enabled</span><span class="p">:</span> <span class="n">true</span>
+  <span class="c"># nrepl.port: 7888  # optional</span></pre></div>
+            </div>
+
+            <div class="gs-substep full-width">
+              <div>
+                <div class="gs-substep-label">Copy the Claude Code skill</div>
+                <p>
+                  The skill file is the agent's cheat-sheet for Livewire's API. Without it,
+                  Claude will still connect — but with it, it knows exactly which functions to
+                  call, how to avoid pitfalls, and how to run the full
+                  inspect → trace → fix → verify loop.
+                </p>
+                <div class="code-block" style="margin-top: 0.85rem;"><pre><span class="c"># from the Livewire source root:</span>
+cp skills/livewire/SKILL.md <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire/SKILL.md</pre></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="gs-step" style="gap: 0; margin-top: -3rem; margin-bottom: -2.5rem;">
+        <div class="gs-step-connector"></div>
+        <div></div>
+      </div>
+
+      <!-- ── Step 2 ── -->
+      <div class="gs-step">
+        <div class="gs-step-num">2</div>
+        <div class="gs-step-body">
+          <h3>Start your Spring Boot app</h3>
+          <p>
+            Start it with the <code>local</code> profile active so Livewire picks up the
+            property you set. The nREPL server starts automatically — look for this line in the logs:
+          </p>
+          <div class="gs-log">INFO&nbsp; LivewireBootstrapBean &mdash; Livewire nREPL server started on port 7888</div>
+
+          <div class="gs-substeps" style="margin-top: 1.25rem;">
+            <div class="gs-substep">
+              <div>
+                <div class="gs-substep-label">Example — bloated-shelf</div>
+                <p>
+                  The <a href="https://github.com/brdloush/bloated-shelf" target="_blank" rel="noopener">bloated-shelf</a>
+                  sample app is a Spring Boot library API with 200 books, 30 authors, 50 members,
+                  and N+1 problems deliberately baked in. It's the canonical Livewire sandbox.
+                </p>
+              </div>
+              <div class="code-block"><pre><span class="kw">cd</span> bloated-shelf
+mvn spring-boot:run \
+  -Dspring-boot.run.profiles=<span class="n">dev,seed,local</span></pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="gs-step" style="gap: 0; margin-top: -3rem; margin-bottom: -2.5rem;">
+        <div class="gs-step-connector"></div>
+        <div></div>
+      </div>
+
+      <!-- ── Step 3 ── -->
+      <div class="gs-step">
+        <div class="gs-step-num">3</div>
+        <div class="gs-step-body">
+          <h3>Open Claude Code and load the skill</h3>
+          <p>
+            Open Claude Code in your project directory. Then load the Livewire skill —
+            this primes Claude with the full API reference and the right workflow for
+            exploring a live Spring app.
+          </p>
+
+          <div class="skill-box">
+            <span class="skill-cmd">/livewire</span>
+            <p>
+              Type this slash command in the Claude Code chat. Claude will confirm it
+              has loaded the skill, then connect to the running nREPL on port 7888.
+              You're live.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="gs-step" style="gap: 0; margin-top: -3rem; margin-bottom: -2.5rem;">
+        <div class="gs-step-connector"></div>
+        <div></div>
+      </div>
+
+      <!-- ── Step 4 ── -->
+      <div class="gs-step">
+        <div class="gs-step-num">4</div>
+        <div class="gs-step-body">
+          <h3>Ask questions in plain English</h3>
+          <p>
+            No Clojure knowledge required. Just describe what you want to know about
+            your running app — Claude handles the REPL calls and presents the results.
+            Here are some prompts to get you started.
+          </p>
+
+          <div class="try-grid">
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Orient yourself in an unfamiliar codebase</h4>
+                <code class="try-prompt">What entities does this app have? Describe their relationships and fetch strategies.</code>
+                <p>
+                  Claude calls <code>intro/list-entities</code> and <code>intro/inspect-entity</code>
+                  on each one, then summarises the full schema — table names, column mappings,
+                  associations, and fetch types — without reading a single source file.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Map all endpoints and their access rules</h4>
+                <code class="try-prompt">List all HTTP endpoints. Which ones require authentication, and what roles are needed?</code>
+                <p>
+                  <code>intro/list-endpoints</code> returns every route with its <code>@PreAuthorize</code>
+                  expression. Claude turns that into a readable table — useful before probing any
+                  secured controller.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-diagnose">Diagnose</span>
+              <div class="try-card-text">
+                <h4>Count exactly how many queries an endpoint fires</h4>
+                <code class="try-prompt">How many SQL queries does GET /api/books actually execute? Show me the breakdown.</code>
+                <p>
+                  Claude wraps the controller call in <code>trace/trace-sql</code> and reports
+                  the exact count with caller attribution. In bloated-shelf the answer is
+                  <strong style="color: var(--text)">1,201 queries for 200 books</strong> — a number
+                  that makes the problem undeniable.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-diagnose">Diagnose</span>
+              <div class="try-card-text">
+                <h4>Pinpoint the N+1 suspects</h4>
+                <code class="try-prompt">Find the N+1 query problem on the books endpoint. Which queries are repeating?</code>
+                <p>
+                  <code>trace/detect-n+1</code> groups repeated query templates and flags the
+                  worst offenders with counts. Claude names both the query and the likely
+                  association that's causing it.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-query">Query</span>
+              <div class="try-card-text">
+                <h4>Compare efficient vs. naive endpoints</h4>
+                <code class="try-prompt">How many queries does GET /api/admin/most-loaned fire compared to GET /api/books?</code>
+                <p>
+                  The contrast is stark: the admin aggregate fires <strong style="color: var(--text)">1 query</strong>
+                  via a single GROUP BY JOIN, while the books list fires over a thousand.
+                  Side-by-side, it makes a compelling case for the fix.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-query">Query</span>
+              <div class="try-card-text">
+                <h4>Ask a business question without writing code</h4>
+                <code class="try-prompt">Which genres have the most books in this library? And which ones are borrowed the most?</code>
+                <p>
+                  Claude writes and executes ad-hoc SQL via <code>q/sql</code> — joining
+                  <code>genre → book_genre → loan_record</code> in a single query you didn't
+                  have to write yourself. Results straight from the live database.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-query">Query</span>
+              <div class="try-card-text">
+                <h4>Surface operational data on the spot</h4>
+                <code class="try-prompt">Are there any overdue loans right now? Show me the member name, book title, and how many days overdue.</code>
+                <p>
+                  Multi-table SQL with a date comparison — the kind of thing that would normally
+                  require adding a new repository method, compiling, and restarting. Here it's
+                  a single prompt against the live database.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-query">Query</span>
+              <div class="try-card-text">
+                <h4>Rank data with aggregations</h4>
+                <code class="try-prompt">Which authors have the highest average review rating? Show top 10.</code>
+                <p>
+                  Claude joins <code>review → book → author</code>, aggregates with
+                  <code>AVG</code> and <code>GROUP BY</code>, and returns a ranked table.
+                  Pure ad-hoc analysis — no Spring code touched.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-fix">Fix</span>
+              <div class="try-card-text">
+                <h4>Fix the N+1 live, without restarting</h4>
+                <code class="try-prompt">Fix the N+1 on GET /api/books. Don't restart the app — hot-swap the query, verify it worked, then write the fix to source.</code>
+                <p>
+                  The payoff. Claude uses <code>hq/hot-swap-query!</code> to patch the
+                  <code>@Query</code> JPQL live, re-runs <code>trace/trace-sql</code> to
+                  confirm the query count dropped, writes the fix to <code>BookRepository.java</code>,
+                  then calls <code>hq/reset-all!</code>. Zero restarts. Typically under 90 seconds.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── What's next ───────────────────────────────────────────────────── -->
+<section id="next">
+  <div class="container">
+    <div class="section-label">What's next</div>
+    <h2>Dig deeper</h2>
+    <p class="section-sub">
+      Once you're comfortable with the basics, the full skill reference covers every
+      function, pitfall, and edge case.
+    </p>
+    <div class="human-block" style="max-width: 720px;">
+      <div class="human-card agent">
+        <div class="card-icon">📖</div>
+        <h3>Full skill reference</h3>
+        <p>
+          The <code>SKILL.md</code> you copied into your project is the authoritative
+          API reference — all six namespaces, every function signature, known pitfalls,
+          and worked examples. Read it once; Claude reads it every session.
+        </p>
+      </div>
+      <div class="human-card human">
+        <div class="card-icon">⚠️</div>
+        <h3>A word of caution</h3>
+        <p>
+          Livewire gives Claude (and you) full code execution power inside the JVM.
+          Use <strong>anonymized seed data</strong> — never point it at a database with
+          real user data. And keep <code>livewire.enabled</code> out of any profile
+          that ships to staging or production.
+        </p>
+      </div>
+    </div>
+    <div style="margin-top: 2.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+      <a href="index.html" class="btn btn-ghost">← Back to overview</a>
+      <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" class="btn btn-ghost">GitHub ↗</a>
+      <a href="https://github.com/brdloush/bloated-shelf" target="_blank" rel="noopener" class="btn btn-ghost">bloated-shelf ↗</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-logo">
+      <img src="images/logo-transparent.png" alt="Livewire" />
+      Livewire
+    </div>
+    <p class="footer-warning">
+      <strong>Dev only. Not for production.</strong>
+      You've been warned.
+    </p>
+    <p style="margin-top:1rem; font-size:0.85rem;">
+      <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" style="color:var(--muted);">GitHub ↗</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  const hamburger = document.getElementById('nav-hamburger');
+  const navLinks  = document.getElementById('nav-links');
+
+  function closeMenu() {
+    hamburger.classList.remove('open');
+    navLinks.classList.remove('open');
+  }
+
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    navLinks.classList.toggle('open');
+  });
+
+  navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('nav')) closeMenu();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeMenu();
+  });
+</script>
+
+</body>
+</html>

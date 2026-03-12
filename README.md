@@ -417,4 +417,12 @@ See [TODO.md](TODO.md) for open tasks, planned components, and ideas.
 
 ---
 
+## Inspiration
+
+[*Java Troubleshooting on Steroids with Clojure REPL*](https://engineering.telia.no/blog/java-troubleshooting-on-steroids-with-clojure-repl)
+by Jakub Holý (2019) — the idea that you can wire a Clojure REPL into a running JVM
+and talk to it live was the seed this project grew from. Worth a read.
+
+---
+
 *Don't touch live wires in production. But in dev? Grab on.*

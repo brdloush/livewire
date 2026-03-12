@@ -39,7 +39,7 @@
              (println "No bbserve running on port 4000")))}
 
   serve
-  {:doc "Serve web/ on port 4000 and print a QR code for the local URL"
+  {:doc "Serve the web/ landing page locally on port 4000 (for development only). Prints a QR code if qrencode is available."
    :task (let [ip   (with-open [s (java.net.DatagramSocket.)]
                       (.connect s (java.net.InetAddress/getByName "8.8.8.8") 53)
                       (.. s getLocalAddress getHostAddress))
@@ -49,5 +49,5 @@
            (babashka.process/process ["bbserve" "--dir" "web" "--port" (str port)]
                                      {:out :inherit :err :inherit})
            (Thread/sleep 600)
-           (babashka.process/shell "qrencode" "-t" "ansiutf8" url))}}
-}
+           (when (babashka.fs/which "qrencode")
+             (babashka.process/shell "qrencode" "-t" "ansiutf8" url)))}}}

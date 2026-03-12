@@ -206,11 +206,10 @@
         <div class="feature-icon">🔐</div>
         <h3><code>run-as</code> — Call Secured Beans Directly</h3>
         <p>Set a Spring <code>SecurityContext</code> for the duration of a REPL call. Call <code>@PreAuthorize</code>-guarded controllers and services directly — no more bypassing to the service layer.</p>
-        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="s">"member1"</span>
-  <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
-    <span class="p">(</span><span class="kw">.getBookById</span>
-      <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)</span>
-      <span class="p">(</span><span class="kw">long</span> 25<span class="p">))))</span></pre></div>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"member1"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
+  <span class="p">(</span><span class="kw">.getBookById</span>
+    <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)</span>
+    <span class="p">(</span><span class="kw">long</span> 25<span class="p">)))</span></pre></div>
       </div>
 
       <div class="feature-card">

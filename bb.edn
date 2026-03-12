@@ -61,6 +61,61 @@
                       "pom.xml"]]
              (println (str "  " f " — " (if (babashka.fs/exists? f) "✅" "❌")))))}
 
+  bundle
+  {:doc "Assemble the Maven Central upload bundle ZIP from signed release artifacts"
+   :task (let [version  (nth (read-string (slurp "project.clj")) 2)
+               src-dir  "target/provided"
+               base     (str "net/brdloush/livewire/" version)
+               bnd-dir  (str "target/bundle/" base)
+               zip-out  (str "target/livewire-" version "-bundle.zip")
+               stems    [(str "livewire-" version)
+                         (str "livewire-" version "-sources")
+                         (str "livewire-" version "-javadoc")]
+               pom-stem (str "livewire-" version)]
+           (babashka.fs/create-dirs bnd-dir)
+           ;; Copy JARs + signatures
+           (doseq [stem stems
+                   ext  [".jar" ".jar.asc"]]
+             (babashka.fs/copy (str src-dir "/" stem ext)
+                               (str bnd-dir "/" stem ext)
+                               {:replace-existing true}))
+           ;; Copy POM + signature
+           (doseq [ext [".pom" ".pom.asc"]]
+             (babashka.fs/copy (str src-dir "/" pom-stem ext)
+                               (str bnd-dir "/" pom-stem ext)
+                               {:replace-existing true}))
+           ;; Zip the bundle/ tree (Central Portal expects the full group/artifact/version path inside)
+           (babashka.fs/delete-if-exists zip-out)
+           (let [abs-zip (str (babashka.fs/absolutize zip-out))]
+             (shell (str "zip -r " abs-zip " net/") {:dir "target/bundle"}))
+           (println (str "\nBundle: " zip-out))
+           (println "Contents:")
+           (shell (str "unzip -l " zip-out)))}
+
+  sign-jars
+  {:doc "GPG-sign all release artifacts, producing .asc detached signatures"
+   :task (let [version (nth (read-string (slurp "project.clj")) 2)
+               out-dir "target/provided"
+               pom-dst (str out-dir "/livewire-" version ".pom")
+               files   [(str out-dir "/livewire-" version ".jar")
+                        (str out-dir "/livewire-" version "-sources.jar")
+                        (str out-dir "/livewire-" version "-javadoc.jar")
+                        pom-dst]]
+           ;; Copy pom.xml to the versioned .pom name Maven Central expects
+           (println (str "Copying pom.xml → " pom-dst))
+           (babashka.fs/copy "pom.xml" pom-dst {:replace-existing true})
+           ;; Sign each artifact with a detached ASCII-armored signature
+           (doseq [f files]
+             (println (str "Signing " f " ..."))
+             (shell (str "gpg --armor --detach-sign "
+                         "--local-user brdloush@gmail.com " f)))
+           ;; Verify all .asc files were produced
+           (println "\nSignatures:")
+           (doseq [f files]
+             (let [asc (str f ".asc")]
+               (println (str "  " asc " — "
+                             (if (babashka.fs/exists? asc) "✅" "❌"))))))}
+
   stop-serve
   {:doc "Kill the bbserve process on port 4000"
    :task (let [procs (->> (java.lang.ProcessHandle/allProcesses)

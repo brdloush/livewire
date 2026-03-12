@@ -70,13 +70,13 @@ Then add the dependency to your Spring Boot project:
 <dependency>
   <groupId>net.brdloush</groupId>
   <artifactId>livewire</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
 **Gradle**
 ```groovy
-implementation 'net.brdloush:livewire:0.1.0-SNAPSHOT'
+implementation 'net.brdloush:livewire:0.1.0'
 ```
 
 ---

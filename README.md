@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="web/logo-transparent.png" alt="Livewire" width="160" />
+</div>
+
 # ⚡ Livewire
 
 > *A live nREPL wire into your running Spring Boot app. Dev only. You've been warned.*

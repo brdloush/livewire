@@ -151,7 +151,7 @@
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
       <br>
-      <span class="hl-green">Claude Code</span> <span style="color:var(--border-mid)">→</span> <span class="hl-blue">clojure_eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
+      <span class="hl-green">AI agent</span> <span style="color:var(--border-mid)">(Claude Code, ECA, …) →</span> <span class="hl-blue">clj-nrepl-eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
     </div>
   </div>
 </section>
@@ -433,7 +433,7 @@
         <div class="step-num">3</div>
         <div class="install-step-body">
           <h3>Connect &amp; probe</h3>
-          <p>From Claude Code, clojure-mcp, or any nREPL client.</p>
+          <p>From <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>, <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>, or any nREPL client.</p>
         </div>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">require</span>
   <span class="s">'[net.brdloush.livewire.core :as lw]</span>

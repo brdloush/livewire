@@ -301,7 +301,7 @@
     <div class="prereq-row">
       <span class="prereq-badge">☕ Java 17+</span>
       <span class="prereq-badge">🍃 Spring Boot 3.x</span>
-      <span class="prereq-badge">🤖 Claude Code</span>
+      <span class="prereq-badge">🤖 AI agent (Claude Code, ECA, …)</span>
       <span class="prereq-badge">🍺 bbin</span>
       <span class="prereq-badge">⚡ clj-nrepl-eval</span>
     </div>
@@ -320,7 +320,7 @@
           <h3>Add Livewire to your project</h3>
           <p>
             Three small changes: the Maven dependency, one property to enable it locally,
-            and the Claude Code skill file that tells the agent exactly what Livewire can do.
+            and the agent skill file that tells your AI agent exactly what Livewire can do.
           </p>
 
           <div class="gs-substeps">
@@ -357,7 +357,7 @@
               <div>
                 <div class="gs-substep-label">Install clj-nrepl-eval</div>
                 <p>
-                  Livewire's Claude Code skill uses
+                  The Livewire skill uses
                   <a href="https://github.com/bhauman/clojure-mcp-light" target="_blank" rel="noopener">clojure-mcp-light</a>'s
                   <code>clj-nrepl-eval</code> CLI to talk to the nREPL server.
                   Install it once via <a href="https://github.com/babashka/bbin" target="_blank" rel="noopener">bbin</a>
@@ -376,12 +376,19 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
 
             <div class="gs-substep full-width">
               <div>
-                <div class="gs-substep-label">Copy the Claude Code skill</div>
+                <div class="gs-substep-label">Copy the skill file into your project</div>
                 <p>
                   The skill file is the agent's cheat-sheet for Livewire's API. Without it,
-                  Claude will still connect — but with it, it knows exactly which functions to
-                  call, how to avoid pitfalls, and how to run the full
+                  your agent will still connect — but with it, it knows exactly which functions
+                  to call, how to avoid pitfalls, and how to run the full
                   inspect → trace → fix → verify loop.
+                </p>
+                <p style="margin-top: 0.6rem;">
+                  The skill is designed for agents that support slash-command skills
+                  (such as <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>
+                  or <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>).
+                  Place it at <code>.claude/skills/livewire/SKILL.md</code> — both tools pick it
+                  up from there. Other agents can read it directly as context.
                 </p>
                 <div class="code-block" style="margin-top: 0.85rem;"><pre><span class="c"># from the Livewire source root:</span>
 cp skills/livewire/SKILL.md <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire/SKILL.md</pre></div>
@@ -436,18 +443,25 @@ mvn spring-boot:run \
       <div class="gs-step">
         <div class="gs-step-num">3</div>
         <div class="gs-step-body">
-          <h3>Open Claude Code and load the skill</h3>
+          <h3>Open your AI agent and load the skill</h3>
           <p>
-            Open Claude Code in your project directory. Then load the Livewire skill —
-            this primes Claude with the full API reference and the right workflow for
+            Open your agent in your project directory. Then load the Livewire skill —
+            this primes it with the full API reference and the right workflow for
             exploring a live Spring app.
+          </p>
+          <p>
+            Works with any agent that supports slash-command skills — including
+            <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>,
+            <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>,
+            and others. Once the skill file is in <code>.claude/skills/livewire/</code>,
+            load it with:
           </p>
 
           <div class="skill-box">
             <span class="skill-cmd">/livewire</span>
             <p>
-              Type this slash command in the Claude Code chat. Claude will confirm it
-              has loaded the skill, then connect to the running nREPL on port 7888.
+              Type this slash command in the agent chat. It will confirm the skill
+              has loaded, then connect to the running nREPL on port 7888.
               You're live.
             </p>
           </div>

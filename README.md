@@ -280,6 +280,7 @@ Use it with:
 - A local development database seeded with anonymized or synthetic data
 - A sandbox / staging environment that is completely isolated from production
 - Testcontainers-spun databases (like the Bloated Shelf playground below)
+- A self-hosted LLM — your ground, your rules, no data leaving the building
 
 ### The nREPL can execute arbitrary code
 

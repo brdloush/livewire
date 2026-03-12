@@ -5,6 +5,16 @@ working on the Livewire project.
 
 ---
 
+## Git discipline — always ask before committing or pushing
+
+Never commit or push autonomously. Always present what you intend to do and
+**wait for explicit user approval** before running any `git commit` or `git push`.
+
+This applies even when the change is small or the user said "do it" in a general
+sense earlier — confirm the specific commit/push action each time.
+
+---
+
 ## Clojure gotchas
 
 ### `defonce` does not accept docstrings

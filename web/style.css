@@ -762,6 +762,13 @@ nav {
   margin: 0;
 }
 
+.install-footnote {
+  margin-top: 0.5rem !important;
+  font-size: 0.8rem !important;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
 .install-step .code-block {
   margin: 0;
 }

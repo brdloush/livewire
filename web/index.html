@@ -193,9 +193,8 @@
         <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">trace/detect-n+1</span>
   <span class="p">(</span><span class="kw">trace/trace-sql</span>
-    <span class="p">(</span><span class="kw">lw/run-as</span> <span class="s">"member1"</span>
-      <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
-        <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">))))))</span>
+    <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+      <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)))))</span>
 <span class="r">;; => {:suspicious-queries
 ;;      [{:sql "select ... from book_genre ...", :count 200}
 ;;       {:sql "select ... from review ...",     :count 200}]
@@ -206,7 +205,7 @@
         <div class="feature-icon">🔐</div>
         <h3><code>run-as</code> — Call Secured Beans Directly</h3>
         <p>Set a Spring <code>SecurityContext</code> for the duration of a REPL call. Call <code>@PreAuthorize</code>-guarded controllers and services directly — no more bypassing to the service layer.</p>
-        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"member1"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"alice"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
   <span class="p">(</span><span class="kw">.getBookById</span>
     <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)</span>
     <span class="p">(</span><span class="kw">long</span> 25<span class="p">)))</span></pre></div>

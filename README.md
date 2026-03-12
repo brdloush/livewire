@@ -379,7 +379,7 @@ cp skills/livewire/SKILL.md /your/spring-app/SKILL-livewire.md
 Even if the file is in place, explicitly telling the agent to load the skill
 at the start of a session gets much better results than hoping it gets picked up passively:
 
-> *"Load the Livewire skill. The nREPL is on port 7888."*
+> *"Load the Livewire skill."*
 
 That one sentence changes the entire session. The agent switches from guessing to probing.
 From static analysis to live questions. From "I think the query might be..." to

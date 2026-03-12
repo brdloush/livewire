@@ -344,12 +344,45 @@ a solid starting point for an agentic session.
 
 ---
 
-## API reference
+## 📖 SKILL.md — the agent's instruction manual
 
-Full API docs, detailed examples, and gotchas live in
-[`skills/livewire/SKILL.md`](skills/livewire/SKILL.md) — written for AI agents
-but readable by humans too. Covers all six namespaces, known pitfalls, and escalation
-strategies for debugging without restarts.
+[`skills/livewire/SKILL.md`](skills/livewire/SKILL.md) is the most important file
+in this repository if you're working with an AI agent.
+
+It covers the full API across all six namespaces, worked examples, known pitfalls,
+and escalation strategies for debugging without restarts. It's written for agents —
+but it's perfectly readable by humans too.
+
+**Without `SKILL.md` in the agent's context, cooperation will be poor.**
+The agent will hallucinate method signatures, call things that don't exist,
+and make sloppy guesses about behaviour it could just... ask the live app about.
+With it, the agent knows exactly what tools it has, how to use them, and what to watch out for.
+
+### Make it discoverable
+
+Most agent toolchains pick up context files from well-known locations automatically.
+Drop `SKILL.md` somewhere the agent will find it:
+
+```bash
+# Globally — available in every project, every session
+cp skills/livewire/SKILL.md ~/.claude/skills/livewire.md
+# or wherever your agent looks for global context
+# (e.g. ~/.config/aider/skills/, a global AGENTS.md, etc.)
+
+# Per-project — checked in alongside the app that uses Livewire
+cp skills/livewire/SKILL.md /your/spring-app/SKILL-livewire.md
+```
+
+### Load it explicitly
+
+Even if the file is in place, explicitly telling the agent to load the skill
+at the start of a session gets much better results than hoping it gets picked up passively:
+
+> *"Load the Livewire skill. The nREPL is on port 7888."*
+
+That one sentence changes the entire session. The agent switches from guessing to probing.
+From static analysis to live questions. From "I think the query might be..." to
+"I just measured it — 481 queries. Here's why, and here's the fix."
 
 Quick namespace cheatsheet:
 

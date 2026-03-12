@@ -1,11 +1,14 @@
 {:min-bb-version "0.8.0"
 
  :tasks
- {:init (defn file-hex-digest [algorithm file]
-          (let [bytes (java.nio.file.Files/readAllBytes (.toPath (java.io.File. file)))
-                md    (doto (java.security.MessageDigest/getInstance algorithm)
-                        (.update bytes))]
-            (apply str (map (fn [b] (format "%02x" (bit-and b 0xff))) (.digest md)))))
+ {:init (do
+          (defn file-hex-digest [algorithm file]
+            (let [bytes (java.nio.file.Files/readAllBytes (.toPath (java.io.File. file)))
+                  md    (doto (java.security.MessageDigest/getInstance algorithm)
+                          (.update bytes))]
+              (apply str (map (fn [b] (format "%02x" (bit-and b 0xff))) (.digest md)))))
+          (defn sh-out [& cmd]
+            (clojure.string/trim (:out (apply clojure.java.shell/sh cmd)))))
 
   clean
   {:doc "Remove build artifacts (target/ directory)"
@@ -126,6 +129,21 @@
              (let [asc (str f ".asc")]
                (println (str "  " asc " — "
                              (if (babashka.fs/exists? asc) "✅" "❌"))))))}
+
+  deploy-pages
+  {:doc "Push web/ contents to the gh-pages branch for GitHub Pages hosting"
+   :task (let [remote (sh-out "git" "remote" "get-url" "origin")
+               tmp    "/tmp/livewire-pages-deploy"]
+           (println (str "Deploying web/ → gh-pages on " remote " ..."))
+           (babashka.fs/delete-tree tmp)
+           (babashka.fs/copy-tree "web" tmp)
+           (shell {:dir tmp} "git init -b gh-pages")
+           (shell {:dir tmp} (str "git remote add origin " remote))
+           (shell {:dir tmp} "git add -A")
+           (shell {:dir tmp} "git commit -m \"Deploy GitHub Pages\"")
+           (shell {:dir tmp} "git push --force origin gh-pages")
+           (babashka.fs/delete-tree tmp)
+           (println "\n✅ Deployed! GitHub Pages will be live at https://brdloush.github.io/livewire/"))}
 
   stop-serve
   {:doc "Kill the bbserve process on port 4000"

@@ -27,6 +27,21 @@ history worth preserving.
 
 ---
 
+## Deploying the website
+
+The files under `web/` are the source for https://brdloush.github.io/livewire/.
+They are **not** served directly from `main` — they are published to the `gh-pages`
+branch by the maintainer running:
+
+```bash
+bb deploy-pages
+```
+
+After any commit that touches `web/`, remind the maintainer to run this command
+so the live site stays in sync. Do not run it yourself.
+
+---
+
 ## Clojure gotchas
 
 ### `defonce` does not accept docstrings

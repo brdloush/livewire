@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Usage: lw-inspect-entity <EntityName>
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.introspect :as intro]) (intro/inspect-entity \"$1\"))"

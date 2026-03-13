@@ -7,6 +7,33 @@ the JVM beats static analysis every time.
 
 ---
 
+## Wrapper scripts
+
+This skill ships named wrapper scripts in `bin/` alongside `SKILL.md`. Always
+prefer these over raw `clj-nrepl-eval` calls — they produce cleaner output in
+the Claude Code UI (the script name is shown instead of the full Clojure
+expression) and handle namespace requiring automatically.
+
+Use them via their full path: `~/.claude/skills/livewire/bin/<script-name>`.
+The port defaults to **7888** and can be overridden with `LW_PORT`.
+
+| Script | What it does |
+|---|---|
+| `lw-info` | App/env summary |
+| `lw-list-entities` | All Hibernate-managed entities |
+| `lw-inspect-entity <Name>` | Table, columns, relations for one entity |
+| `lw-list-endpoints` | All HTTP endpoints with auth info |
+| `lw-find-beans <regex>` | Filter bean names by regex |
+| `lw-props <regex>` | Filter environment properties by regex |
+| `lw-sql <query>` | Run a read-only SQL query |
+| `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
+| `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
+| `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
+| `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
+| `lw-eval <clojure-expr>` | Generic nREPL eval (raw clj-nrepl-eval) |
+
+---
+
 ## Prerequisites
 
 This skill relies on `clj-nrepl-eval` — a lightweight CLI from
@@ -58,16 +85,22 @@ clj-nrepl-eval --discover-ports
    clj-nrepl-eval -p <port> --timeout 5000 "<clojure-code>"
    ```
 
-4. **Present results readably:**
+4. **Run independent read queries in parallel** — when multiple `clj-nrepl-eval` calls have
+   no dependencies on each other (e.g. inspecting several entities, fetching unrelated
+   properties), fire them all in a single message as parallel Bash tool calls. This
+   significantly reduces wall-clock time. Only serialize calls when one result feeds
+   into the next.
+
+5. **Present results readably:**
    - Collections of maps → markdown table
    - Single map → inline key/value list
    - Scalars → inline code in prose
 
-5. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it
+6. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it
    re-reads the same old class already on the classpath. Instead, evaluate the
    new `ns` form and function bodies directly into the live REPL.
 
-6. **After writing a source-code fix:** Once a hypothesis has been validated in
+7. **After writing a source-code fix:** Once a hypothesis has been validated in
    the REPL and the fix has been written to source, remind the user that a
    restart may be required before the new code takes effect — unless the change
    is limited to `@Query` JPQL strings that the query-watcher can pick up
@@ -131,6 +164,22 @@ Use `run-as` whenever calling a bean that is protected by Spring Security (`@Pre
 
 **Prefer `run-as` over bypassing to the service layer** when you want to exercise
 the real secured code path — including AOP advice, `@PostAuthorize` filters, etc.
+
+#### ⚠️ Plain string form only grants `ROLE_USER` + `ROLE_ADMIN`
+
+If an endpoint requires a custom role (e.g. `ROLE_MEMBER`, `ROLE_VIEWER`, `ROLE_LIBRARIAN`),
+the plain string form will fail with `AuthorizationDeniedException` — not
+`AuthenticationCredentialsNotFoundException`. **Always use the vector form for non-admin roles.**
+
+```clojure
+;; ❌ fails with AuthorizationDeniedException if endpoint requires ROLE_VIEWER
+(lw/run-as "viewer"
+  (.getAuthors (lw/bean "authorController")))
+
+;; ✅ explicitly specify the required role
+(lw/run-as ["viewer" "ROLE_VIEWER"]
+  (.getAuthors (lw/bean "authorController")))
+```
 
 ---
 
@@ -213,6 +262,76 @@ so it's always populated when security is in play, regardless of where the annot
 | `(trace/trace-sql & body)` | Captures every SQL fired by Hibernate on the current thread |
 | `(trace/trace-sql-global & body)` | Same, but captures across *all* threads (useful for `@Async`) |
 | `(trace/detect-n+1 trace-res)` | Analyzes a trace result and flags repeated queries |
+
+---
+
+## JPA Query API — `net.brdloush.livewire.jpa-query`
+
+Executes a JPQL query against the live `EntityManager` inside a read-only transaction and
+returns a vector of plain Clojure maps. Lazy collections are rendered as `"<lazy>"` rather
+than triggering surprise queries; ancestor-chain cycles become `"<circular>"`.
+
+**Prefer this over raw `q/sql`** when you want to work at the JPA/entity level — `JOIN FETCH`
+clauses control exactly what gets loaded, and the result is already a readable Clojure structure
+with no need to manually call `clojure.core/bean`.
+
+| Expression | What it does |
+|---|---|
+| `(jpa/jpa-query jpql)` | Run JPQL, return first 20 results as entity maps |
+| `(jpa/jpa-query jpql :page 1 :page-size 5)` | Paginate — offset = `page × page-size` |
+
+### Serialization behaviour
+
+| Scenario | Result |
+|---|---|
+| Scalar property | Value as-is |
+| Temporal type (`LocalDate`, etc.) | `#object[LocalDate ...]` (not coerced) |
+| Eagerly fetched `@ManyToOne` | Recursed into (full nested map) |
+| Eagerly fetched collection (within cap) | `[{…} {…} …]` |
+| Collection beyond page-size cap | Truncated to cap |
+| Uninitialized lazy collection | `"<lazy>"` |
+| Ancestor-chain cycle | `"<circular>"` |
+| Sibling reuse of same object | Fully rendered (not falsely circular) |
+| Non-entity Java object | `(.toString obj)` |
+
+### Examples
+
+```clojure
+;; Basic — lazy associations render as "<lazy>"
+(jpa/jpa-query "SELECT b FROM Book b ORDER BY b.id")
+;; => [{:id 1, :title "All the King's Men", :isbn "...",
+;;      :author {:id 6, :firstName "Kip", :lastName "O'Reilly", :books "<lazy>"},
+;;      :genres "<lazy>", :reviews "<lazy>", :loanRecords "<lazy>"} ...]
+
+;; JOIN FETCH to eagerly load genres — they come back as real vectors
+(jpa/jpa-query "SELECT DISTINCT b FROM Book b LEFT JOIN FETCH b.genres ORDER BY b.id"
+               :page 0 :page-size 5)
+;; => [{:id 1, ..., :genres [{:id 3, :name "Fiction"} {:id 7, :name "Drama"}], :reviews "<lazy>"} ...]
+
+;; Paginate — page 2 of 10 (rows 20–29)
+(jpa/jpa-query "SELECT b FROM Book b ORDER BY b.id" :page 2 :page-size 10)
+
+;; Combine with trace-sql to inspect query count and SQL shape
+(trace/trace-sql
+  (jpa/jpa-query "SELECT DISTINCT b FROM Book b LEFT JOIN FETCH b.genres"))
+;; => {:result [...], :count 1, :duration-ms 12, :queries [{:sql "select ..."}]}
+```
+
+### CLI: `lw-jpa-query`
+
+```bash
+# Default: page 0, page-size 20
+lw-jpa-query 'SELECT b FROM Book b ORDER BY b.id'
+
+# With JOIN FETCH, first 5 results
+lw-jpa-query 'SELECT DISTINCT b FROM Book b LEFT JOIN FETCH b.genres' 0 5
+
+# Page 2 with 10 per page
+lw-jpa-query 'SELECT b FROM Book b ORDER BY b.id' 2 10
+```
+
+The CLI output is wrapped in `trace/trace-sql`, so you always get `:result`, `:count`,
+`:queries`, and `:duration-ms` in one shot.
 
 ---
 
@@ -538,6 +657,51 @@ Use `lw/run-as` to set one, or bypass to the underlying service if security is n
 
 ;; ✅ alternative: call the service the controller delegates to (skips security entirely)
 (.myServiceMethod (lw/bean "myService") someArg)
+```
+
+### Use `jakarta.persistence` not `javax.persistence` on Spring Boot 3+
+
+Spring Boot 3 migrated to Jakarta EE. When importing `EntityManager` or other JPA types
+directly in REPL expressions, use the `jakarta.persistence` package.
+
+```clojure
+;; ❌ ClassNotFoundException on Spring Boot 3+
+(import 'javax.persistence.EntityManager)
+
+;; ✅ correct
+(import 'jakarta.persistence.EntityManager)
+(lw/bean EntityManager)
+```
+
+### `q/sql` is query-only — use raw JDBC for DDL
+
+`q/sql` executes via `executeQuery` and expects a result set. DDL statements (`CREATE INDEX`,
+`ALTER TABLE`, etc.) return no rows and throw `PSQLException: No results were returned by the query`.
+Use a raw JDBC connection instead.
+
+```clojure
+;; ❌ PSQLException: No results were returned by the query
+(lw/in-tx (q/sql "CREATE INDEX idx_foo ON bar(baz)"))
+
+;; ✅ raw JDBC for DDL
+(let [ds (lw/bean javax.sql.DataSource)]
+  (with-open [conn (.getConnection ds)]
+    (-> conn .createStatement (.execute "CREATE INDEX idx_foo ON bar(baz)"))))
+```
+
+### First call after restart inflates timing — always warm up before measuring
+
+The JVM JIT hasn't compiled anything on a fresh restart. The first call can be 5–10× slower
+than steady-state. Always run several iterations before drawing conclusions about performance.
+
+```clojure
+;; ❌ misleading — first call may show 98ms due to cold JIT
+(:duration-ms (trace/trace-sql (lw/run-as "admin" (.myEndpoint (lw/bean "myController")))))
+
+;; ✅ warm up first, then measure
+(mapv (fn [_] (:duration-ms (trace/trace-sql (lw/run-as "admin" (.myEndpoint (lw/bean "myController"))))))
+      (range 5))
+;; => [98 25 15 12 12]  ← ignore the first result
 ```
 
 ### `trace/trace-sql` requires Livewire ≥ 0.1.0-SNAPSHOT (post Hibernate 7 fix)

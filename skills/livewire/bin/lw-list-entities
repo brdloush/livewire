@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.introspect :as intro]) (intro/list-entities))"

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Usage: lw-sql <sql-query>
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q]) (lw/in-readonly-tx (q/sql \"$*\")))"

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Usage: lw-find-beans <regex-pattern>
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.core :as lw]) (lw/find-beans-matching \"$1\"))"

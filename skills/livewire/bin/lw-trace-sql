@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Usage: lw-trace-sql <clojure-expr>
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.trace :as trace]) (trace/trace-sql $1))"

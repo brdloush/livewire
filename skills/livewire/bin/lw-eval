@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Usage: lw-eval <clojure-expr>
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" "$@"

@@ -2,7 +2,9 @@
 # Usage: lw-call-endpoint <beanName> <method> <role> [args...]
 #
 # Calls a controller or service method under a Spring Security context with a
-# single role. Handles the require and run-as boilerplate automatically.
+# single role. Serializes the result using mvc/serialize — the same Jackson
+# ObjectMapper that Spring MVC uses, producing output identical to the HTTP
+# response body. Binary/non-JSON results print a descriptive message instead.
 #
 # For multiple roles or a custom username, fall back to lw-eval.
 #
@@ -24,5 +26,14 @@ ROLE="$3"
 shift 3
 ARGS="$*"
 
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
-  "(do (require '[net.brdloush.livewire.core :as lw]) (lw/run-as [\"repl-user\" \"${ROLE}\"] (.${METHOD} (lw/bean \"${BEAN}\") ${ARGS})))"
+EXPR=$(cat <<CLOJURE
+(do
+  (require '[net.brdloush.livewire.core :as lw]
+           '[net.brdloush.livewire.mvc :as mvc])
+  (println (mvc/serialize
+             (lw/run-as ["repl-user" "${ROLE}"]
+               (.${METHOD} (lw/bean "${BEAN}") ${ARGS})))))
+CLOJURE
+)
+
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" "$EXPR"

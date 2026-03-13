@@ -36,35 +36,7 @@
                            (.getMethodParameters hm))}))))
 
 ;;; ---------------------------------------------------------------------------
-;;; Hibernate Metamodel
-
-(defn list-entities
-  "Returns a list of all Hibernate-managed entities (their simple names and FQNs)."
-  []
-  (let [emf (core/bean "entityManagerFactory")
-        mm (.getMetamodel emf)]
-    (->> (.getEntities mm)
-         (map (fn [e]
-                {:name (.getName e)
-                 :class (.getName (.getJavaType e))}))
-         (sort-by :name)
-         vec)))
-
-(defn- resolve-entity-name
-  "Resolves a simple name or FQN to the Hibernate entity name."
-  [emf entity-class]
-  (let [mm (.getMetamodel emf)
-        entities (.getEntities mm)
-        target-name (if (class? entity-class) (.getName entity-class) entity-class)
-        simple-name? (not (str/includes? target-name "."))]
-    (if simple-name?
-      (->> entities
-           (filter #(= target-name (.getName %)))
-           first
-           (#(when % (.getName (.getJavaType %)))))
-      target-name)))
-
-;;; Hibernate 6 / 7 cross-compatibility helpers
+;;; Hibernate Metamodel — cross-compatibility helpers (must precede callers)
 
 (defn- safe-get-entity-persister [mm entity-name]
   (try
@@ -83,6 +55,40 @@
     (clojure.lang.Reflector/invokeInstanceMethod ep "getCascadeStyle" (object-array [(int idx)]))
     (catch Exception _
       (aget (clojure.lang.Reflector/invokeInstanceMethod ep "getPropertyCascadeStyles" (object-array [])) idx))))
+
+;;; ---------------------------------------------------------------------------
+
+(defn list-entities
+  "Returns a list of all Hibernate-managed entities: simple name, FQN, and DB table name."
+  []
+  (let [emf (core/bean "entityManagerFactory")
+        sf  (.unwrap emf org.hibernate.SessionFactory)
+        mm  (.getMetamodel sf)]
+    (->> (.getEntities mm)
+         (map (fn [e]
+                (let [entity-name (.getName e)
+                      fqn         (.getName (.getJavaType e))
+                      ep          (try (safe-get-entity-persister mm fqn)
+                                       (catch Exception _ nil))]
+                  {:name       entity-name
+                   :class      fqn
+                   :table-name (when ep (try (.getTableName ep) (catch Exception _ nil)))})))
+         (sort-by :name)
+         vec)))
+
+(defn- resolve-entity-name
+  "Resolves a simple name or FQN to the Hibernate entity name."
+  [emf entity-class]
+  (let [mm (.getMetamodel emf)
+        entities (.getEntities mm)
+        target-name (if (class? entity-class) (.getName entity-class) entity-class)
+        simple-name? (not (str/includes? target-name "."))]
+    (if simple-name?
+      (->> entities
+           (filter #(= target-name (.getName %)))
+           first
+           (#(when % (.getName (.getJavaType %)))))
+      target-name)))
 
 (defn inspect-entity
   "Reads Hibernate's metamodel for a given entity (by Class or simple/FQN String).

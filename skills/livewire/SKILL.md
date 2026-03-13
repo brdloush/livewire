@@ -189,7 +189,7 @@ the plain string form will fail with `AuthorizationDeniedException` — not
 | Expression | What it returns |
 |---|---|
 | `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, params, `:pre-authorize`) |
-| `(intro/list-entities)` | All Hibernate-managed entities (simple name + FQN) |
+| `(intro/list-entities)` | All Hibernate-managed entities — simple name, FQN, and DB table name |
 | `(intro/inspect-entity "Name")` | Table name, columns, and relations for one entity |
 
 ### Inspecting entity structure
@@ -198,6 +198,11 @@ the plain string form will fail with `AuthorizationDeniedException` — not
 exploring entity mappings, table names, columns, or relations. The introspection API reads
 directly from Hibernate's metamodel — it reflects the actual JPA mapping including column
 overrides, join tables, and relation types, without needing to know the DB dialect or schema name.
+
+**When presenting entity listings to the user, always include:**
+- Entity name (`:name`)
+- Fully-qualified class name (`:class`)
+- DB table name (`:table-name`) — included directly in `list-entities` output, no extra calls needed
 
 ```clojure
 ;; ✅ preferred: list all entities, then inspect one
@@ -254,6 +259,13 @@ If one is present, **always wrap the call in `lw/run-as`** — without it the RE
 `:pre-authorize` reflects both method-level and class-level `@PreAuthorize` annotations —
 so it's always populated when security is in play, regardless of where the annotation lives.
 
+**When presenting `list-endpoints` results to the user, always include these fields for each endpoint:**
+- HTTP method(s) (`:methods`)
+- Path(s) (`:paths`)
+- Controller class name (`:controller`)
+- Handler method name (`:handler-method`)
+- Required role / `@PreAuthorize` expression (`:pre-authorize`, or "none" if absent)
+
 #### CLI shortcut: `lw-call-endpoint`
 
 For one-shot calls from the shell, `lw-call-endpoint` handles the require and `run-as`
@@ -261,9 +273,29 @@ boilerplate automatically. It accepts a single role (the `ROLE_` prefix is requi
 
 **List results are capped at 20 items by default** — the same convention as `lw-sql` and
 `lw-jpa-query`. Use `--limit N` to override. The returned value is a Clojure vector with
-`{:total <full-count> :returned <N>}` metadata attached so you can see how many items were
-omitted. Single-object results (non-list) are unaffected and always return in full as
-pretty-printed JSON.
+metadata attached so you can see how many items were omitted. Single-object results (non-list)
+are unaffected and always return in full as pretty-printed JSON.
+
+**Always report the following to the user when a limited list is returned:**
+- `:returned` / `:total` — how many rows were shown vs how many exist
+- `:content-size` — raw JSON byte size of the **full uncapped** response (all `:total` items, not just the `:returned` ones — do NOT use this to judge whether the returned payload is too large to display)
+- `:content-size-gzip` — gzip-compressed byte size of the full uncapped response
+
+**The actual returned payload contains only `:returned` items** — always render it directly as a markdown table without piping through external tools (Python, jq, etc.), even when `:content-size` looks large.
+
+**If the saved output file is too large for the Read tool** (error: token limit exceeded), do NOT fall back to Python/jq/shell tools to parse it. Instead, re-call the same endpoint using `lw-call-endpoint --limit 1`:
+
+```bash
+# Re-call with a single item — always fits in the Read tool
+lw-call-endpoint --limit 1 bookController getBooks ROLE_MEMBER
+```
+
+**Always render the returned items as a markdown table**, using the keys of the first item as
+column headers. The number of rows to display in the table follows this rule:
+- If the result has `:total` metadata, show up to `:returned` rows — but if the tool result is too large to fully process, show at least 3 rows and note that the rest were omitted due to response size
+- Otherwise cap the table at **20 rows** unless the user explicitly asked for more
+- Never silently truncate — if rows were omitted, add a note such as
+  `_Showing N of M total rows. Use --limit to retrieve more._`
 
 ```bash
 # List endpoint — capped at 20 by default

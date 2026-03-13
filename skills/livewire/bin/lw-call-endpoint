@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Usage: lw-call-endpoint <beanName> <method> <role> [args...]
+#
+# Calls a controller or service method under a Spring Security context with a
+# single role. Handles the require and run-as boilerplate automatically.
+#
+# For multiple roles or a custom username, fall back to lw-eval.
+#
+# Arguments:
+#   $1    Spring bean name  (e.g. bookController)
+#   $2    Method name       (e.g. getBooks)
+#   $3    Role              (e.g. ROLE_MEMBER — the ROLE_ prefix is required)
+#   $4+   Method arguments as Clojure literals  (optional)
+#
+# Examples:
+#   lw-call-endpoint bookController getBooks ROLE_MEMBER
+#   lw-call-endpoint bookController getBookById ROLE_MEMBER 25
+#   lw-call-endpoint adminController getStats ROLE_ADMIN
+#   lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
+
+BEAN="$1"
+METHOD="$2"
+ROLE="$3"
+shift 3
+ARGS="$*"
+
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.core :as lw]) (lw/run-as [\"repl-user\" \"${ROLE}\"] (.${METHOD} (lw/bean \"${BEAN}\") ${ARGS})))"

@@ -29,6 +29,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
+| `lw-call-endpoint <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-eval <clojure-expr>` | Generic nREPL eval (raw clj-nrepl-eval) |
 
@@ -252,6 +253,28 @@ If one is present, **always wrap the call in `lw/run-as`** — without it the RE
 
 `:pre-authorize` reflects both method-level and class-level `@PreAuthorize` annotations —
 so it's always populated when security is in play, regardless of where the annotation lives.
+
+#### CLI shortcut: `lw-call-endpoint`
+
+For one-shot calls from the shell, `lw-call-endpoint` handles the require and `run-as`
+boilerplate automatically. It accepts a single role (the `ROLE_` prefix is required):
+
+```bash
+# No args
+lw-call-endpoint bookController getBooks ROLE_MEMBER
+
+# With a positional argument
+lw-call-endpoint bookController getBookById ROLE_MEMBER 25
+
+# String argument — quote carefully
+lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
+```
+
+When you need **multiple roles** or a custom username, fall back to `lw-eval`:
+
+```bash
+lw-eval '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.getMembers (lw/bean "memberController")))'
+```
 
 ---
 

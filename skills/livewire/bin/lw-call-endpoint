@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Usage: lw-call-endpoint <beanName> <method> <role> [args...]
+# Usage: lw-call-endpoint [--limit N] <beanName> <method> <role> [args...]
 #
 # Calls a controller or service method under a Spring Security context with a
 # single role. Serializes the result using mvc/serialize — the same Jackson
 # ObjectMapper that Spring MVC uses, producing output identical to the HTTP
 # response body. Binary/non-JSON results print a descriptive message instead.
+#
+# --limit N   When the result is a top-level list, return only the first N
+#             items. The returned value is a Clojure vector with metadata
+#             {:total <full-count> :returned <N>} attached.
+#             Without --limit, returns a pretty-printed JSON string.
 #
 # For multiple roles or a custom username, fall back to lw-eval.
 #
@@ -16,9 +21,16 @@
 #
 # Examples:
 #   lw-call-endpoint bookController getBooks ROLE_MEMBER
+#   lw-call-endpoint --limit 5 bookController getBooks ROLE_MEMBER
 #   lw-call-endpoint bookController getBookById ROLE_MEMBER 25
 #   lw-call-endpoint adminController getStats ROLE_ADMIN
 #   lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
+
+LIMIT=":limit 20"
+if [[ "$1" == "--limit" ]]; then
+  LIMIT=":limit $2"
+  shift 2
+fi
 
 BEAN="$1"
 METHOD="$2"
@@ -30,9 +42,13 @@ EXPR=$(cat <<CLOJURE
 (do
   (require '[net.brdloush.livewire.core :as lw]
            '[net.brdloush.livewire.mvc :as mvc])
-  (println (mvc/serialize
-             (lw/run-as ["repl-user" "${ROLE}"]
-               (.${METHOD} (lw/bean "${BEAN}") ${ARGS})))))
+  (let [result (mvc/serialize
+                 (lw/run-as ["repl-user" "${ROLE}"]
+                   (.${METHOD} (lw/bean "${BEAN}") ${ARGS}))
+                 ${LIMIT})]
+    (if (string? result)
+      (println result)
+      (binding [*print-meta* true] (prn result)))))
 CLOJURE
 )
 

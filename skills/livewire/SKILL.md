@@ -29,7 +29,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
-| `lw-call-endpoint <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role |
+| `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-eval <clojure-expr>` | Generic nREPL eval (raw clj-nrepl-eval) |
 
@@ -257,13 +257,22 @@ so it's always populated when security is in play, regardless of where the annot
 #### CLI shortcut: `lw-call-endpoint`
 
 For one-shot calls from the shell, `lw-call-endpoint` handles the require and `run-as`
-boilerplate automatically. It accepts a single role (the `ROLE_` prefix is required):
+boilerplate automatically. It accepts a single role (the `ROLE_` prefix is required).
+
+**List results are capped at 20 items by default** — the same convention as `lw-sql` and
+`lw-jpa-query`. Use `--limit N` to override. The returned value is a Clojure vector with
+`{:total <full-count> :returned <N>}` metadata attached so you can see how many items were
+omitted. Single-object results (non-list) are unaffected and always return in full as
+pretty-printed JSON.
 
 ```bash
-# No args
+# List endpoint — capped at 20 by default
 lw-call-endpoint bookController getBooks ROLE_MEMBER
 
-# With a positional argument
+# Raise the cap
+lw-call-endpoint --limit 5 bookController getBooks ROLE_MEMBER
+
+# Single-object endpoint — limit has no effect, returns full pretty-printed JSON
 lw-call-endpoint bookController getBookById ROLE_MEMBER 25
 
 # String argument — quote carefully

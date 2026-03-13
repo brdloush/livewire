@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.0] — 2025-03-13
+
+First public release. Repository made public on GitHub; landing page and
+getting-started guide published.
+
+No API changes from 0.1.0.
+
+---
+
 ## [0.1.0] — 2025-03-12
 
 First versioned release.

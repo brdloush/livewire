@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: lw-start
+#
+# Discovers running nREPL servers and, once connected, reports an app summary.
+# Combines the two manual startup steps into one:
+#   1. clj-nrepl-eval --discover-ports
+#   2. lw-info  (app name, profiles, Java/Spring/Hibernate versions)
+
+clj-nrepl-eval --discover-ports
+clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(do (require '[net.brdloush.livewire.core :as lw]) (lw/info))"

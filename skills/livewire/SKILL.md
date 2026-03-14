@@ -19,6 +19,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 
 | Script | What it does |
 |---|---|
+| `lw-start` | Discover nREPL + app summary in one shot — **always run this first** |
 | `lw-info` | App/env summary |
 | `lw-list-entities` | All Hibernate-managed entities |
 | `lw-inspect-entity <Name>` | Table, columns, relations for one entity |
@@ -63,21 +64,18 @@ clj-nrepl-eval --discover-ports
 
 ## Workflow
 
-1. **Discover** whether a Livewire nREPL is available:
+1. **Start the session** — always run `lw-start` first:
    ```bash
-   clj-nrepl-eval --discover-ports
+   lw-start
    ```
-   The default port is **7888**. If nothing is found, the app may not be running
-   or `livewire.enabled=true` may not be set.
+   This discovers running nREPL servers and prints an app summary (name, profiles,
+   Java/Spring/Hibernate versions) in one shot. The default port is **7888** and can
+   be overridden with `LW_PORT`. If nothing is found, the app may not be running or
+   `livewire.enabled=true` may not be set.
 
-2. **Require** the Livewire namespaces at the start of the session:
-   ```clojure
-   (require '[net.brdloush.livewire.core :as lw]
-            '[net.brdloush.livewire.introspect :as intro]
-            '[net.brdloush.livewire.trace :as trace]
-            '[net.brdloush.livewire.hot-queries :as hq]
-            '[net.brdloush.livewire.query-watcher :as qw])
-   ```
+2. **Namespaces are pre-aliased** — the boot sequence wires these into the `user` ns
+   automatically, so no manual `require` is needed:
+   `lw`, `q`, `intro`, `trace`, `qw`, `hq`, `jpa`, `mvc`
 
 3. **Evaluate** snippets iteratively — the session persists between calls:
    ```bash

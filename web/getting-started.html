@@ -376,22 +376,26 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
 
             <div class="gs-substep full-width">
               <div>
-                <div class="gs-substep-label">Copy the skill file into your project</div>
+                <div class="gs-substep-label">Copy the skill into your project</div>
                 <p>
-                  The skill file is the agent's cheat-sheet for Livewire's API. Without it,
-                  your agent will still connect — but with it, it knows exactly which functions
-                  to call, how to avoid pitfalls, and how to run the full
-                  inspect → trace → fix → verify loop.
+                  The skill is the agent's cheat-sheet for Livewire's full API. It ships with
+                  two parts: <code>SKILL.md</code> (the API reference) and <code>bin/</code>
+                  (shell wrapper scripts like <code>lw-start</code>, <code>lw-call-endpoint</code>,
+                  <code>lw-jpa-query</code>, and more). Copy or symlink both.
                 </p>
                 <p style="margin-top: 0.6rem; overflow-wrap: break-word;">
                   The skill is designed for agents that support slash-command skills
                   (such as <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>
                   or <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>).
-                  Place it at <code style="word-break: break-all;">.claude/skills/livewire/SKILL.md</code> — both tools pick it
-                  up from there. Other agents can read it directly as context.
+                  Place the whole directory at
+                  <code style="word-break: break-all;">.claude/skills/livewire/</code> — both tools pick it up from there.
                 </p>
-                <div class="code-block" style="margin-top: 0.85rem;"><pre style="white-space: pre-wrap; word-break: break-all;"><span class="c"># from the Livewire source root:</span>
-cp skills/livewire/SKILL.md <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire/SKILL.md</pre></div>
+                <div class="code-block" style="margin-top: 0.85rem;"><pre style="white-space: pre-wrap; word-break: break-all;"><span class="c"># copy the skill directory (SKILL.md + bin/ scripts)</span>
+cp -r skills/livewire <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire
+
+<span class="c"># or symlink it (stays in sync with Livewire updates)</span>
+ln -s <span class="n">/path/to/livewire</span>/skills/livewire \
+      <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire</pre></div>
               </div>
             </div>
           </div>
@@ -588,6 +592,35 @@ mvn spring-boot:run \
                   Claude joins <code>review → book → author</code>, aggregates with
                   <code>AVG</code> and <code>GROUP BY</code>, and returns a ranked table.
                   Pure ad-hoc analysis — no Spring code touched.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-query">Query</span>
+              <div class="try-card-text">
+                <h4>Run a JPQL query and get readable results</h4>
+                <code class="try-prompt">Show me the 5 most-borrowed books using JPQL. Include title and loan count.</code>
+                <p>
+                  Claude uses <code>jpa/jpa-query</code> to execute JPQL directly via the live
+                  <code>EntityManager</code> and gets back plain Clojure maps — not opaque Java
+                  objects. Scalar projections with <code>AS</code> aliases become named keys.
+                  Lazy associations stay <code>"&lt;lazy&gt;"</code> so no surprise queries fire.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Call a secured endpoint and see exactly what it returns</h4>
+                <code class="try-prompt">Call the GET /api/books endpoint as a MEMBER and show me what it returns. How large is the response?</code>
+                <p>
+                  <code>lw-call-endpoint</code> invokes the controller method under a live Spring
+                  <code>SecurityContext</code> and serializes the result with the same Jackson
+                  <code>ObjectMapper</code> the HTTP layer uses — output is identical to what a real
+                  HTTP client would receive. The response metadata tells you both the row count and
+                  the raw and gzip-compressed byte size of the full payload.
                 </p>
               </div>
             </div>

@@ -147,7 +147,10 @@
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-text">Livewire namespaces</span><br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">core</span> &nbsp;&nbsp;· beans, transactions, run-as<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">trace</span> &nbsp;· SQL tracing, N+1 detection<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query</span> &nbsp;· JPQL / SQL execution<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query</span> &nbsp;· raw SQL execution<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">jpa-query</span> · JPQL with smart entity serialization<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">mvc</span> &nbsp;&nbsp;· controller probing, JSON serialization<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">introspect</span> · entities, endpoints, schema<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
       <br>
@@ -161,7 +164,7 @@
   <div class="container">
     <div class="section-label">Features</div>
     <h2>Everything you need to probe a live Spring app</h2>
-    <p class="section-sub">Six namespaces. Require and go.</p>
+    <p class="section-sub">Eight namespaces. Require and go.</p>
 
     <div class="features-grid">
 
@@ -247,6 +250,37 @@
 
 <span class="p">(</span><span class="kw">qw/status</span><span class="p">)</span>
 <span class="r">;; => {:running? true, :disk-state-size 8}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🧩</div>
+        <h3>JPQL with Smart Entity Serialization</h3>
+        <p>Run any JPQL query via the live <code>EntityManager</code> and get back plain Clojure maps — no <code>.toString()</code> surprises. Lazy collections render as <code>"&lt;lazy&gt;"</code> rather than firing surprise queries. Scalar projections (<code>SELECT expr, …</code>) are unpacked into maps using <code>AS</code> aliases or positional <code>:col0</code>, <code>:col1</code> keys. Paged by default.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">jpa/jpa-query</span>
+  <span class="s">"SELECT b.title AS title, COUNT(lr) AS loans
+   FROM Book b JOIN b.loanRecords lr
+   GROUP BY b.id, b.title
+   ORDER BY COUNT(lr) DESC"</span>
+  <span class="kw">:page</span> 0 <span class="kw">:page-size</span> 5<span class="p">)</span>
+<span class="r">;; => [{:title "Vanity Fair",  :loans 7}
+;;     {:title "The Green Bay Tree", :loans 7} ...]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Controller Endpoint Probing</h3>
+        <p>Call any Spring bean method under a live <code>SecurityContext</code> and get back proper JSON — serialized with the exact same Jackson <code>ObjectMapper</code> Spring MVC uses. List results are capped at 20 by default and returned with <code>{:total :returned :content-size :content-size-gzip}</code> metadata so you always know the full picture.</p>
+        <div class="code-block"><pre>lw-call-endpoint bookController getBooks ROLE_MEMBER
+<span class="r">;; ^{:total 200, :returned 20,
+;;   :content-size 515299, :content-size-gzip 82995}
+;; [{"id" 1, "title" "All the King's Men",
+;;   "author" {"id" 6, ...}, "genres" [...]} ...]</span>
+
+<span class="c">;; or from the REPL:</span>
+<span class="p">(</span><span class="kw">mvc/serialize</span>
+  <span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"u"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
+    <span class="p">(</span><span class="kw">.getBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)))</span>
+  <span class="kw">:limit</span> 3<span class="p">)</span></pre></div>
       </div>
 
     </div>
@@ -435,13 +469,14 @@
           <h3>Connect &amp; probe</h3>
           <p>From <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>, <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>, or any nREPL client.</p>
         </div>
-        <div class="code-block"><pre><span class="p">(</span><span class="kw">require</span>
-  <span class="s">'[net.brdloush.livewire.core :as lw]</span>
-  <span class="s">'[net.brdloush.livewire.trace :as trace]</span>
-  <span class="s">'[net.brdloush.livewire.hot-queries :as hq]</span>
-  <span class="s">'[net.brdloush.livewire.query-watcher :as qw]</span><span class="p">)</span>
+        <div class="code-block"><pre><span class="c"># all 8 aliases are pre-loaded at startup</span>
+<span class="c"># lw, q, intro, trace, qw, hq, jpa, mvc</span>
 
-<span class="p">(</span><span class="kw">lw/info</span><span class="p">)</span> <span class="c">; you're in — query-watcher already running</span></pre></div>
+<span class="c"># lw-start discovers the nREPL + prints app info</span>
+lw-start
+<span class="r">;; Discovered nREPL servers:
+;;   localhost:7888 (clj) - /your-project
+;; => {:application-name "your-app", ...}</span></pre></div>
       </div>
     </div>
   </div>

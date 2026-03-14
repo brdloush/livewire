@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Livewire — Live nREPL wire into your Spring Boot app</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/asciinema-player.css" />
 </head>
 <body>
 
@@ -21,6 +22,7 @@
     <li><a href="#features">Features</a></li>
     <li><a href="#human">Human-friendly</a></li>
     <li><a href="#story">Story</a></li>
+    <li><a href="#demo">Demo</a></li>
     <li><a href="getting-started.html">Get started</a></li>
     <li><a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener">GitHub ↗</a></li>
   </ul>
@@ -358,6 +360,20 @@
   </div>
 </section>
 
+<!-- ── Demo screencast ───────────────────────────────────────────────── -->
+<section id="demo">
+  <div class="container">
+    <div class="section-label">Live demo</div>
+    <h2>Watch the loop in action</h2>
+    <p class="section-sub">
+      The same investigation described in the story above — recorded live against the
+      <a href="https://github.com/brdloush/bloated-shelf" target="_blank" rel="noopener">bloated-shelf</a>
+      demo app. From first connection to confirmed fix, no restarts.
+    </p>
+    <div id="livewire-demo" style="max-width: 900px; margin: 2.5rem auto 0; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.5);"></div>
+  </div>
+</section>
+
 <!-- ── Screenshots ───────────────────────────────────────────────────── -->
 <section id="screenshots">
   <div class="container">
@@ -504,6 +520,23 @@ lw-start
   <button id="lightbox-close" onclick="closeLightbox()" aria-label="Close">✕</button>
   <img id="lightbox-img" src="" alt="" onclick="closeLightbox()" />
 </div>
+
+<script src="js/asciinema-player.min.js"></script>
+<script>
+  AsciinemaPlayer.create(
+    'screencasts/livewire-n1-investigation.cast',
+    document.getElementById('livewire-demo'),
+    {
+      theme: 'monokai',
+      autoPlay: false,
+      loop: false,
+      idleTimeLimit: 2,
+      speed: 1.5,
+      fit: 'width',
+      terminalFontSize: 'small'
+    }
+  );
+</script>
 
 <script>
   function openLightbox(card) {

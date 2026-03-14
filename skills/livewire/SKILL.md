@@ -655,6 +655,31 @@ source. This round-trip gives high confidence with zero restarts.
 
 ## ⚠️ Known Pitfalls
 
+### New repository methods require a restart — the query-watcher cannot inject them
+
+The query-watcher can only hot-swap JPQL strings in `@Query` methods that **already existed at startup**.
+If you add a brand-new method to a Spring Data repository interface, compile it, and update the service
+to call it, the running JVM will not pick up the change — for two reasons:
+
+1. **The JVM classloader** won't reload an already-loaded interface. The new `.class` on disk is ignored;
+   the old interface definition (without the new method) stays live in memory.
+2. **The Spring Data proxy** was created at startup from the old interface. It has no knowledge of methods
+   added after the fact, so calling the new method throws `NoSuchMethodError` or simply isn't reachable.
+
+This is distinct from editing an existing `@Query` JPQL string, which the watcher handles transparently.
+
+**Rule of thumb:** if `javap` shows the new method on disk but the REPL proxy doesn't have it, this is
+the cause. A restart is the correct fix — not cache flushing or `force-rescan!`.
+
+```bash
+# Confirm the compiled artifact is correct
+javap -p target/classes/com/example/yourapp/repository/YourRepository.class
+
+# Confirm the proxy is missing the method
+lw-eval '(->> (.getClass (lw/bean "yourRepository")) .getMethods (map #(.getName %)) sort)'
+# If the new method is absent here but present in javap output → restart required
+```
+
 ### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`
 The docstring mentions "simple name + FQN" but the actual map keys are `:name` and `:class`.
 Using `:simple-name` returns nil for every entry and causes a NullPointerException in regex filters.

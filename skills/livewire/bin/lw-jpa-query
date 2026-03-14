@@ -19,4 +19,4 @@ PAGE="${2:-0}"
 PAGE_SIZE="${3:-20}"
 
 exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
-  "(do (require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.jpa-query :as jpa]) (trace/trace-sql (jpa/jpa-query \"$1\" :page $PAGE :page-size $PAGE_SIZE)))"
+  "(do (require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc]) (trace/trace-sql (jpa/jpa-query \"$1\" :page $PAGE :page-size $PAGE_SIZE)))"

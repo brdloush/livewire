@@ -7,6 +7,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.4.0] — 2025-03-14
+
+### Fixed
+
+- **SKILL.md**: added YAML frontmatter (`name` + `description`) required by ECA for
+  automatic skill discovery and loading. Without it ECA cannot index or surface the skill.
+- **SKILL.md**: expanded the "Wrapper scripts" section with explicit guidance on locating
+  the `bin/` directory via `find` — addresses ECA having trouble resolving wrapper script
+  paths during sessions.
+
+---
+
 ## [0.3.0] — 2025-03-14
 
 ### Added

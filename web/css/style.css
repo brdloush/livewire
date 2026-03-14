@@ -43,7 +43,7 @@ code, pre {
   padding: 0 2rem;
 }
 
-section { padding: 6rem 0; }
+section { padding: 6rem 0; scroll-margin-top: 6rem; }
 section:nth-child(even) { background: rgba(255,255,255,0.018); }
 
 h2 {
@@ -810,6 +810,7 @@ footer {
 /* Tablet landscape — ~1024px */
 @media (max-width: 1024px) {
   nav { height: 80px; }
+  section { scroll-margin-top: 5rem; }
   .nav-brand img { width: 64px; height: 64px; }
   .nav-brand { font-size: 1.45rem; }
   .hero-title { font-size: 2.8rem; }
@@ -820,6 +821,7 @@ footer {
 /* Tablet portrait — ~768px */
 @media (max-width: 768px) {
   nav { height: 64px; }
+  section { scroll-margin-top: 4.5rem; }
   .nav-brand img { width: 44px; height: 44px; }
   .nav-brand { font-size: 1.25rem; }
   .nav-hamburger { display: flex; }

@@ -27,6 +27,84 @@ history worth preserving.
 
 ---
 
+## Release process
+
+Follow these steps in order. **Never skip ahead** — each step depends on the previous one.
+
+### 1. Bump version + update CHANGELOG
+
+In `project.clj`, change `X.Y.Z-SNAPSHOT` → `X.Y.Z`.
+
+Add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md` covering all changes
+since the previous release (new features, fixes, breaking changes).
+
+Commit both files:
+```bash
+git add project.clj CHANGELOG.md
+git commit -m "chore: bump version to X.Y.Z and update changelog"
+```
+
+### 2. Build release artifacts
+
+```bash
+bb release-jars
+```
+
+Verify all four artifacts are reported as ✅ before continuing.
+
+### 3. Tag the release
+
+```bash
+git tag -a vX.Y.Z -m "Release X.Y.Z"
+```
+
+### 4. Sign the artifacts — ⚠️ ask first
+
+**Before running `bb sign-jars`, always tell the user to have their GPG password
+ready and wait for explicit confirmation.** The command prompts immediately and will
+fail silently if the passphrase entry is cancelled.
+
+Once the user confirms:
+```bash
+bb sign-jars
+```
+
+### 5. Build the upload bundle
+
+```bash
+bb bundle
+```
+
+This produces `target/livewire-X.Y.Z-bundle.zip` ready for upload to
+**https://central.sonatype.com/** (Publishing → Upload).
+
+### 6. Push commits and tag
+
+Remind the user to push — do **not** push autonomously (see Git discipline above):
+```
+git push && git push --tags
+```
+
+### 7. Bump to next SNAPSHOT immediately
+
+After the release commit, bump `project.clj` to the next development version:
+```
+X.Y.Z → X.(Y+1).0-SNAPSHOT   (or X.Y.(Z+1)-SNAPSHOT for a patch release)
+```
+Commit:
+```bash
+git add project.clj
+git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
+```
+
+### 8. Update the website (separate step)
+
+Do **not** run `bb deploy-pages` as part of the release — the user controls when
+the docs site is updated. Remind them after the release is published:
+> The release is live. When you're ready, run `bb deploy-pages` to update the website.
+
+---
+
 ## Deploying the website
 
 The files under `web/` are the source for https://brdloush.github.io/livewire/.

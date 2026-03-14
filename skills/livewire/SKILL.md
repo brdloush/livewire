@@ -1,3 +1,8 @@
+---
+name: livewire
+description: Live nREPL probe for Spring Boot apps. Use when working with a Spring Boot application that has Livewire on its classpath to query the running JVM state, beans, database, and behaviour via the live REPL.
+---
+
 # Livewire — Live nREPL probe for Spring Boot apps
 
 Use this skill whenever working with a Spring Boot application that has Livewire
@@ -9,10 +14,14 @@ the JVM beats static analysis every time.
 
 ## Wrapper scripts
 
-This skill ships named wrapper scripts in `bin/` alongside `SKILL.md`. Always
-prefer these over raw `clj-nrepl-eval` calls — they produce cleaner output in
-the Claude Code UI (the script name is shown instead of the full Clojure
-expression) and handle namespace requiring automatically.
+This skill ships named wrapper scripts in a `bin/` subdirectory located in the
+same directory as this `SKILL.md` file. If you ever need to find the scripts,
+locate `SKILL.md` first (e.g. `find / -name SKILL.md 2>/dev/null | grep livewire`)
+and the `bin/` folder is right next to it.
+
+Always prefer these wrapper scripts over raw `clj-nrepl-eval` calls — they
+produce cleaner output in the Claude Code UI (the script name is shown instead
+of the full Clojure expression) and handle namespace requiring automatically.
 
 Use them via their full path: `~/.claude/skills/livewire/bin/<script-name>`.
 The port defaults to **7888** and can be overridden with `LW_PORT`.

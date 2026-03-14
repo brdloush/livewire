@@ -67,6 +67,41 @@
             (str obj)))))))
 
 ;; ---------------------------------------------------------------------------
+;; Scalar projection helpers
+;; ---------------------------------------------------------------------------
+
+(defn- extract-select-aliases
+  "Extracts AS <alias> names from the SELECT clause of `jpql` in order,
+   returning a seq of keywords, or nil if none are found.
+   E.g. \"SELECT b.title AS title, COUNT(lr) AS cnt FROM ...\"
+        => [:title :cnt]"
+  [jpql]
+  (when jpql
+    (let [select-clause (-> jpql
+                            (str/replace #"(?i)\s+" " ")
+                            (str/replace #"(?i)^.*?SELECT\s+" "")
+                            (str/replace #"(?i)\s+FROM\s+.*$" ""))]
+      (when-let [aliases (seq (map (comp keyword str/lower-case second)
+                                   (re-seq #"(?i)\bAS\s+(\w+)" select-clause)))]
+        aliases))))
+
+(defn- unpack-scalar-row
+  "Converts a single scalar-projection row to a Clojure map.
+   If the row is an Object[], each element is mapped to the corresponding
+   alias keyword (or :col0, :col1, … when no aliases are present).
+   A bare scalar (single-column projection) is returned as-is."
+  [aliases row]
+  (if (.isArray (.getClass row))
+    (let [items (object-array row)]
+      (if aliases
+        (zipmap aliases items)
+        (into {} (map-indexed (fn [i v] [(keyword (str "col" i)) v]) items))))
+    ;; Single-column projection — wrap for consistency
+    (if aliases
+      {(first aliases) row}
+      {:col0 row})))
+
+;; ---------------------------------------------------------------------------
 ;; Public API
 ;; ---------------------------------------------------------------------------
 
@@ -88,4 +123,14 @@
          q        (doto (.createQuery em jpql)
                     (.setFirstResult (* page page-size))
                     (.setMaxResults page-size))]
-     (mapv #(entity->map meta-map page-size #{} %) (.getResultList q)))))
+     (let [results (.getResultList q)]
+       (if (and (seq results)
+                (let [first-row (first results)]
+                  (or (.isArray (.getClass first-row))
+                      ;; single scalar: not an entity known to meta-map
+                      (nil? (get meta-map (first (str/split (.getSimpleName (.getClass first-row)) #"\$")))))))
+         ;; Scalar projection — unpack each row using AS aliases or :col0/:col1/...
+         (let [aliases (extract-select-aliases jpql)]
+           (mapv #(unpack-scalar-row aliases %) results))
+         ;; Entity projection — use the full entity serializer
+         (mapv #(entity->map meta-map page-size #{} %) results))))))

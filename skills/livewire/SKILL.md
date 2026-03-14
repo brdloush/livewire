@@ -405,6 +405,36 @@ lw-jpa-query 'SELECT b FROM Book b ORDER BY b.id' 2 10
 The CLI output is wrapped in `trace/trace-sql`, so you always get `:result`, `:count`,
 `:queries`, and `:duration-ms` in one shot.
 
+### Scalar projections
+
+`jpa/jpa-query` and `lw-jpa-query` also work for **scalar projections** — queries that select
+expressions or aggregates rather than full entities. `Object[]` rows are automatically unpacked
+into maps with positional keys `:col0`, `:col1`, etc.
+
+```bash
+# Aggregate query — returns {:col0 <title>, :col1 <count>} maps
+lw-jpa-query 'SELECT b.title, COUNT(lr) FROM Book b JOIN b.loanRecords lr GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC' 0 5
+```
+
+```clojure
+;; => {:duration-ms 26,
+;;     :result [{:col0 "Vanity Fair",                  :col1 7}
+;;              {:col0 "Let Us Now Praise Famous Men", :col1 7}
+;;              {:col0 "The Green Bay Tree",           :col1 7}
+;;              {:col0 "The Mermaids Singing",         :col1 6}
+;;              {:col0 "This Lime Tree Bower",         :col1 6}],
+;;     :count 1, ...}
+```
+
+If you want named keys instead of `:col0`/`:col1`, rename them in Clojure after the fact:
+
+```clojure
+(->> (:result (jpa/jpa-query "SELECT b.title, COUNT(lr) FROM Book b JOIN b.loanRecords lr GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC"
+                              :page 0 :page-size 5))
+     (mapv #(clojure.set/rename-keys % {:col0 :title :col1 :loan-count})))
+;; => [{:title "Vanity Fair", :loan-count 7} ...]
+```
+
 ---
 
 ## Hot Queries API — `net.brdloush.livewire.hot-queries`

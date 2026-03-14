@@ -32,7 +32,17 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
 | `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
-| `lw-eval <clojure-expr>` | Generic nREPL eval (raw clj-nrepl-eval) |
+| `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
+
+> ⚠️ **Prefer `clj-nrepl-eval -p <port>` over `lw-eval` for arbitrary expressions.**
+> Clojure naming conventions use `!` (mutating fns like `reset-all!`, `hot-swap-query!`),
+> `?` (predicates like `running?`), and `->` / `->>` (threading macros). These characters
+> can be misinterpreted by the shell when passed through `lw-eval`. Use the dedicated
+> wrapper scripts for their named operations; for everything else, call `clj-nrepl-eval`
+> directly with a double-quoted expression:
+> ```bash
+> clj-nrepl-eval -p 7888 "(hq/reset-all!)"
+> ```
 
 ---
 
@@ -309,10 +319,10 @@ lw-call-endpoint bookController getBookById ROLE_MEMBER 25
 lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
 ```
 
-When you need **multiple roles** or a custom username, fall back to `lw-eval`:
+When you need **multiple roles** or a custom username, use `clj-nrepl-eval` directly:
 
 ```bash
-lw-eval '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.getMembers (lw/bean "memberController")))'
+clj-nrepl-eval -p 7888 '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.getMembers (lw/bean "memberController")))'
 ```
 
 ---
@@ -676,9 +686,35 @@ the cause. A restart is the correct fix — not cache flushing or `force-rescan!
 javap -p target/classes/com/example/yourapp/repository/YourRepository.class
 
 # Confirm the proxy is missing the method
-lw-eval '(->> (.getClass (lw/bean "yourRepository")) .getMethods (map #(.getName %)) sort)'
+clj-nrepl-eval -p 7888 '(->> (.getClass (lw/bean "yourRepository")) .getMethods (map #(.getName %)) sort)'
 # If the new method is absent here but present in javap output → restart required
 ```
+
+### `lw-eval` mangles Clojure-idiomatic characters — use `clj-nrepl-eval` directly
+
+`lw-eval` passes its argument through the shell, where characters common in Clojure
+symbol names are misinterpreted:
+
+| Character | Clojure use | Shell hazard |
+|---|---|---|
+| `!` | Mutating fns: `reset-all!`, `hot-swap-query!`, `swap!` | zsh history expansion |
+| `?` | Predicates: `running?`, `empty?` | Glob / conditional |
+| `->`, `->>` | Threading macros | Redirect / `>>` append |
+
+**Rule: never use `lw-eval` for expressions containing these characters.** Use
+`clj-nrepl-eval -p <port>` directly with a double-quoted string instead — the
+expression reaches the JVM unmodified:
+
+```bash
+# ❌ lw-eval silently drops the ! — "No such var: hq/reset-all"
+lw-eval '(hq/reset-all!)'
+
+# ✅ clj-nrepl-eval passes the expression verbatim
+clj-nrepl-eval -p 7888 "(hq/reset-all!)"
+```
+
+Use the dedicated wrapper scripts (`lw-sql`, `lw-jpa-query`, `lw-call-endpoint`, etc.)
+for their named operations. For everything else, go straight to `clj-nrepl-eval`.
 
 ### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`
 The docstring mentions "simple name + FQN" but the actual map keys are `:name` and `:class`.

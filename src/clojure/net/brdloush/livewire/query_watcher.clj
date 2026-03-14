@@ -165,9 +165,19 @@
             (doseq [[method-name new-jpql] queries]
               (let [reg-key [bean-name method-name]
                     current-jpql (get @hq/disk-state reg-key)]
-                (when (not= current-jpql new-jpql)
-                  (println (str "[query-watcher] detected change " bean-name "#" method-name))
-                  (hq/watcher-apply! bean-name method-name new-jpql))))))))
+                (cond
+                  ;; New method — didn't exist at startup, proxy has no knowledge of it.
+                  ;; Seed disk-state to suppress repeated logging on future polls.
+                  (nil? current-jpql)
+                  (do (println (str "[query-watcher] new @Query method detected: "
+                                    bean-name "#" method-name
+                                    " — restart required to register with Spring Data proxy"))
+                      (swap! hq/disk-state assoc reg-key new-jpql))
+
+                  ;; Known method whose JPQL changed — hot-swap it.
+                  (not= current-jpql new-jpql)
+                  (do (println (str "[query-watcher] detected change " bean-name "#" method-name))
+                      (hq/watcher-apply! bean-name method-name new-jpql)))))))))
     (catch Exception e
       (println (str "[query-watcher] error processing " (.toString abs-path) ": " (.getMessage e))))))
 

@@ -5,9 +5,34 @@ working on the Livewire project.
 
 ---
 
+## ECA vs. other agentic tools
+
+These instructions are written for **ECA (Editor Code Assistant)**, which is the
+tool used by the primary developer ([@brdloush](https://github.com/brdloush)) for
+day-to-day Livewire development. Some rules reference ECA-specific capabilities:
+
+| ECA concept | What it does | If you use a different tool |
+|---|---|---|
+| `eca__task` | Structured in-session task planner with states, priorities, and blocking dependencies | Use your tool's equivalent, or maintain `tasks/todo.md` manually |
+| `explorer` subagent | Spawns a read-only agent for codebase research without polluting the main context | Use a separate read-only context window, or just be mindful of context consumption |
+| `general` subagent | Spawns a read-write agent for parallel or isolated workstreams | Use your tool's parallel execution feature, or run sequentially |
+
+The *intent* behind each rule is tool-agnostic. Only the specific mechanism is
+ECA-flavoured. If you are working with a different agentic setup, apply the same
+principles using the closest equivalent your tool offers.
+
+_(Future sections may add explicit hints for other popular tools — Cursor, Windsurf, Claude Code CLI, etc.)_
+
+---
+
 ## Git discipline — always ask before committing or pushing
 
-Never commit or push autonomously. Always present what you intend to do and
+**Investigating a bug and implementing a fix should be done autonomously** — no
+need to check in at every step. Use the REPL, read files, write code, validate
+against the live app. The gate is at *persisting* the result, not at doing the
+work.
+
+Once the fix is validated, present it (diff + REPL evidence where applicable) and
 **wait for explicit user approval** before running any `git commit` or `git push`.
 
 This applies even when the change is small or the user said "do it" in a general
@@ -24,6 +49,91 @@ history that others may have already fetched.
 The only exception is the `gh-pages` branch, which is always
 assembled fresh from `web/` by `bb deploy-pages` and has no shared
 history worth preserving.
+
+---
+
+## Planning & task management
+
+For any task with **3 or more steps**, or any task that involves an architectural
+decision, enter plan mode before doing anything else:
+
+1. Write the plan as tasks using the `eca__task` tool (preferred for in-session
+   work — structured, supports blocking dependencies and status tracking).
+2. Present the plan and wait for a go-ahead before starting implementation.
+3. **If something goes sideways mid-task: STOP. Re-plan. Do not keep pushing.**
+   A wrong direction executed quickly makes things worse; a short pause to
+   re-assess saves turns.
+
+### In-session vs. multi-session work
+
+- **`eca__task`** is the primary tracker for work within a single session. It is
+  ephemeral — tasks do not survive a context reset.
+- **`tasks/todo.md`** is the convention for work expected to span multiple
+  sessions or days. Write an initial plan there so a fresh agent (or a future
+  session) can resume without losing context. Check and update it at session
+  start and end.
+
+---
+
+## Subagent strategy
+
+Two subagent types are available:
+
+| Agent | Type | Use for |
+|---|---|---|
+| `explorer` | Read-only | Codebase search, file reading, structural analysis — anything that does not modify files |
+| `general` | Read-write | Multi-step execution, parallel workstreams, isolated research that would bloat the main context |
+
+**Delegate to a subagent when:**
+- The task is exploratory or research-only (use `explorer`)
+- Two workstreams can run in parallel and are independent
+- A subtask would consume significant context without producing a decision (e.g. scanning many files, summarising a large codebase area)
+
+**Keep in main context when:**
+- A REPL evaluation is needed — only the main agent interacts with the live nREPL
+- A file edit follows immediately from the result
+- The task requires a decision or judgement that affects the overall plan
+- The task is small enough that spawning a subagent costs more than it saves
+
+One task per subagent; keep subagent scope focused.
+
+---
+
+## Self-improvement loop
+
+Mistakes that are corrected once and then forgotten will recur. Use
+`tasks/lessons.md` as a living capture buffer to prevent that.
+
+**After any user correction:**
+Immediately append a brief entry to `tasks/lessons.md` in this format:
+```
+- YYYY-MM-DD: <one or two sentences describing what went wrong and what to do instead>
+```
+
+**At the start of each session:**
+If `tasks/lessons.md` exists, read it before doing any work and take its lessons
+into account for the session ahead.
+
+**Promoting lessons to canon:**
+When a lesson has recurred across sessions or proven broadly applicable, promote it
+into a named section of `AGENTS.md` (like "Clojure gotchas") and remove it from
+`tasks/lessons.md`. The goal is for `AGENTS.md` to contain stable, curated
+knowledge and `tasks/lessons.md` to contain recent, still-accumulating
+observations.
+
+---
+
+## Core principles
+
+These are the three meta-rules that all other rules in this document serve:
+
+- **Simplicity first.** Make every change as simple as possible. The REPL
+  escalation ladder exists to enforce this — always pick the least invasive option
+  that still solves the problem.
+- **No laziness.** Find root causes. No temporary fixes. Senior developer
+  standards. If a fix feels like a workaround, it probably is.
+- **Minimal impact.** Changes should only touch what is necessary. Avoid
+  introducing unrelated modifications, reformats, or refactors alongside a fix.
 
 ---
 
@@ -316,6 +426,17 @@ When a fix can't be validated without running code against the live app, use thi
 4. **Restart** — only if none of the above apply.
 
 Option 3 is the least obvious but highly effective. The nREPL runs inside the same JVM as the Spring Boot app, so a Clojure expression can call any Spring bean — repositories, services, anything — making it possible to prototype a Java fix entirely in Clojure before touching source.
+
+**After a successful prototype (step 3), pause before writing the final code.**
+Ask: *"Is there a more elegant way?"* The prototype proved the concept; the final
+Java/Kotlin implementation must be clean — not a mechanical translation of the
+throwaway Clojure expression. If the prototype revealed a simpler model, use it.
+
+**Before presenting any output to the user**, apply this self-check:
+*"Would a staff engineer approve this?"* — consider readability, side effects on
+other callers, and overall design quality. Tests are not required at this stage
+of the project, but write code that is easy to test later: minimal side effects,
+logical structure, good naming. If the answer is no, iterate first.
 
 ### ⚠️ Side effects — clean up after exploratory sessions
 

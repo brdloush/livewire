@@ -105,7 +105,7 @@ Mistakes that are corrected once and then forgotten will recur. Use
 `tasks/lessons.md` as a living capture buffer to prevent that.
 
 **After any user correction:**
-Immediately append a brief entry to `tasks/lessons.md` in this format:
+Immediately append a brief entry to `tasks/lessons.md` in this format — **this must be the very next action, before resuming any task work**:
 ```
 - YYYY-MM-DD: <one or two sentences describing what went wrong and what to do instead>
 ```
@@ -415,6 +415,19 @@ The `specs` folder contains various context, architectural designs, and feature 
 ## Live REPL-driven development
 
 When developing new features or fixing bugs in Livewire, we strongly prefer an interactive approach. **Always use the live REPL to test things immediately**. Don't write code blindly and hope it compiles/runs; evaluate small snippets, check the output in the target Spring Boot application environment, and iteratively build up the solution. This is the core "agentic feedback loop" we aim to achieve.
+
+### Eval before writing
+
+**Prove every piece of logic in the REPL before writing or editing any `.clj` file.**
+This applies to new functions, refactors, and delegations alike — even when the code looks obvious. The order is always:
+
+1. Hot-patch the code into the live REPL (eval `ns` form + function bodies verbatim)
+2. Run representative calls and verify the output is correct
+3. Only then write the file
+
+The REPL eval is essentially free. A wrong file write followed by a discovered bug costs multiple turns to recover from. When in doubt, eval one more time.
+
+**Unless** constructing the REPL expression itself becomes genuinely impractical — in which case: say so explicitly, explain why, and ask whether to proceed to writing anyway or reconsider the design first. No hurt feelings. But note that difficulty in REPL-testing is itself a signal: good Clojure code should be REPL-friendly by design. If something is hard to run in isolation, the design likely has too many dependencies or baked-in assumptions — worth reconsidering before writing it at all.
 
 ### Escalation ladder — pick the least invasive option that works
 

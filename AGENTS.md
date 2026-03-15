@@ -38,6 +38,9 @@ Once the fix is validated, present it (diff + REPL evidence where applicable) an
 This applies even when the change is small or the user said "do it" in a general
 sense earlier — confirm the specific commit/push action each time.
 
+**Never combine `git commit` and `git push` in a single command.** Commit first,
+then wait for explicit push approval. Bundling them silently bypasses the push gate.
+
 ---
 
 ## No force pushes

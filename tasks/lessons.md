@@ -12,6 +12,10 @@ and removed from here.
 - 2025-03-15: Before creating a GitHub Release, always verify the version bump commit and
   tag are pushed to origin. `git log origin/main..HEAD` will show any unpushed commits.
 
+- 2025-03-15: Never combine `git commit` and `git push` in a single shell command. Commit
+  first, then wait for explicit user approval before pushing. The Git discipline rule in
+  AGENTS.md requires separate approval for each push — bundling them bypasses that gate.
+
 - 2025-03-15: After bumping to the next -SNAPSHOT version, always run `bb install`
   immediately so the local Maven repo is up to date and dependent apps (e.g. bloated-shelf)
   can pick up the new snapshot on their next restart.

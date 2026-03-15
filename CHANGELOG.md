@@ -7,6 +7,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] — 2025-03-15
+
+### Added
+
+- **`q/diff-entity`** — mutation observer for Hibernate-managed entities. Captures entity
+  state before and after calling a thunk, runs the thunk inside an auto-rollback transaction
+  (database never touched), and returns `{:before … :after … :changed {key [old new]}}`.
+  The primary use case is AI agent mutation investigation: systematically calling candidate
+  service methods to trace which one caused unexpected entity state.
+- **`entity-serialize`** — new internal namespace extracting the entity serialization
+  machinery (previously private in `jpa-query`) into a shared helper used by both
+  `jpa-query` and `diff-entity`.
+
+### Changed
+
+- `jpa-query` now delegates entity serialization to `entity-serialize`; no behaviour change.
+
+---
+
 ## [0.4.0] — 2025-03-14
 
 ### Fixed

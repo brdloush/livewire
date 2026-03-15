@@ -16,6 +16,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   query paths. That extra rigour (not just "it works in my dirty REPL state") is what made
   the difference between going through the motions and genuinely proving the code.
 
+- 2025-03-15: "AMAZING JOB. Standing ovation!" — for recognising that the `bb install` after
+  SNAPSHOT bump lesson was concrete, release-process-specific, and actionable enough to skip
+  lessons.md and go straight into the AGENTS.md release checklist as step 8.
+
+  *Why I think this was praised:* lessons.md is for recent, still-accumulating observations.
+  AGENTS.md is for stable, curated knowledge. The distinction matters — not every lesson
+  needs to ferment in lessons.md first. A lesson that is immediately precise, non-contextual,
+  and fits cleanly into an existing named section belongs in AGENTS.md on the spot. Knowing
+  when to promote immediately vs. when to let something accumulate is the skill being praised
+  here.
+
 - 2025-03-15: "I praise you as the release checklist worked flawlessly." — for executing the
   full release process (version bump → artifacts → tag → GitHub Release → sign → bundle →
   SNAPSHOT bump) without missing a step, including pausing to push before creating the release.

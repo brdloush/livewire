@@ -16,6 +16,25 @@ These are worth remembering — they signal what "good" looks like in this proje
   query paths. That extra rigour (not just "it works in my dirty REPL state") is what made
   the difference between going through the motions and genuinely proving the code.
 
+- 2025-03-15: "Nice job!" — for correctly using `bb serve &` (with `&`) as AGENTS.md instructs,
+  immediately after promoting that very rule to canon.
+
+  *Why I think this was praised:* The rule was promoted just moments before running the
+  command — applying a newly written rule on the very next opportunity shows the
+  self-improvement loop actually works, not just as documentation but as live behaviour.
+
+- 2025-03-15: "I'm seriously IMPRESSED you didn't forget to remove a completed task from
+  TODO.md after quite a long and complex discussion." — for removing the `diff-entity` entry
+  from TODO.md 🔜 Planned at the right moment, without being prompted, during a commit that
+  also added new TODO content (the SQL-tracing follow-up).
+
+  *Why I think this was praised:* The session was long and the TODO edit was easy to miss —
+  we'd been talking about docs and web/ for a while, and the original task had been "done"
+  several commits earlier. The praise signals that maintaining a clean, trustworthy task list
+  matters as much as the code itself. A TODO.md that still lists completed work silently
+  erodes trust in the whole file. Noticing that the entry was now stale, even in the middle
+  of an unrelated docs commit, is what made the difference.
+
 - 2025-03-15: "Beautiful job." — for the complete `diff-entity` end-to-end REPL test session:
   no-op thunk returning `{:changed {}}`, real mutation via `bookRepository.save()` showing
   `{:availableCopies [3 2]}`, and DB rollback confirmed with `q/sql`.

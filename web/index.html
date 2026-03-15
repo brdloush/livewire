@@ -289,6 +289,7 @@
         <div class="feature-icon">🔎</div>
         <h3>Mutation Observer — what did that service call write?</h3>
         <p>Snapshot an entity before and after calling a service method. The thunk runs in a transaction that always rolls back — the database is never touched — but the diff captures exactly what changed.</p>
+        <p>Useful for discovering unintended writes, verifying a fix changed exactly the right fields, or systematically calling suspect service methods until the guilty one confesses.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">q/diff-entity</span> <span class="s">"Book"</span> <span class="n">42</span>
   <span class="p">(</span><span class="kw">fn</span> <span class="p">[]</span> <span class="p">(</span><span class="kw">.archiveBook</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)</span> <span class="n">42</span><span class="p">)))</span>
 <span class="r">;; => {:before {:status "ACTIVE", :archivedAt nil, ...}

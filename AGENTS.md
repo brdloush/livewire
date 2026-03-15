@@ -140,6 +140,36 @@ good, not just that it was praised.
 
 ---
 
+## Shell discipline
+
+### Never run long-running processes without `&`
+
+Dev servers, watchers, and any other process that does not exit on its own must always
+be backgrounded with `&`. Running them in the foreground blocks the shell and the agent
+loses control of the session.
+
+Even with `&`, the shell tool captures stdout — if the process keeps writing output, the
+tool still hangs. Always redirect output to a log file so the shell returns immediately:
+
+```bash
+# ❌ blocks — agent is stuck until the process exits or times out
+bb serve
+
+# ❌ still hangs — & backgrounds the process but stdout capture still blocks the tool
+bb serve &
+
+# ✅ correct — backgrounds and redirects output, shell returns immediately
+bb serve > /tmp/bb-serve.log 2>&1 &
+```
+
+After backgrounding, confirm the port is up before proceeding:
+
+```bash
+bb serve > /tmp/bb-serve.log 2>&1 & sleep 1 && grep -m1 "Serving\|http://" /tmp/bb-serve.log
+```
+
+---
+
 ## Core principles
 
 These are the three meta-rules that all other rules in this document serve:

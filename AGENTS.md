@@ -295,8 +295,15 @@ branch by the maintainer running:
 bb deploy-pages
 ```
 
-After any commit that touches `web/`, remind the maintainer to run this command
-so the live site stays in sync. Do not run it yourself.
+**Do not suggest `bb deploy-pages` after every `web/` commit.** The website should
+reflect a released version of the library, not just whatever is on `main`. The correct
+order is:
+
+1. Complete the full release process (version bump → artifacts → GitHub Release → push tag)
+2. Only then run `bb deploy-pages` to update the live site
+
+After a release is published, remind the maintainer:
+> The release is live. When you're ready, run `bb deploy-pages` to update the website.
 
 ---
 

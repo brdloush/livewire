@@ -16,6 +16,16 @@ These are worth remembering — they signal what "good" looks like in this proje
   query paths. That extra rigour (not just "it works in my dirty REPL state") is what made
   the difference between going through the motions and genuinely proving the code.
 
+- 2025-03-15: "I praise you as the release checklist worked flawlessly." — for executing the
+  full release process (version bump → artifacts → tag → GitHub Release → sign → bundle →
+  SNAPSHOT bump) without missing a step, including pausing to push before creating the release.
+
+  *Why I think this was praised:* The release process has many ordered steps and it's easy
+  to skip or reorder them. The key moment was stopping before `gh release create`, checking
+  whether the commit and tag were pushed, discovering they weren't, and only then proceeding.
+  Following a checklist faithfully — even when each individual step feels obvious — is what
+  makes a release trustworthy.
+
 - 2025-03-15: "I'm AMAZED. Hard to describe." — for the full cross-project integration loop:
   spec written into bloated-shelf, user implemented it and restarted the app, agent
   connected to the live REPL, diagnosed that diff-entity was missing from the old JAR,

@@ -271,10 +271,11 @@ After the release commit, bump `project.clj` to the next development version:
 ```
 X.Y.Z → X.(Y+1).0-SNAPSHOT   (or X.Y.(Z+1)-SNAPSHOT for a patch release)
 ```
-Commit:
+Commit and install locally so dependent apps pick up the new snapshot immediately:
 ```bash
 git add project.clj
 git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
+bb install
 ```
 
 ### 9. Update the website (separate step)

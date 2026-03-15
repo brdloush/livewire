@@ -446,6 +446,65 @@ If you want named keys instead of `:col0`/`:col1`, rename them in Clojure after 
 
 ---
 
+## Mutation Observer API — `net.brdloush.livewire.query`
+
+`q/diff-entity` answers the question *"what did this service call actually write to the database?"* —
+the observability gap that `trace/trace-sql` and `jpa/jpa-query` leave open. Those tools cover
+the *query* dimension; `diff-entity` covers the *mutation* dimension.
+
+| Expression | What it does |
+|---|---|
+| `(q/diff-entity entity-class id thunk)` | Snapshot entity before and after calling `thunk`, return `{:before … :after … :changed {key [old new]}}` |
+
+- `entity-class` — Hibernate entity name (string, e.g. `"Book"`) or Java class
+- `id` — primary key value
+- `thunk` — zero-argument function that performs the mutation
+
+The thunk always runs inside `lw/in-tx` — **the change is always rolled back**. The database is
+never affected. The snapshot of the mutated state is captured inside the transaction, before the
+rollback fires.
+
+### When to use it
+
+- **Exploration** — "what fields does `.archiveBook` actually touch?" without reading service code
+- **Debugging** — "why is entity 42 in this unexpected state?" — call candidate service methods and inspect their diffs
+- **Fix verification** — confirm a patched service method now writes the correct fields before committing
+- **AI agent mutation investigation** — the primary use case: an agent can systematically call candidate service methods and reason about which one caused an unexpected state change
+
+### Example
+
+```clojure
+;; Observe what a repository save would change (rolled back — nothing persists)
+(q/diff-entity "Book" 1
+  (fn []
+    (let [repo (lw/bean "bookRepository")
+          book (.get (.findById repo (Long. 1)))]
+      (.setAvailableCopies book (short 2))
+      (.save repo book))))
+;; => {:before  {:id 1, :title "All the King's Men", :availableCopies 3, ...}
+;;     :after   {:id 1, :title "All the King's Men", :availableCopies 2, ...}
+;;     :changed {:availableCopies [3 2]}}
+
+;; No-op thunk — confirms rollback and baseline
+(q/diff-entity "Book" 1 (fn []))
+;; => {:before {...}, :after {...}, :changed {}}
+
+;; Non-existent entity — safe, returns nils
+(q/diff-entity "Book" 99999 (fn []))
+;; => {:before nil, :after nil, :changed {}}
+```
+
+### Using it from the shell
+
+There is no dedicated wrapper script — the thunk is Clojure logic, not a data argument.
+Use `clj-nrepl-eval` directly:
+
+```bash
+clj-nrepl-eval -p 7888 '(q/diff-entity "Book" 1 (fn [] (.save (lw/bean "bookRepository") ...)))'
+```
+
+---
+
 ## Hot Queries API — `net.brdloush.livewire.hot-queries`
 
 Swap a Spring Data JPA `@Query` live without restarting the app. Works by replacing the

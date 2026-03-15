@@ -13,12 +13,21 @@
 
 ## 🔜 Planned
 
-### `query` namespace — entity diffing
+### `query` namespace — SQL tracing inside `diff-entity`
 
-- **`(q/diff-entity entity-class id thunk)`** — Mutation observer for a single entity by PK.
-  Answers the question *"what did this service method actually write to the database?"* —
-  the gap that `trace/trace-sql` and `jpa/jpa-query` leave open.
-  See [`specs/03-diff-entity.md`](specs/03-diff-entity.md) for full spec, use cases, and implementation notes.
+Investigate whether wrapping `diff-entity` in `trace/trace-sql` captures the UPDATE/INSERT
+statements that Hibernate fires on the explicit `.flush` call inside `in-tx`.
+
+Two constraints to verify:
+1. `trace/trace-sql` uses a `StatementInspector` — does it intercept write statements, or
+   only SELECTs?
+2. Hibernate's write-behind (dirty checking) means the UPDATE only fires on flush. `diff-entity`
+   already calls `.flush em` explicitly before the after-snapshot, so the UPDATE *should* fire —
+   but whether it is captured by `StatementInspector` before the rollback needs confirming.
+
+If it works, the composition `(trace/trace-sql (q/diff-entity ...))` would give both the
+entity diff *and* the SQL shape of the write in one call — a natural complement to the
+existing read-side tracing story. Worth documenting in SKILL.md if confirmed.
 
 ---
 

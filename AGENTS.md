@@ -58,7 +58,30 @@ Verify all four artifacts are reported as ✅ before continuing.
 git tag -a vX.Y.Z -m "Release X.Y.Z"
 ```
 
-### 4. Sign the artifacts — ⚠️ ask first
+### 4. Create the GitHub Release
+
+Using the changelog notes for the version being released:
+
+```bash
+gh release create vX.Y.Z \
+  --title "vX.Y.Z" \
+  --target <commit-sha-of-tag> \
+  --notes "## What's Changed
+
+### Added
+...
+
+### Fixed
+..."
+```
+
+The `--target` must be the **commit SHA** that the tag points to (not the tag name itself):
+
+```bash
+git rev-list -n1 vX.Y.Z
+```
+
+### 5. Sign the artifacts — ⚠️ ask first
 
 **Before running `bb sign-jars`, always tell the user to have their GPG password
 ready and wait for explicit confirmation.** The command prompts immediately and will
@@ -69,7 +92,7 @@ Once the user confirms:
 bb sign-jars
 ```
 
-### 5. Build the upload bundle
+### 6. Build the upload bundle
 
 ```bash
 bb bundle
@@ -78,14 +101,14 @@ bb bundle
 This produces `target/livewire-X.Y.Z-bundle.zip` ready for upload to
 **https://central.sonatype.com/** (Publishing → Upload).
 
-### 6. Push commits and tag
+### 7. Push commits and tag
 
 Remind the user to push — do **not** push autonomously (see Git discipline above):
 ```
 git push && git push --tags
 ```
 
-### 7. Bump to next SNAPSHOT immediately
+### 8. Bump to next SNAPSHOT immediately
 
 After the release commit, bump `project.clj` to the next development version:
 ```
@@ -97,7 +120,7 @@ git add project.clj
 git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
 ```
 
-### 8. Update the website (separate step)
+### 9. Update the website (separate step)
 
 Do **not** run `bb deploy-pages` as part of the release — the user controls when
 the docs site is updated. Remind them after the release is published:

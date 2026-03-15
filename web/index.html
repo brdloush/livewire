@@ -166,7 +166,7 @@
   <div class="container">
     <div class="section-label">Features</div>
     <h2>Everything you need to probe a live Spring app</h2>
-    <p class="section-sub">Eight namespaces. Require and go.</p>
+    <p class="section-sub">Nine namespaces. Require and go.</p>
 
     <div class="features-grid">
 
@@ -283,6 +283,18 @@
   <span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"u"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
     <span class="p">(</span><span class="kw">.getBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)))</span>
   <span class="kw">:limit</span> 3<span class="p">)</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔎</div>
+        <h3>Mutation Observer — what did that service call write?</h3>
+        <p>Snapshot an entity before and after calling a service method. The thunk runs in a transaction that always rolls back — the database is never touched — but the diff captures exactly what changed.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">q/diff-entity</span> <span class="s">"Book"</span> <span class="n">42</span>
+  <span class="p">(</span><span class="kw">fn</span> <span class="p">[]</span> <span class="p">(</span><span class="kw">.archiveBook</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)</span> <span class="n">42</span><span class="p">)))</span>
+<span class="r">;; => {:before {:status "ACTIVE", :archivedAt nil, ...}
+;;     :after  {:status "ARCHIVED", :archivedAt "2025-03-15", ...}
+;;     :changed {:status     ["ACTIVE" "ARCHIVED"]
+;;               :archivedAt [nil "2025-03-15"]}}</span></pre></div>
       </div>
 
     </div>

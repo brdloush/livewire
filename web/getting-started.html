@@ -628,6 +628,21 @@ mvn spring-boot:run \
             </div>
 
             <div class="try-card">
+              <span class="try-tag tag-diagnose">Diagnose</span>
+              <div class="try-card-text">
+                <h4>Find out exactly what a service method changes — without touching the database</h4>
+                <code class="try-prompt">I suspect .archiveBook is modifying more fields than it should on Book 42. Show me exactly what it changes, but don't actually persist anything.</code>
+                <p>
+                  Claude calls <code>q/diff-entity</code>, which runs the service method inside a
+                  transaction that is <strong>always rolled back</strong>. It captures the entity
+                  state before and after the call and returns a structured
+                  <code>:changed</code> map — only the keys that differ, with old and new values
+                  side by side. The database is never touched.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
               <span class="try-tag tag-fix">Fix</span>
               <div class="try-card-text">
                 <h4>Fix the N+1 live, without restarting</h4>

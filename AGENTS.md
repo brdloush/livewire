@@ -123,6 +123,23 @@ observations.
 
 ---
 
+Praise is also worth capturing. Use `tasks/praises.md` as a record of moments the
+user explicitly praised the work done — they signal what "good" looks like here.
+
+**After any explicit praise from the user:**
+Append an entry to `tasks/praises.md` in this format:
+```
+- YYYY-MM-DD: "<exact or paraphrased praise>" — brief description of what was done.
+
+  *Why I think this was praised:* one or two sentences with your own honest
+  interpretation of the underlying principle or behaviour that earned it.
+```
+
+The "why I think" part is important — it forces reflection on *what* made the work
+good, not just that it was praised.
+
+---
+
 ## Core principles
 
 These are the three meta-rules that all other rules in this document serve:

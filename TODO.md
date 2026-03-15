@@ -13,13 +13,12 @@
 
 ## 🔜 Planned
 
-### `query` namespace — JPQL execution and entity diffing
+### `query` namespace — entity diffing
 
-- **`(q/jpql query & params)`** — Execute a JPQL query via the live `EntityManager`
-  inside a read-only transaction. Return results as Clojure maps.
-
-- **`(q/diff-entity entity-class id thunk)`** — Capture entity state before and after
-  calling `thunk`, return a diff. Useful for observing what a service method actually changes.
+- **`(q/diff-entity entity-class id thunk)`** — Mutation observer for a single entity by PK.
+  Answers the question *"what did this service method actually write to the database?"* —
+  the gap that `trace/trace-sql` and `jpa/jpa-query` leave open.
+  See [`specs/03-diff-entity.md`](specs/03-diff-entity.md) for full spec, use cases, and implementation notes.
 
 ---
 
@@ -46,22 +45,6 @@ Known constraints:
 ---
 
 ## 🐛 Known Bugs / Docstring Issues
-
-### `intro/list-entities` — key name mismatch in docstring
-
-The docstring says "simple name + FQN" but the actual map keys are `:name` and `:class`,
-not `:simple-name`. Using `:simple-name` silently returns `nil` and causes a
-`NullPointerException` in regex filters.
-
-Fix: correct the docstring (or rename the keys) and update `SKILL.md`.
-
-```clojure
-;; ❌ NullPointerException
-(->> (intro/list-entities) (map :simple-name) (filter #(re-find #"Foo" %)))
-
-;; ✅ correct
-(->> (intro/list-entities) (map :name) (filter some?) (filter #(re-find #"Foo" %)))
-```
 
 ### `trace/trace-sql` — add startup warning for Hibernate version mismatch
 

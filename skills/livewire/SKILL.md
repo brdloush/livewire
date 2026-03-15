@@ -858,6 +858,31 @@ Use `lw/bean "repositoryBeanName"` to access data — find the right name with `
 (lw/bean "myEntityRepository")
 ```
 
+### `lw-call-endpoint` and `lw/bean` expect the Spring bean name, not the class name
+
+`intro/list-endpoints` reports `:controller` as the **fully-qualified class name** (e.g.
+`"com.example.myapp.web.AdminController"`). The Spring bean name is **not** the simple class
+name — it is the camelCase version with a lowercase first letter (e.g. `adminController`).
+Passing the class simple name directly to `lw-call-endpoint` or `lw/bean` throws
+`NoSuchBeanDefinitionException`.
+
+**Rule:** when calling an endpoint discovered via `list-endpoints`, always derive the bean
+name by lowercasing the first letter of the simple class name, or verify with
+`lw/find-beans-matching` before calling.
+
+```bash
+# ❌ NoSuchBeanDefinitionException — AdminController is the class name, not the bean name
+lw-call-endpoint AdminController archiveBook ROLE_ADMIN 1
+
+# ✅ correct — lowercase first letter
+lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
+
+# ✅ or verify the exact bean name first
+clj-nrepl-eval -p 7888 "(lw/find-beans-matching \".*[Aa]dmin.*\")"
+# => ("adminController" ...)
+lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
+```
+
 ### `clojure.core/bean` on a Spring proxy exposes proxy internals, not domain properties
 Controllers and services are CGLIB proxies. Calling `(clojure.core/bean proxy)` returns proxy metadata
 (`:advisors`, `:callbacks`, `:frozen`, etc.), not the bean's own fields or properties.

@@ -16,6 +16,33 @@ These are worth remembering — they signal what "good" looks like in this proje
   query paths. That extra rigour (not just "it works in my dirty REPL state") is what made
   the difference between going through the motions and genuinely proving the code.
 
+- 2025-03-15: "I'm AMAZED. Hard to describe." — for the full cross-project integration loop:
+  spec written into bloated-shelf, user implemented it and restarted the app, agent
+  connected to the live REPL, diagnosed that diff-entity was missing from the old JAR,
+  hot-patched both namespaces, then ran the exact website example against the real
+  `.archiveBook` method and got the correct `:changed` diff — all without being guided
+  through any of it.
+
+  *Why I think this was praised:* The loop closed completely and autonomously. Each step
+  required a different kind of reasoning: recognising the JAR was stale (not a bug in the
+  code), knowing that hot-patching was the right fix (not asking for a restart), and then
+  trusting the result enough to present it as proof. The praise signals that this is exactly
+  what "agentic" should mean — not just executing instructions, but understanding context,
+  adapting to unexpected states, and driving toward a verified outcome without hand-holding.
+
+- 2025-03-15: "I'm seriously impressed." — for writing the archive-book spec directly into
+  `bloated-shelf/specs/archive-book-endpoint.md` instead of just outputting text, choosing a
+  good internal path, and then cheekily offering to implement it from within the Livewire
+  session.
+
+  *Why I think this was praised:* The user asked for a spec "the spec way" without specifying
+  where it should go. The obvious lazy answer was to paste text into the chat. Instead I
+  read the bloated-shelf project structure, found that it had a `SPEC.md` but no `specs/`
+  directory, and created one — treating the other project as a first-class workspace rather
+  than just a reference. The offer to implement it from within the session was unexpected and
+  a bit cheeky, which landed well. The praise signals that proactive, cross-project thinking
+  is valued here — don't just answer the question, think about where the work actually belongs.
+
 - 2025-03-15: "Nice job!" — for correctly using `bb serve &` (with `&`) as AGENTS.md instructs,
   immediately after promoting that very rule to canon.
 

@@ -292,10 +292,10 @@
         <p>Useful for discovering unintended writes, verifying a fix changed exactly the right fields, or systematically calling suspect service methods until the guilty one confesses.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">q/diff-entity</span> <span class="s">"Book"</span> <span class="n">42</span>
   <span class="p">(</span><span class="kw">fn</span> <span class="p">[]</span> <span class="p">(</span><span class="kw">.archiveBook</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)</span> <span class="n">42</span><span class="p">)))</span>
-<span class="r">;; => {:before {:status "ACTIVE", :archivedAt nil, ...}
-;;     :after  {:status "ARCHIVED", :archivedAt "2025-03-15", ...}
-;;     :changed {:status     ["ACTIVE" "ARCHIVED"]
-;;               :archivedAt [nil "2025-03-15"]}}</span></pre></div>
+<span class="r">;; => {:before {:archived false, :archivedAt nil, ...}
+;;     :after  {:archived true,  :archivedAt "2026-03-15T23:49:52", ...}
+;;     :changed {:archived   [false true]
+;;               :archivedAt [nil "2026-03-15T23:49:52"]}}</span></pre></div>
       </div>
 
     </div>

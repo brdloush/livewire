@@ -7,6 +7,35 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.0] — 2026-03-16
+
+### Added
+
+- **`boot/start!` StatementInspector warning** — on startup, Livewire now verifies that
+  `LivewireSqlTracer` is the active Hibernate `StatementInspector` and prints a clear
+  `[livewire] WARNING` if it is not, instead of silently returning `{:count 0, :queries []}`
+  from `trace-sql`.
+- **`intro/inspect-all-entities`** — returns full Hibernate metamodel detail for every entity
+  in a single call. Equivalent to calling `inspect-entity` once per entity but without the
+  per-entity round-trip overhead. Useful for agents building ER diagrams or reasoning about
+  the full domain model. Also adds the `lw-inspect-all-entities` CLI wrapper.
+- **`docs/sb3-vs-sb4-differences.md`** — reference document covering Spring Boot 3.x vs 4.x
+  compatibility differences relevant to Livewire (Jackson 2 vs 3, converter class rename,
+  `HibernatePropertiesCustomizer` removal, Hibernate 6 vs 7 API compatibility).
+
+### Fixed
+
+- **`mvc/serialize` fails to load on Spring Boot 3.x** — `mvc.clj` previously hard-imported
+  `JacksonJsonHttpMessageConverter` (Spring Framework 7 / Jackson 3 only), causing a
+  `ClassNotFoundException` at namespace load time on Spring Boot 3.x. The import is now
+  replaced with a lazy classpath probe that resolves whichever converter is present
+  (`JacksonJsonHttpMessageConverter` on SB4, `MappingJackson2HttpMessageConverter` on SB3).
+  This fixes `lw-call-endpoint` being completely broken and all other CLI scripts printing a
+  noisy error on Spring Boot 3.x apps. Verified on SB3.5.9/SF6/Hibernate 6 and
+  SB4.0.1/SF7/Hibernate 7.
+
+---
+
 ## [0.5.0] — 2025-03-15
 
 ### Added

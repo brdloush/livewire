@@ -38,33 +38,9 @@ existing read-side tracing story. Worth documenting in SKILL.md if confirmed.
 
 ## 💡 Ideas (not yet spec'd)
 
-### `introspect` namespace — batch entity inspection (`inspect-all-entities`)
+### ~~`introspect` namespace — batch entity inspection (`inspect-all-entities`)~~
 
-**Context:** When an agent needs a full picture of the domain model (e.g. to build an
-ASCII ER diagram, generate a data dictionary, or reason about relationships), it currently
-has to call `lw-inspect-entity` once per entity. With 6–10 entities that is 6–10 separate
-REPL round-trips, each paying the nREPL overhead and tool-call cost.
-
-**Idea:** Add a single call that returns the full detail for every entity at once:
-
-```clojure
-(intro/inspect-all-entities)
-;; => {"Book" {:identifier ... :properties [...]}
-;;     "Author" {:identifier ... :properties [...]}
-;;     ...}
-```
-
-And a corresponding CLI wrapper:
-```bash
-lw-inspect-all-entities   # returns the full map, one entry per entity
-```
-
-**Notes:**
-- `introspect/list-entities` + `introspect/inspect-entity` already exist; this is
-  a thin convenience wrapper: `(into {} (map (fn [{:keys [name]}] [name (inspect-entity name)]) (list-entities)))`.
-- The return shape should match the existing `inspect-entity` output so agents can
-  reuse the same reasoning patterns.
-- Worth adding a `--format table` option to the CLI wrapper for human-readable output.
+✅ Done in `dcf1c3a` — `intro/inspect-all-entities` and `lw-inspect-all-entities` CLI wrapper added.
 
 ---
 

@@ -32,6 +32,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-info` | App/env summary |
 | `lw-list-entities` | All Hibernate-managed entities |
 | `lw-inspect-entity <Name>` | Table, columns, relations for one entity |
+| `lw-inspect-all-entities` | Table, columns, relations for **all** entities in one call |
 | `lw-list-endpoints` | All HTTP endpoints with auth info |
 | `lw-find-beans <regex>` | Filter bean names by regex |
 | `lw-props <regex>` | Filter environment properties by regex |
@@ -208,8 +209,13 @@ the plain string form will fail with `AuthorizationDeniedException` — not
 | `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, params, `:pre-authorize`) |
 | `(intro/list-entities)` | All Hibernate-managed entities — simple name, FQN, and DB table name |
 | `(intro/inspect-entity "Name")` | Table name, columns, and relations for one entity |
+| `(intro/inspect-all-entities)` | Table name, columns, and relations for **all** entities in one call |
 
 ### Inspecting entity structure
+
+**Prefer `intro/inspect-all-entities` over calling `intro/inspect-entity` in a loop** when
+you need the full domain model — e.g. to build an ER diagram, reason about relationships, or
+generate a data dictionary. It returns all entities in a single REPL round-trip.
 
 **Prefer `intro/list-entities` + `intro/inspect-entity` over raw SQL schema queries** when
 exploring entity mappings, table names, columns, or relations. The introspection API reads

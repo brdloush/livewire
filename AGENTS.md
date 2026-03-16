@@ -265,8 +265,12 @@ This produces `target/livewire-X.Y.Z-bundle.zip` ready for upload to
 
 Remind the user to push — do **not** push autonomously (see Git discipline above):
 ```
-git push && git push --tags
+git push && git push origin vX.Y.Z
 ```
+
+Push the specific release tag by name rather than `git push --tags`. The `--tags` flag
+pushes **all** local tags including old ones that already exist on the remote, causing
+a spurious rejection error even when the new tag is pushed successfully.
 
 ### 8. Bump to next SNAPSHOT immediately
 

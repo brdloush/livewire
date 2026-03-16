@@ -220,6 +220,14 @@ lw-start
 (lw/find-beans-matching ".*Repository.*")
 ;; => ("bookRepository" "authorRepository" "reviewRepository" ...)
 
+;; All registered bean names
+(lw/bean-names)
+;; => ("bookRepository" "authorRepository" ... "dataSource" ...)
+
+;; All beans of a given type
+(lw/beans-of-type javax.sql.DataSource)
+;; => [{:name "dataSource", :bean #object[HikariDataSource ...]}]
+
 ;; What DB URL is the app actually talking to?
 (lw/props-matching "spring\\.datasource\\.url")
 ;; => {"spring.datasource.url" "jdbc:postgresql://localhost:32808/test"}
@@ -293,6 +301,12 @@ Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll 
 ;;                          {:sql "select ... from review ...",     :count 200}
 ;;                          {:sql "select ... from library_member", :count 50}
 ;;                          {:sql "select ... from author ...",     :count 30}]}
+
+;; For @Async / CompletableFuture — capture SQL across all threads
+(trace/trace-sql-global
+  (lw/run-as "member1"
+    (.getBooksByGenreAsync (lw/bean "bookService") 1)))
+;; => {:result [...], :count 12, :queries [...]}
 ```
 
 481 queries for one endpoint. Four N+1 suspects flagged automatically.

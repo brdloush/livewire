@@ -155,10 +155,21 @@ clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version "1.3.1"}}}' \
         -M -m nrepl.cmdline --connect --host 127.0.0.1 --port 7888
 ```
 
-### AI agents (clojure-mcp)
+### AI agents (Claude Code, ECA, etc.)
 
-Point the MCP server at port 7888. The agent can then use `clojure_eval` to
-probe the live app directly — no HTTP, no mocking, no guessing.
+For AI agent use, you'll need **`clj-nrepl-eval`** — a tiny CLI tool the agent uses to
+evaluate Clojure expressions against the live nREPL. Install it via
+[bbin](https://github.com/babashka/bbin):
+
+```bash
+bbin install https://github.com/bhauman/clojure-mcp-light.git \
+  --tag v0.2.1 \
+  --as clj-nrepl-eval \
+  --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'
+```
+
+Then point your agent at port 7888 and load the Livewire skill (see the SKILL.md section
+below). All 8 namespaces are pre-aliased at startup — no manual `require` needed.
 
 ---
 
@@ -287,15 +298,73 @@ picks it up automatically — same result, no REPL call.
 (map :name (intro/list-entities))
 ;; => ("Author" "Book" "Genre" "LoanRecord" "LibraryMember" "Review")
 
-;; Entity schema straight from Hibernate's metamodel
+;; Entity schema for one entity — straight from Hibernate's live metamodel
 (intro/inspect-entity "Book")
 ;; => {:table-name "book",
-;;     :identifier {:name "id", :type "long"},
-;;     :properties [{:name "title", :columns ["title"], :type "string"} ...],
-;;     :relations  [{:name "author",  :type :many-to-one,  :target "Author"}
-;;                  {:name "genres",  :type :many-to-many, :target "Genre"}
-;;                  {:name "reviews", :type :one-to-many,  :target "Review"}]}
+;;     :identifier {:name "id", :columns ["id"], :type "long"},
+;;     :properties [{:name "title", :columns ["title"], :type "string", :is-association false} ...]}
+
+;; Full domain model in one call — great for ER diagrams
+(intro/inspect-all-entities)
+;; => {"Book"   {:table-name "book", :identifier {...}, :properties [...]}
+;;     "Author" {:table-name "author", ...}
+;;     ...}
 ```
+
+### 📄 Run JPQL with smart entity serialization
+
+```clojure
+;; Execute any JPQL via the live EntityManager — returns plain Clojure maps
+(jpa/jpa-query "SELECT b FROM Book b ORDER BY b.id" :page 0 :page-size 5)
+;; => [{:id 1, :title "All the King's Men", :author {:id 6, ...}, :genres "<lazy>"} ...]
+
+;; Scalar projections with AS aliases become named keys
+(jpa/jpa-query
+  "SELECT b.title AS title, COUNT(lr) AS loans
+   FROM Book b JOIN b.loanRecords lr
+   GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC"
+  :page-size 5)
+;; => [{:title "Vanity Fair", :loans 7} ...]
+```
+
+Lazy collections render as `"<lazy>"` rather than firing surprise queries.
+Paged by default (`:page-size 20`).
+
+### 🎯 Call controller endpoints and serialize the response
+
+```clojure
+;; Invoke a controller method under a live SecurityContext
+;; and serialize with the exact same Jackson ObjectMapper Spring MVC uses
+(mvc/serialize
+  (lw/run-as ["repl-user" "ROLE_MEMBER"]
+    (.getBooks (lw/bean "bookController")))
+  :limit 3)
+;; => ^{:total 200, :returned 3, :content-size 51529, :content-size-gzip 8299}
+;;    [{"id" 1, "title" "All the King's Men", ...} ...]
+```
+
+Or use the CLI wrapper (runs traced, returns JSON + metadata):
+```bash
+lw-call-endpoint bookController getBooks ROLE_MEMBER
+lw-call-endpoint --limit 5 adminController getMostLoaned ROLE_ADMIN
+```
+
+### 🔎 Observe what a service method actually writes
+
+No database changes — the thunk runs inside a transaction that always rolls back.
+The diff shows exactly which fields changed and their old/new values:
+
+```clojure
+(q/diff-entity "Book" 42
+  (fn [] (.archiveBook (lw/bean "bookService") 42)))
+;; => {:before  {:archived false, :archivedAt nil, :availableCopies 3}
+;;     :after   {:archived true,  :archivedAt "2026-03-15T23:49", :availableCopies 3}
+;;     :changed {:archived   [false true]
+;;               :archivedAt [nil "2026-03-15T23:49"]}}
+```
+
+Useful for discovering unintended writes, verifying a fix touched exactly the right fields,
+or systematically calling suspect service methods until the guilty one confesses.
 
 ---
 
@@ -387,7 +456,7 @@ a solid starting point for an agentic session.
 [`skills/livewire/SKILL.md`](skills/livewire/SKILL.md) is the most important file
 in this repository if you're working with an AI agent.
 
-It covers the full API across all six namespaces, worked examples, known pitfalls,
+It covers the full API across all eight namespaces, worked examples, known pitfalls,
 and escalation strategies for debugging without restarts. It's written for agents —
 but it's perfectly readable by humans too.
 
@@ -440,17 +509,21 @@ Quick namespace cheatsheet:
 | Namespace | Require as | What it does |
 |---|---|---|
 | `net.brdloush.livewire.core` | `lw` | Beans, transactions, run-as, properties |
-| `net.brdloush.livewire.query` | `q` | Raw SQL / JPQL execution |
+| `net.brdloush.livewire.query` | `q` | Raw SQL, `diff-entity` |
 | `net.brdloush.livewire.trace` | `trace` | SQL tracing, N+1 detection |
 | `net.brdloush.livewire.hot-queries` | `hq` | Live `@Query` swap + restore |
 | `net.brdloush.livewire.query-watcher` | `qw` | Auto-apply `@Query` on recompile |
 | `net.brdloush.livewire.introspect` | `intro` | Endpoints, entities, schema |
+| `net.brdloush.livewire.jpa-query` | `jpa` | JPQL via live `EntityManager`, smart entity serialization |
+| `net.brdloush.livewire.mvc` | `mvc` | Response serialization via Spring MVC's Jackson `ObjectMapper` |
 
 ---
 
 ## What's next
 
-See [tasks/todo.md](tasks/todo.md) for open tasks, planned components, and ideas.
+- 📖 Read the full [SKILL.md](skills/livewire/SKILL.md) — every function, pitfall, and worked example across all eight namespaces
+- 🚀 Try the [bloated-shelf](https://github.com/brdloush/bloated-shelf) demo app — a realistic N+1 scenario ready to investigate
+- 🐛 Found a bug or have an idea? [Open an issue](https://github.com/brdloush/livewire/issues)
 
 ---
 

@@ -146,7 +146,7 @@ livewire:
 
 You'll see this in the logs on startup:
 ```
-[livewire] nREPL server started on port 7888
+[livewire] nREPL server started on port 7888 with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc)
 ```
 
 That's it. No annotations, no Spring profiles to configure, no code changes.
@@ -161,14 +161,20 @@ That's it. No annotations, no Spring profiles to configure, no code changes.
 M-x cider-connect-clj  →  localhost  →  7888
 ```
 
-Then require the namespaces you need:
+All 8 namespaces are pre-aliased in the `user` namespace at startup — no `require` needed:
 
-```clojure
-(require '[net.brdloush.livewire.core :as lw]
-         '[net.brdloush.livewire.trace :as trace]
-         '[net.brdloush.livewire.hot-queries :as hq]
-         '[net.brdloush.livewire.introspect :as intro])
-```
+| Alias | Namespace |
+|---|---|
+| `lw` | `core` — beans, transactions, run-as, properties |
+| `q` | `query` — raw SQL, diff-entity |
+| `intro` | `introspect` — endpoints, entities, schema |
+| `trace` | `trace` — SQL tracing, N+1 detection |
+| `qw` | `query-watcher` — auto-apply @Query on recompile |
+| `hq` | `hot-queries` — live @Query swap + restore |
+| `jpa` | `jpa-query` — JPQL via live EntityManager |
+| `mvc` | `mvc` — response serialization |
+
+Just connect and start typing — `(lw/info)` is a good smoke-test.
 
 ### Terminal
 
@@ -319,7 +325,17 @@ No restart needed. Swap the JPQL, verify with `trace-sql`, iterate, commit the f
 ```
 
 Alternatively: just edit the `@Query` in your IDE, recompile, and the query-watcher
-picks it up automatically — same result, no REPL call.
+picks it up automatically — same result, no REPL call:
+
+```clojure
+;; Check watcher status
+(qw/status)
+;; => {:running? true, :disk-state-size 8}
+
+;; After recompiling in your IDE — watcher fires automatically:
+;; [query-watcher] detected change: bookRepository#findAllWithAuthorAndGenres
+;; [hot-queries] watcher re-swapped ✓
+```
 
 ### 🧭 Introspect the app's structure
 

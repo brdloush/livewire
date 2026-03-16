@@ -87,7 +87,19 @@ No REPL call needed — no restart either.
 
 ## Installation
 
-Add the dependency to your Spring Boot project:
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| ☕ Java 17+ | Required |
+| 🍃 Spring Boot 3.x or 4.x | Hibernate 6 and 7 both supported |
+| 🤖 AI agent | Claude Code, ECA, or any agent with an nREPL tool |
+| 🍺 [bbin](https://github.com/babashka/bbin) | For installing `clj-nrepl-eval` |
+| ⚡ `clj-nrepl-eval` | CLI wrapper the agent uses to talk to the nREPL (see Connecting below) |
+
+### Add the dependency
+
+Scope it to your local/dev profile — Livewire should **never ship to production**.
 
 **Maven**
 ```xml
@@ -95,12 +107,14 @@ Add the dependency to your Spring Boot project:
   <groupId>net.brdloush</groupId>
   <artifactId>livewire</artifactId>
   <version>0.6.0</version>
+  <!-- scope to dev — never ship this to production -->
 </dependency>
 ```
 
 **Gradle**
 ```groovy
-implementation 'net.brdloush:livewire:0.6.0'
+// developmentOnly or a dev-profile configuration
+developmentOnly 'net.brdloush:livewire:0.6.0'
 ```
 
 ---
@@ -120,6 +134,14 @@ livewire.enabled=true
 
 # Optional: override the default nREPL port
 livewire.nrepl.port=7888
+```
+
+```yaml
+# application-local.yml
+livewire:
+  enabled: true
+  # nrepl:
+  #   port: 7888
 ```
 
 You'll see this in the logs on startup:
@@ -171,6 +193,16 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
 Then point your agent at port 7888 and load the Livewire skill (see the SKILL.md section
 below). All 8 namespaces are pre-aliased at startup — no manual `require` needed.
 
+Start every session with `lw-start` — it discovers the nREPL, prints app info, and confirms
+the connection is live:
+
+```bash
+lw-start
+# [livewire] connected to localhost:7888
+# {:application-name "my-app", :spring-boot-version "4.0.1",
+#  :hibernate-version "7.2.0.Final", :java-version "21"}
+```
+
 ---
 
 ## What you can do
@@ -221,13 +253,18 @@ Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll 
 `run-as` sets one for the duration of the call:
 
 ```clojure
-;; Pass a username → gets ROLE_USER + ROLE_ADMIN by default
-(lw/run-as "admin"
+;; ✅ Preferred: vector form — [username role1 role2 ...]
+(lw/run-as ["repl-user" "ROLE_MEMBER"]
   (.getBookById (lw/bean "bookController") 25))
 
-;; Or specify exact roles
-(lw/run-as ["alice" "ROLE_VIEWER"]
-  (.getAuthors (lw/bean "authorController")))
+;; Multiple roles
+(lw/run-as ["repl-user" "ROLE_ADMIN" "ROLE_MEMBER"]
+  (.getStats (lw/bean "adminController")))
+
+;; ⚠️ Plain string form — only grants ROLE_USER + ROLE_ADMIN
+;; Will throw AuthorizationDeniedException for MEMBER/VIEWER-gated endpoints
+(lw/run-as "admin"
+  (.getBookById (lw/bean "bookController") 25))
 ```
 
 ### 🔬 Trace SQL and detect N+1

@@ -92,6 +92,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   erodes trust in the whole file. Noticing that the entry was now stale, even in the middle
   of an unrelated docs commit, is what made the difference.
 
+- 2026-03-16: "awesome job! you got me exactly right" — for the early-stage/API-stability
+  notice in README.md: capturing not just the "things will change" disclaimer but the
+  nuanced reasoning behind *why* it matters less here — SKILL.md as the real contract,
+  agents adapting automatically, AI-assisted development keeping the docs honest.
+
+  *Why I think this was praised:* The user had a fairly subtle idea with multiple layers
+  (honesty + reassurance + the meta-point about agentic development) and didn't spell it
+  all out explicitly. Rather than writing a generic disclaimer, I read the intent, articulated
+  the underlying reasoning, and gave it a confident tone rather than an apologetic one.
+  Getting the *framing* right — not just the facts — is what earned this.
+
 - 2026-03-16: "NOICE!" — for the analytical and hypotheses-testing work while adding SB3.x /
   SB4.x dual-version support to `mvc/serialize`: probing both live REPLs to verify the class
   probe, mapper getter, and all serialization operations before writing a single line to the file.

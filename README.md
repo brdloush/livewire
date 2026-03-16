@@ -400,13 +400,21 @@ With it, the agent knows exactly what tools it has, how to use them, and what to
 
 The skill is a **directory** — `skills/livewire/` — containing `SKILL.md` and the `bin/`
 CLI wrapper scripts (`lw-jpa-query`, `lw-call-endpoint`, `lw-sql`, etc.). Copy the whole
-thing, not just the markdown file:
+thing, not just the markdown file.
+
+First, clone this repository (you don't need to build anything — you just need the files):
+
+```bash
+git clone https://github.com/brdloush/livewire
+```
+
+Then copy the skill directory into your Spring Boot project:
 
 ```bash
 # Per-project — checked in alongside the app that uses Livewire (recommended)
-cp -r skills/livewire /your/spring-app/.claude/skills/livewire
+cp -r livewire/skills/livewire /your/spring-app/.claude/skills/livewire
 
-# Or symlink it so upgrades are instant
+# Or symlink it so upgrades are instant (just git pull in the livewire clone)
 ln -s /path/to/livewire/skills/livewire /your/spring-app/.claude/skills/livewire
 ```
 

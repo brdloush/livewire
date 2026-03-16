@@ -392,10 +392,13 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
                   Place the whole directory at
                   <code style="word-break: break-all;">.claude/skills/livewire/</code> — both tools pick it up from there.
                 </p>
-                <div class="code-block" style="margin-top: 0.85rem;"><pre style="white-space: pre-wrap; word-break: break-all;"><span class="c"># copy the skill directory (SKILL.md + bin/ scripts)</span>
-cp -r skills/livewire <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire
+                <div class="code-block" style="margin-top: 0.85rem;"><pre style="white-space: pre-wrap; word-break: break-all;"><span class="c"># first, clone the livewire repo (just for the skill files)</span>
+git clone https://github.com/brdloush/livewire
 
-<span class="c"># or symlink it (stays in sync with Livewire updates)</span>
+<span class="c"># copy the skill directory (SKILL.md + bin/ scripts)</span>
+cp -r livewire/skills/livewire <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire
+
+<span class="c"># or symlink it — git pull to stay up to date</span>
 ln -s <span class="n">/path/to/livewire</span>/skills/livewire \
       <span class="n">&lt;your-project&gt;</span>/.claude/skills/livewire</pre></div>
               </div>

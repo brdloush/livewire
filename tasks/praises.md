@@ -92,6 +92,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   erodes trust in the whole file. Noticing that the entry was now stale, even in the middle
   of an unrelated docs commit, is what made the difference.
 
+- 2026-03-16: "NOICE!" — for the analytical and hypotheses-testing work while adding SB3.x /
+  SB4.x dual-version support to `mvc/serialize`: probing both live REPLs to verify the class
+  probe, mapper getter, and all serialization operations before writing a single line to the file.
+
+  *Why I think this was praised:* The problem had two unknown dimensions at once — which class
+  name, which getter method — and neither could be assumed from docs alone. Rather than
+  guessing and branching speculatively, I drove each hypothesis to a REPL-verified fact first
+  (on both SF6 and SF7), then designed the simplest solution that fit all confirmed facts.
+  The praise signals that rigorous upfront investigation, even when it takes more turns, is
+  more valued here than fast-but-fragile guessing.
+
 - 2025-03-15: "Beautiful job." — for the complete `diff-entity` end-to-end REPL test session:
   no-op thunk returning `{:changed {}}`, real mutation via `bookRepository.save()` showing
   `{:availableCopies [3 2]}`, and DB rollback confirmed with `q/sql`.

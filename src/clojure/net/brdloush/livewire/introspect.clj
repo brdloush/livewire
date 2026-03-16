@@ -131,3 +131,13 @@
                                 :fetch (when (not= fetch "DEFAULT") fetch)}))
                            prop-names)})
       {:error (str "Entity not found: " entity-class)})))
+
+(defn inspect-all-entities
+  "Returns a map of {entity-simple-name -> inspect-entity result} for every
+   entity known to the current persistence unit. Equivalent to calling
+   inspect-entity once per entry returned by list-entities, but in a single
+   call — useful for agents building ER diagrams or reasoning about the full
+   domain model."
+  []
+  (into {} (map (fn [{:keys [name]}] [name (inspect-entity name)])
+                (list-entities))))

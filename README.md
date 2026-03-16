@@ -87,13 +87,7 @@ No REPL call needed — no restart either.
 
 ## Installation
 
-Build and install to your local Maven repository:
-
-```bash
-bb install
-```
-
-Then add the dependency to your Spring Boot project:
+Add the dependency to your Spring Boot project:
 
 **Maven**
 ```xml
@@ -404,17 +398,22 @@ With it, the agent knows exactly what tools it has, how to use them, and what to
 
 ### Make it discoverable
 
-Most agent toolchains pick up context files from well-known locations automatically.
-Drop `SKILL.md` somewhere the agent will find it:
+The skill is a **directory** — `skills/livewire/` — containing `SKILL.md` and the `bin/`
+CLI wrapper scripts (`lw-jpa-query`, `lw-call-endpoint`, `lw-sql`, etc.). Copy the whole
+thing, not just the markdown file:
 
 ```bash
-# Globally — available in every project, every session
-cp skills/livewire/SKILL.md ~/.claude/skills/livewire.md
-# or wherever your agent looks for global context
-# (e.g. ~/.config/aider/skills/, a global AGENTS.md, etc.)
+# Per-project — checked in alongside the app that uses Livewire (recommended)
+cp -r skills/livewire /your/spring-app/.claude/skills/livewire
 
-# Per-project — checked in alongside the app that uses Livewire
-cp skills/livewire/SKILL.md /your/spring-app/SKILL-livewire.md
+# Or symlink it so upgrades are instant
+ln -s /path/to/livewire/skills/livewire /your/spring-app/.claude/skills/livewire
+```
+
+Make sure the `bin/` scripts are executable:
+
+```bash
+chmod +x /your/spring-app/.claude/skills/livewire/bin/*
 ```
 
 ### Load it explicitly

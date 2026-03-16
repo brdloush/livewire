@@ -413,7 +413,7 @@ Quick namespace cheatsheet:
 
 ## What's next
 
-See [TODO.md](TODO.md) for open tasks, planned components, and ideas.
+See [tasks/todo.md](tasks/todo.md) for open tasks, planned components, and ideas.
 
 ---
 

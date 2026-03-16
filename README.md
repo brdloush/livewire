@@ -4,6 +4,12 @@
 
 # ⚡ Livewire
 
+[![Maven Central](https://img.shields.io/maven-central/v/net.brdloush/livewire?color=blue&label=Maven%20Central)](https://central.sonatype.com/artifact/net.brdloush/livewire)
+[![Spring Boot 3.x / 4.x](https://img.shields.io/badge/Spring%20Boot-3.x%20%2F%204.x-6db33f?logo=spring)](https://spring.io/projects/spring-boot)
+[![Hibernate 6 / 7](https://img.shields.io/badge/Hibernate-6%20%2F%207-59666c?logo=hibernate)](https://hibernate.org)
+[![Java 17+](https://img.shields.io/badge/Java-17%2B-orange?logo=openjdk)](https://openjdk.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > *A live nREPL wire into your running Spring Boot app. Dev only. You've been warned.*
 
 Your AI agent can read your code. What it **can't** do is ask your app a question.
@@ -70,13 +76,13 @@ Then add the dependency to your Spring Boot project:
 <dependency>
   <groupId>net.brdloush</groupId>
   <artifactId>livewire</artifactId>
-  <version>0.4.0</version>
+  <version>0.6.0</version>
 </dependency>
 ```
 
 **Gradle**
 ```groovy
-implementation 'net.brdloush:livewire:0.4.0'
+implementation 'net.brdloush:livewire:0.6.0'
 ```
 
 ---

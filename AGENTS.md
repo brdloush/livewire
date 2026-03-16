@@ -285,11 +285,35 @@ git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
 bb install
 ```
 
-### 9. Update the website (separate step)
+### 9. Update web/ and docs while Maven Central publishes
 
-Do **not** run `bb deploy-pages` as part of the release — the user controls when
-the docs site is updated. Remind them after the release is published:
-> The release is live. When you're ready, run `bb deploy-pages` to update the website.
+Maven Central publishing takes **10+ minutes** after the bundle is uploaded. Use this
+waiting time productively — update `web/` and any docs that reference the previous version.
+
+**Always do at minimum:**
+- Bump the Livewire version string in `web/getting-started.html` (Maven snippet, Step 1)
+- Bump the Livewire version string in `web/index.html` (Maven snippet, `#install` section)
+
+**Also consider for significant releases:**
+- Add new feature cards to the `#features` section of `index.html`
+- Add new example prompts under Step 4 of `getting-started.html`
+- Update screenshots or screencasts if the UX changed visibly
+
+Commit these `web/` changes to `main` as usual. **Do not run `bb deploy-pages` yet** —
+the artifacts must be live on Maven Central first or the install instructions will point
+to a version that cannot be resolved.
+
+### 10. Deploy the website — ⚠️ only after Maven Central confirms
+
+Once the user confirms the release is visible on Maven Central
+(https://central.sonatype.com/ or by resolving the dependency), remind them:
+
+```bash
+bb deploy-pages
+```
+
+Do **not** suggest or run this step until Maven Central availability is confirmed.
+The live site must always reflect an installable version.
 
 ---
 

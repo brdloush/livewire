@@ -302,7 +302,7 @@
 
     <div class="prereq-row">
       <span class="prereq-badge">☕ Java 17+</span>
-      <span class="prereq-badge">🍃 Spring Boot 3.x</span>
+      <span class="prereq-badge">🍃 Spring Boot 3.x / 4.x</span>
       <span class="prereq-badge">🤖 AI agent (Claude Code, ECA, …)</span>
       <span class="prereq-badge">🍺 bbin</span>
       <span class="prereq-badge">⚡ clj-nrepl-eval</span>
@@ -337,7 +337,7 @@
               <div class="code-block"><pre><span class="kw">&lt;dependency&gt;</span>
   &lt;groupId&gt;<span class="n">net.brdloush</span>&lt;/groupId&gt;
   &lt;artifactId&gt;<span class="n">livewire</span>&lt;/artifactId&gt;
-  &lt;version&gt;<span class="n">0.4.0</span>&lt;/version&gt;
+  &lt;version&gt;<span class="n">0.6.0</span>&lt;/version&gt;
 <span class="kw">&lt;/dependency&gt;</span></pre></div>
             </div>
 
@@ -638,6 +638,19 @@ mvn spring-boot:run \
                   state before and after the call and returns a structured
                   <code>:changed</code> map — only the keys that differ, with old and new values
                   side by side. The database is never touched.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Map the full domain model in one shot</h4>
+                <code class="try-prompt">Give me a full overview of all entities, their tables, columns, and how they relate to each other. Draw an ASCII ER diagram.</code>
+                <p>
+                  Claude calls <code>intro/inspect-all-entities</code> once to get the
+                  complete Hibernate metamodel — every entity, every column, every relation
+                  — and builds the diagram from that. One round-trip instead of one per entity.
                 </p>
               </div>
             </div>

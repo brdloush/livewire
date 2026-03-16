@@ -3,11 +3,32 @@
    Called by the Spring LivewireBootstrapBean via clojure.java.api.Clojure."
   (:require [net.brdloush.livewire.core :as core]
             [net.brdloush.livewire.query-watcher :as query-watcher]
-            [nrepl.server :as nrepl]))
+            [nrepl.server :as nrepl])
+  (:import [net.brdloush.livewire LivewireSqlTracer]
+           [org.hibernate.engine.spi SessionFactoryImplementor]))
 
 ;;; defonce so repeated calls to start! (e.g. hot-reload of this ns) don't
 ;;; spin up a second server.
 (defonce ^:private server-atom (atom nil))
+
+(defn- check-statement-inspector!
+  "Verifies that LivewireSqlTracer is the active StatementInspector on the
+   SessionFactory. Prints a warning if it is not — which means trace-sql will
+   silently return {:count 0, :queries []} until the issue is resolved."
+  []
+  (try
+    (let [sf (core/bean "entityManagerFactory")
+          inspector (-> sf
+                        (.unwrap SessionFactoryImplementor)
+                        .getSessionFactoryOptions
+                        .getStatementInspector)]
+      (when-not (instance? LivewireSqlTracer inspector)
+        (println (str "[livewire] WARNING: StatementInspector is not LivewireSqlTracer (found: "
+                      (some-> inspector class .getName)
+                      ") — trace-sql will return {:count 0, :queries []}. "
+                      "Check that spring.jpa.properties.hibernate.session_factory.statement_inspector is not overridden."))))
+    (catch Exception e
+      (println "[livewire] WARNING: Could not verify StatementInspector registration —" (.getMessage e)))))
 
 (defn- init-user-ns!
   "Automatically requires and aliases Livewire namespaces in the `user` namespace
@@ -37,6 +58,7 @@
    Idempotent: if the server is already running this is a no-op."
   [app-ctx port]
   (core/set-context! app-ctx)
+  (check-statement-inspector!)
   (if @server-atom
     (println (str "[livewire] nREPL server already running on port " port " — skipping start"))
     (let [server (nrepl/start-server :port port)]

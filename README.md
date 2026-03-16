@@ -36,6 +36,30 @@ Beans, queries, transactions, security context, and all.
 
 ---
 
+## ⚠️ Early-stage project — expect rough edges
+
+Livewire is young. The core ideas are solid and it works well in practice, but the API surface
+(Clojure function names and signatures, CLI wrapper scripts, `SKILL.md` structure) **will change**
+as the tool evolves.
+
+This matters less here than it would in a traditional library — and that's by design.
+
+The real contract between Livewire and an AI agent isn't the Clojure API; it's **`SKILL.md`**.
+The agent reads the skill file fresh at the start of every session. When the API changes,
+`SKILL.md` changes with it, and the agent adapts automatically — no version pinning, no
+migration guide to follow. The surface can evolve without breaking the workflow.
+
+Development itself is heavily AI-assisted, which keeps `SKILL.md` honest: the same agent
+that uses Livewire helps build it, so the documentation reflects how the tool actually
+behaves, not how it was originally specced.
+
+**What this means in practice:**
+- Pin a version in your `pom.xml` / `build.gradle` if you need stability
+- After upgrading, copy the new `SKILL.md` from the release — that's all the migration there is
+- Feedback, bug reports, and ideas are very welcome
+
+---
+
 ## The problem
 
 Modern Spring Boot development has a fundamental feedback loop problem.

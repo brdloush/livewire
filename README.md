@@ -9,6 +9,7 @@
 [![Hibernate 6 / 7](https://img.shields.io/badge/Hibernate-6%20%2F%207-59666c?logo=hibernate)](https://hibernate.org)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange?logo=openjdk)](https://openjdk.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/brdloush)
 
 > *A live nREPL wire into your running Spring Boot app. Dev only. You've been warned.*
 

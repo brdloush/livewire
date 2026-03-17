@@ -868,3 +868,14 @@ footer {
   .screenshots-grid { grid-template-columns: 1fr; }
   .arch-box { padding: 1.25rem 1.75rem; font-size: 0.8rem; line-height: 1.8; }
 }
+
+/* ── Ko-fi fallback button ────────────────────────────────────── */
+@keyframes kofi-wiggle {
+  0%,60%        { transform: rotate(0)      scale(1);    }
+  75%           { transform: rotate(0)      scale(1.12); }
+  80%           { transform: rotate(0)      scale(1.1);  }
+  84%, 92%      { transform: rotate(-10deg) scale(1.1);  }
+  88%, 96%      { transform: rotate(10deg)  scale(1.1);  }
+  100%          { transform: rotate(0)      scale(1);    }
+}
+.kofi-fallback-img { animation: kofi-wiggle 3s infinite; }

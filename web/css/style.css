@@ -161,20 +161,32 @@ nav {
 
 .hero-inner {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4rem;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 3rem;
   align-items: center;
 }
 
-.hero-logo {
-  width: 220px;
-  height: 220px;
-  border-radius: 28px;
-  object-fit: contain;
-  padding: 20px;
-  box-shadow:
-    0 0 60px rgba(87,133,202,0.25),
-    0 0 120px rgba(152,201,72,0.1);
+.hero-demo-wrap {
+  min-width: 0; /* prevent grid blowout */
+}
+
+.hero-demo-wrap #hero-demo {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.hero-demo-caption {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hero-demo-caption a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .hero-warning {
@@ -842,7 +854,7 @@ footer {
   .nav-links li { padding: 0; }
   .nav-links a { display: block; padding: 0.85rem 1.5rem; font-size: 1rem; }
   .hero-inner { grid-template-columns: 1fr; }
-  .hero-logo { width: 140px; height: 140px; justify-self: center; order: -1; }
+  .hero-demo-wrap { order: 2; }
   .hero-title { font-size: 2.2rem; }
   #hero { padding: 7rem 0 4rem; }
   .problem-grid { grid-template-columns: 1fr; }

@@ -56,7 +56,7 @@ behaves, not how it was originally specced.
 
 **What this means in practice:**
 - Pin a version in your `pom.xml` / `build.gradle` if you need stability
-- After upgrading, copy the new `SKILL.md` from the release — that's all the migration there is
+- After upgrading, copy the new `skills/livewire/` directory from the release (`SKILL.md` and the `bin/` wrapper scripts) — that's all the migration there is
 - Feedback, bug reports, and ideas are very welcome
 
 ---

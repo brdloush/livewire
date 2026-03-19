@@ -523,6 +523,22 @@ mvn spring-boot:run \
             </div>
 
             <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Identify tightly coupled beans</h4>
+                <code class="try-prompt">Which beans have the most dependencies? Are there any that look like they could be split up?</code>
+                <p>
+                  Claude calls <code>lw/all-bean-deps</code> to get the full wiring graph,
+                  pre-filtered to your own application beans (auto-detected via
+                  <code>@SpringBootApplication</code> — no configuration needed). It sorts by
+                  dependency count to surface high-fan-out candidates, then inspects individual
+                  beans with <code>lw/bean-deps</code> and suggests how to break them apart —
+                  by responsibility, process, or domain area.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
               <span class="try-tag tag-diagnose">Diagnose</span>
               <div class="try-card-text">
                 <h4>Count exactly how many queries an endpoint fires</h4>

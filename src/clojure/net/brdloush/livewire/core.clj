@@ -10,7 +10,8 @@
            [org.springframework.transaction.support TransactionTemplate TransactionCallback]
            [org.springframework.security.core.context SecurityContextHolder SecurityContextImpl]
            [org.springframework.security.authentication UsernamePasswordAuthenticationToken]
-           [org.springframework.security.core.authority SimpleGrantedAuthority]))
+           [org.springframework.security.core.authority SimpleGrantedAuthority]
+           [org.springframework.beans.factory.config ConfigurableListableBeanFactory]))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Context atom — populated by boot.clj on startup
@@ -67,6 +68,107 @@
   [pattern]
   (let [re (re-pattern pattern)]
     (filter #(re-find re %) (bean-names))))
+
+;;; ---------------------------------------------------------------------------
+;;; Bean dependency introspection
+
+(defn- bean-factory
+  "Returns the ConfigurableListableBeanFactory from the current ApplicationContext."
+  []
+  (.getBeanFactory (ctx)))
+
+(defn- app-root-package
+  "Detects the root package of the application by finding the class annotated
+  with @SpringBootApplication. Returns nil if none is found."
+  []
+  (let [c (ctx)
+        names (.getBeanNamesForAnnotation c org.springframework.boot.autoconfigure.SpringBootApplication)]
+    (when (seq names)
+      (-> c (.getBean (first names)) .getClass .getPackage .getName))))
+
+(defn- clean-dep-name?
+  "Returns true for dependency names that are simple bean identifiers.
+  Filters out:
+  - Fully-qualified class names (contain a dot) — e.g. autoconfiguration placeholders.
+  - Object identity strings (contain @) — e.g. raw BeanFactory/ApplicationContext refs."
+  [^String s]
+  (and (not (clojure.string/includes? s "."))
+       (not (clojure.string/includes? s "@"))))
+
+(defn- clean-class-name
+  "Strips CGLIB proxy suffixes (e.g. $$SpringCGLIB$$0) from a class name."
+  [^String class-name]
+  (when class-name
+    (clojure.string/replace class-name #"\$\$.*$" "")))
+
+(defn bean-deps
+  "Returns a map describing the runtime wiring of a single bean:
+
+     {:bean        \"myService\"
+      :class       \"com.example.MyService\"   ; resolved class name (nil for anonymous beans)
+      :dependencies [\"repoA\" \"repoB\"]        ; beans this bean injects / depends on
+      :dependents   [\"controllerX\"]}           ; beans that inject this bean
+
+   Uses Spring's internal dependency tracking (populated during context refresh)
+   which captures constructor injection, @Autowired fields, and @Inject fields.
+   Names that look like FQCNs or raw object references are filtered out.
+
+   Example:
+     (lw/bean-deps \"bookService\")
+     ;; => {:bean         \"bookService\"
+     ;;     :class        \"com.example.BookService\"
+     ;;     :dependencies [\"bookRepository\"]
+     ;;     :dependents   [\"adminController\" \"bookController\"]}"
+  [bean-name]
+  (let [bf  (bean-factory)
+        cls (clean-class-name
+              (try (some-> (.getBeanDefinition bf bean-name) .getBeanClassName)
+                   (catch Exception _ nil)))]
+    {:bean         bean-name
+     :class        cls
+     :dependencies (filterv clean-dep-name? (.getDependenciesForBean bf bean-name))
+     :dependents   (try (filterv clean-dep-name? (.getDependentBeans bf bean-name))
+                        (catch Exception _ []))}))
+
+(defn all-bean-deps
+  "Returns a seq of dependency maps (see bean-deps) for beans in the application context.
+
+  Options:
+    :app-only  (default true) — when true, restricts results to beans whose class
+               belongs to the application's own root package (auto-detected from
+               @SpringBootApplication). Set to false to include all Spring
+               infrastructure beans.
+
+  Each map contains :bean, :class, :dependencies, and :dependents.
+  Beans whose names are FQCNs or role >= 2 synthetic beans are always excluded.
+
+  Examples:
+
+    ;; App beans only (default) — typically a handful of your own classes
+    (lw/all-bean-deps)
+
+    ;; Full context including Spring Boot infrastructure
+    (lw/all-bean-deps :app-only false)
+
+    ;; Top 10 beans by number of dependencies (coupling smell candidates)
+    (->> (lw/all-bean-deps)
+         (sort-by #(count (:dependencies %)) >)
+         (take 10)
+         (mapv #(select-keys % [:bean :class :dependencies])))"
+  [& {:keys [app-only] :or {app-only true}}]
+  (let [c   (ctx)
+        bf  (.getBeanFactory c)
+        pkg (when app-only (app-root-package))]
+    (->> (.getBeanDefinitionNames c)
+         (filter (fn [n]
+                   (when-let [bd (try (.getBeanDefinition bf n) (catch Exception _ nil))]
+                     (and (< (.getRole bd) 2)
+                          (not (clojure.string/includes? n "."))
+                          (if pkg
+                            (some-> (.getBeanClassName bd)
+                                    (clojure.string/starts-with? pkg))
+                            true)))))
+         (mapv bean-deps))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Environment information

@@ -180,12 +180,14 @@
       <div class="feature-card">
         <div class="feature-icon">🔍</div>
         <h3>Live Bean &amp; Property Inspection</h3>
-        <p>Query any Spring bean, list all endpoints, inspect resolved properties and filter beans by regex — all against the running app, no source reading required.</p>
-        <div class="code-block"><pre><span class="c">;; find all repository beans</span>
-<span class="p">(</span><span class="kw">lw/find-beans-matching</span> <span class="s">".*Repository.*"</span><span class="p">)</span>
+        <p>Query any Spring bean, inspect resolved properties, and map the full wiring graph — what each bean injects and what depends on it. Find high-fan-out coupling candidates in one call. All against the running app, no source reading required.</p>
+        <div class="code-block"><pre><span class="c">;; wiring graph — auto-filtered to your own classes</span>
+<span class="p">(</span><span class="kw">lw/all-bean-deps</span><span class="p">)</span>
+<span class="c">;; =&gt; [{:bean "adminService" :class "…AdminService"</span>
+<span class="c">;;      :dependencies ["bookRepo" …] :dependents ["adminController"]}  …]</span>
 
-<span class="c">;; check what the app name resolves to</span>
-<span class="p">(</span><span class="kw">lw/props-matching</span> <span class="s">"spring\\.application\\.name"</span><span class="p">)</span></pre></div>
+<span class="c">;; or drill into a single bean</span>
+<span class="p">(</span><span class="kw">lw/bean-deps</span> <span class="s">"adminService"</span><span class="p">)</span></pre></div>
       </div>
 
       <div class="feature-card">

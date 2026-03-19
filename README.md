@@ -236,6 +236,30 @@ lw-start
 ;; Runtime environment summary
 (lw/info)
 ;; => {:spring-boot "4.0.1", :spring "7.0.2", :hibernate "7.2.0.Final", :java "25", ...}
+
+;; Wiring of a single bean — what it injects and what injects it
+(lw/bean-deps "bookService")
+;; => {:bean         "bookService"
+;;     :class        "com.example.BookService"
+;;     :dependencies ["bookRepository"]
+;;     :dependents   ["adminController" "bookController"]}
+
+;; App-level wiring graph — defaults to your own classes only (auto-detected via @SpringBootApplication)
+(lw/all-bean-deps)
+;; => [{:bean "adminService", :class "com.example.AdminService", :dependencies [...], :dependents [...]} ...]
+
+;; Find high-fan-out coupling candidates
+(->> (lw/all-bean-deps)
+     (sort-by #(count (:dependencies %)) >)
+     (take 10)
+     (mapv #(select-keys % [:bean :class :dependencies])))
+
+;; Include Spring infrastructure beans too
+(lw/all-bean-deps :app-only false)
+
+;; CLI shorthands
+;; lw-bean-deps bookService
+;; lw-all-bean-deps
 ```
 
 ### 🗄️ Run queries safely

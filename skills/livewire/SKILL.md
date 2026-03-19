@@ -35,6 +35,8 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-inspect-all-entities` | Table, columns, relations for **all** entities in one call |
 | `lw-list-endpoints` | All HTTP endpoints with auth info |
 | `lw-find-beans <regex>` | Filter bean names by regex |
+| `lw-bean-deps <beanName>` | Dependencies and dependents for one bean |
+| `lw-all-bean-deps` | Wiring maps for all app-level beans (auto-filtered to own package) |
 | `lw-props <regex>` | Filter environment properties by regex |
 | `lw-sql <query>` | Run a read-only SQL query |
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
@@ -142,11 +144,71 @@ clj-nrepl-eval --discover-ports
 | `(lw/beans-of-type DataSource)` | All beans of a type → map |
 | `(lw/bean-names)` | All registered bean names |
 | `(lw/find-beans-matching ".*Repo.*")` | Filter bean names by regex |
+| `(lw/bean-deps "name")` | Wiring map for one bean: `:class`, `:dependencies`, `:dependents` |
+| `(lw/all-bean-deps)` | Wiring maps for app-level beans (`:app-only true` by default) |
+| `(lw/all-bean-deps :app-only false)` | Wiring maps for all beans including Spring infrastructure |
 | `(lw/all-properties)` | All resolved environment properties → map |
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
 | `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
 | `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
 | `(lw/run-as user & body)` | Run body with a Spring `SecurityContext` set — required for `@PreAuthorize`-guarded beans |
+
+### `bean-deps` / `all-bean-deps` — wiring graph introspection
+
+Use these functions to map the runtime dependency graph of the Spring context.
+They rely on Spring's internal dependency tracking — populated during context refresh —
+which captures constructor injection, `@Autowired` fields, and `@Inject` fields.
+
+`bean-deps` returns a map for a single bean:
+
+```clojure
+(lw/bean-deps "bookService")
+;; => {:bean         "bookService"
+;;     :class        "com.example.BookService"
+;;     :dependencies ["bookRepository"]          ; beans bookService injects
+;;     :dependents   ["adminController"           ; beans that inject bookService
+;;                    "bookController"]}
+```
+
+`all-bean-deps` returns the same map for every bean matching the filter.
+By default (`:app-only true`) it restricts results to beans whose class belongs
+to the application's own root package — auto-detected from `@SpringBootApplication`.
+This collapses the "which beans are mine?" lookup into the same call.
+Pass `:app-only false` to include all Spring infrastructure beans.
+
+```clojure
+;; App beans only — the default, typically a handful of your own classes
+(lw/all-bean-deps)
+
+;; Full context including Spring Boot infrastructure (~250+ beans)
+(lw/all-bean-deps :app-only false)
+```
+
+**Common patterns:**
+
+```clojure
+;; Find beans with the most dependencies — coupling smell candidates
+(->> (lw/all-bean-deps)
+     (sort-by #(count (:dependencies %)) >)
+     (take 10)
+     (mapv #(select-keys % [:bean :class :dependencies])))
+
+;; Find beans with the most dependents — high-impact, highest-risk to change
+(->> (lw/all-bean-deps)
+     (sort-by #(count (:dependents %)) >)
+     (take 10)
+     (mapv #(select-keys % [:bean :dependents])))
+
+;; Inspect a specific bean's full wiring context
+(lw/bean-deps "adminService")
+
+;; Find all beans that depend on a given bean (inverse lookup)
+(->> (lw/all-bean-deps)
+     (filter #(some #{"bookRepository"} (:dependencies %)))
+     (mapv :bean))
+```
+
+---
 
 ### `run-as` — when and how to use it
 

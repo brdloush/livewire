@@ -67,6 +67,25 @@ decision, enter plan mode before doing anything else:
    A wrong direction executed quickly makes things worse; a short pause to
    re-assess saves turns.
 
+### Feature delivery checklist — nREPL-facing features
+
+When planning or implementing a feature that users can call from the nREPL, work
+through this checklist as part of the plan. Each item is a candidate task, not a
+guarantee — rule it in or out explicitly rather than silently skipping it.
+
+| # | Deliverable | When to include |
+|---|---|---|
+| 1 | **Clojure implementation** in the appropriate `net.brdloush.livewire.*` namespace | Always |
+| 2 | **Wrapper script** in `skills/livewire/bin/` | When the function takes a small number of fixed arguments and its output is useful standalone. Key criterion: would an agent reach for this script without any extra filtering? (compare `lw-inspect-entity` — yes, one entity name in, structured result out; `lw-all-bean-deps` — yes, now that it defaults to app-only and returns ~10–20 focused beans; `lw-all-bean-deps :app-only false` — no, 250+ raw entries are not standalone-useful) |
+| 3 | **SKILL.md** — table row + subsection with examples | Always; the skill is the contract between the library and the agent |
+| 4 | **README.md** — extend the relevant "What you can do" section | Always for new public functions; a code snippet + one-liner is enough |
+| 5 | **`web/getting-started.html`** — new "try this prompt" card | When there is a natural, compelling plain-English prompt that demonstrates the feature |
+| 6 | **`web/index.html`** — update or extend a feature card | When the feature broadens an existing capability category; add a new card only if it represents a genuinely distinct capability |
+
+Raise any of these as explicit tasks in the plan so they are tracked and not forgotten.
+
+---
+
 ### In-session vs. multi-session work
 
 - **`eca__task`** is the primary tracker for work within a single session. It is

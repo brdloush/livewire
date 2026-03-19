@@ -5,7 +5,7 @@ Each entry should carry enough context for a fresh agent to resume without askin
 
 ---
 
-_Last updated: 2026-03-16_
+_Last updated: 2026-03-19_
 
 ## 🚧 In Progress
 
@@ -37,6 +37,11 @@ existing read-side tracing story. Worth documenting in SKILL.md if confirmed.
 ---
 
 ## 💡 Ideas (not yet spec'd)
+
+### ~~`core` namespace — bean dependency introspection~~
+
+✅ Done — `lw/bean-deps`, `lw/all-bean-deps` (`:app-only true` default, `:class` field),
+`lw-bean-deps` and `lw-all-bean-deps` CLI wrappers added. SKILL.md, README.md, and web pages updated.
 
 ### ~~`introspect` namespace — batch entity inspection (`inspect-all-entities`)~~
 

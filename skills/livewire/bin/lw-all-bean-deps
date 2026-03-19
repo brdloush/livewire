@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Usage: lw-all-bean-deps
+# Returns the wiring map for every application-level bean (auto-detected via
+# @SpringBootApplication). Pass :app-only false to include Spring infrastructure beans.
+clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc])"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(lw/all-bean-deps)"

@@ -7,6 +7,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] — 2026-03-19
+
+### Added
+
+- **`lw/bean-deps`** — returns the runtime wiring map for a single bean:
+  `{:bean … :class … :dependencies […] :dependents […]}`. Uses Spring's internal
+  dependency tracking (populated during context refresh), covering constructor injection,
+  `@Autowired`, and `@Inject` fields. CGLIB proxy suffixes are stripped from `:class`.
+- **`lw/all-bean-deps`** — returns the full wiring graph for every bean matching the filter.
+  Defaults to `:app-only true`, auto-detecting the application's root package from the
+  `@SpringBootApplication`-annotated class so only user-defined beans are returned (not
+  250+ Spring Boot internals). Pass `:app-only false` for the unfiltered set.
+- **`lw-bean-deps`** and **`lw-all-bean-deps`** CLI wrapper scripts.
+
+### Changed
+
+- **`AGENTS.md`** — added a feature delivery checklist for nREPL-facing features, covering
+  Clojure implementation, wrapper scripts, SKILL.md, README.md, and web page updates.
+
+---
+
 ## [0.6.0] — 2026-03-16
 
 ### Added

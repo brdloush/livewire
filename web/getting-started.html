@@ -539,6 +539,21 @@ mvn spring-boot:run \
             </div>
 
             <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Audit transactional boundaries</h4>
+                <code class="try-prompt">Which service methods are not marked read-only but probably should be? Are there any suspicious transaction configurations?</code>
+                <p>
+                  Claude calls <code>lw/all-bean-tx</code> to map the effective
+                  <code>@Transactional</code> configuration of every app bean at runtime —
+                  propagation, isolation, read-only flag, rollback rules. No source reading
+                  needed. It then cross-references method names against their read-only flag
+                  to surface methods that look like reads but aren't marked accordingly.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
               <span class="try-tag tag-diagnose">Diagnose</span>
               <div class="try-card-text">
                 <h4>Count exactly how many queries an endpoint fires</h4>

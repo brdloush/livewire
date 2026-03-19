@@ -260,6 +260,25 @@ lw-start
 ;; CLI shorthands
 ;; lw-bean-deps bookService
 ;; lw-all-bean-deps
+
+;; @Transactional surface of a single bean
+(lw/bean-tx "bookService")
+;; => {:bean "bookService" :class "com.example.BookService"
+;;     :methods [{:method "archiveBook" :propagation :required :read-only false ...}
+;;               {:method "getAllBooks"  :propagation :required :read-only true  ...}]}
+
+;; All app-level beans with transactional methods (auto-filtered via @SpringBootApplication)
+(lw/all-bean-tx)
+
+;; Smell check: reads not marked read-only
+(->> (lw/all-bean-tx)
+     (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+     (filter #(and (not (:read-only %))
+                   (re-find #"(?i)^(get|find|list|count|search|fetch)" (:method %)))))
+
+;; CLI shorthands
+;; lw-bean-tx bookService
+;; lw-all-bean-tx
 ```
 
 ### 🗄️ Run queries safely

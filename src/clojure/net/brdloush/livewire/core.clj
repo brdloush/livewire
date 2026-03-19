@@ -11,7 +11,10 @@
            [org.springframework.security.core.context SecurityContextHolder SecurityContextImpl]
            [org.springframework.security.authentication UsernamePasswordAuthenticationToken]
            [org.springframework.security.core.authority SimpleGrantedAuthority]
-           [org.springframework.beans.factory.config ConfigurableListableBeanFactory]))
+           [org.springframework.beans.factory.config ConfigurableListableBeanFactory]
+           [org.springframework.transaction TransactionDefinition]
+           [org.springframework.transaction.interceptor RollbackRuleAttribute NoRollbackRuleAttribute]
+           [org.springframework.aop.support AopUtils]))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Context atom — populated by boot.clj on startup
@@ -169,6 +172,134 @@
                                     (clojure.string/starts-with? pkg))
                             true)))))
          (mapv bean-deps))))
+
+;;; ---------------------------------------------------------------------------
+;;; Transactional boundary introspection
+
+(def ^:private propagation-names
+  {TransactionDefinition/PROPAGATION_REQUIRED     :required
+   TransactionDefinition/PROPAGATION_SUPPORTS     :supports
+   TransactionDefinition/PROPAGATION_MANDATORY    :mandatory
+   TransactionDefinition/PROPAGATION_REQUIRES_NEW :requires-new
+   TransactionDefinition/PROPAGATION_NOT_SUPPORTED :not-supported
+   TransactionDefinition/PROPAGATION_NEVER        :never
+   TransactionDefinition/PROPAGATION_NESTED       :nested})
+
+(def ^:private isolation-names
+  {TransactionDefinition/ISOLATION_DEFAULT          :default
+   TransactionDefinition/ISOLATION_READ_UNCOMMITTED :read-uncommitted
+   TransactionDefinition/ISOLATION_READ_COMMITTED   :read-committed
+   TransactionDefinition/ISOLATION_REPEATABLE_READ  :repeatable-read
+   TransactionDefinition/ISOLATION_SERIALIZABLE     :serializable})
+
+(defn- tx-attr->map
+  "Converts a Spring TransactionAttribute to a plain Clojure map."
+  [attr]
+  {:propagation     (get propagation-names (.getPropagationBehavior attr) (.getPropagationBehavior attr))
+   :isolation       (get isolation-names (.getIsolationLevel attr) (.getIsolationLevel attr))
+   :read-only       (.isReadOnly attr)
+   :timeout         (.getTimeout attr)
+   :rollback-for    (vec (keep #(when (and (instance? RollbackRuleAttribute %)
+                                           (not (instance? NoRollbackRuleAttribute %)))
+                                  (.getExceptionName %))
+                               (.getRollbackRules attr)))
+   :no-rollback-for (vec (keep #(when (instance? NoRollbackRuleAttribute %)
+                                  (.getExceptionName %))
+                               (.getRollbackRules attr)))})
+
+(defn bean-tx
+  "Returns a map describing the effective @Transactional configuration of a single bean:
+
+     {:bean    \"myService\"
+      :class   \"com.example.MyService\"
+      :methods [{:method      \"save\"
+                 :propagation :required
+                 :isolation   :default
+                 :read-only   false
+                 :timeout     -1
+                 :rollback-for    []
+                 :no-rollback-for []}
+                ...]}
+
+   Only public methods with an effective @Transactional annotation are included
+   (both method-level and class-level are resolved correctly). Methods with no
+   transaction configuration are omitted.
+
+   Note: JPA repository beans (e.g. BookRepository) expose all methods from
+   SimpleJpaRepository including many overloaded variants — the result will be
+   verbose. Use all-bean-tx with the default :app-only true to restrict to your
+   own service/component classes.
+
+   Example:
+     (lw/bean-tx \"bookService\")
+     ;; => {:bean \"bookService\"
+     ;;     :class \"com.example.BookService\"
+     ;;     :methods [{:method \"archiveBook\" :propagation :required :read-only false ...}
+     ;;               {:method \"getAllBooks\"  :propagation :required :read-only true  ...}]}"
+  [bean-name]
+  (let [b          (bean bean-name)
+        target-cls (AopUtils/getTargetClass b)
+        cls-name   (clean-class-name (.getName target-cls))
+        txas       (try (bean "transactionAttributeSource") (catch Exception _ nil))]
+    {:bean    bean-name
+     :class   cls-name
+     :methods (if-not txas
+                []
+                (->> (.getDeclaredMethods target-cls)
+                     (filter #(pos? (bit-and (.getModifiers %) java.lang.reflect.Modifier/PUBLIC)))
+                     (keep (fn [m]
+                             (when-let [attr (try (.getTransactionAttribute txas m target-cls)
+                                                  (catch Exception _ nil))]
+                               (assoc (tx-attr->map attr) :method (.getName m)))))
+                     (sort-by :method)
+                     vec))}))
+
+(defn all-bean-tx
+  "Returns a seq of transaction maps (see bean-tx) for beans in the application context,
+  restricted to beans that have at least one transactional method.
+
+  Options:
+    :app-only  (default true) — when true, restricts to beans in the application's own
+               root package (auto-detected from @SpringBootApplication). Recommended:
+               this filters out JPA repository beans whose SimpleJpaRepository base
+               class produces very verbose output.
+
+  Requires @EnableTransactionManagement to be active. Returns an empty seq if
+  transactionAttributeSource is not present in the context.
+
+  Examples:
+
+    ;; All app-level beans with transactional methods (default)
+    (lw/all-bean-tx)
+
+    ;; Include Spring infrastructure beans too
+    (lw/all-bean-tx :app-only false)
+
+    ;; Methods that look like reads but are not marked read-only — potential smell
+    (->> (lw/all-bean-tx)
+         (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+         (filter #(and (not (:read-only %))
+                       (re-find #\"(?i)^(get|find|list|count|search|fetch)\" (:method %)))))
+
+    ;; All REQUIRES_NEW methods — potential nested transaction complexity
+    (->> (lw/all-bean-tx)
+         (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+         (filter #(= :requires-new (:propagation %))))"
+  [& {:keys [app-only] :or {app-only true}}]
+  (let [c   (ctx)
+        bf  (.getBeanFactory c)
+        pkg (when app-only (app-root-package))]
+    (->> (.getBeanDefinitionNames c)
+         (filter (fn [n]
+                   (when-let [bd (try (.getBeanDefinition bf n) (catch Exception _ nil))]
+                     (and (< (.getRole bd) 2)
+                          (not (clojure.string/includes? n "."))
+                          (if pkg
+                            (some-> (.getBeanClassName bd)
+                                    (clojure.string/starts-with? pkg))
+                            true)))))
+         (mapv bean-tx)
+         (filterv #(seq (:methods %))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Environment information

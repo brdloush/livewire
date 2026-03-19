@@ -293,7 +293,12 @@ a spurious rejection error even when the new tag is pushed successfully.
 
 ### 8. Bump to next SNAPSHOT immediately
 
-After the release commit, bump `project.clj` to the next development version:
+⚠️ **Do not run this step until the user confirms the bundle has been uploaded and accepted
+by Maven Central.** Running `bb install` overwrites the signed release artifacts in
+`target/provided/` with SNAPSHOT builds, destroying them. If you proceed too early the user
+will have to re-run `bb release-jars`, `bb sign-jars`, and `bb bundle` from scratch.
+
+After Maven Central confirms, bump `project.clj` to the next development version:
 ```
 X.Y.Z → X.(Y+1).0-SNAPSHOT   (or X.Y.(Z+1)-SNAPSHOT for a patch release)
 ```
@@ -312,6 +317,9 @@ waiting time productively — update `web/` and any docs that reference the prev
 **Always do at minimum:**
 - Bump the Livewire version string in `web/getting-started.html` (Maven snippet, Step 1)
 - Bump the Livewire version string in `web/index.html` (Maven snippet, `#install` section)
+- Bump the Livewire version string in `README.md` — both the Maven **and** Gradle snippets
+
+Verify nothing is missed with: `grep -r "X.Y.Z" README.md web/`
 
 **Also consider for significant releases:**
 - Add new feature cards to the `#features` section of `index.html`
@@ -359,6 +367,29 @@ After a release is published, remind the maintainer:
 ---
 
 ## Clojure gotchas
+
+### Never use the `lw/` alias inside Livewire source files
+
+The `lw` alias (`require '[net.brdloush.livewire.core :as lw]`) only exists in REPL
+sessions. Inside `core.clj` itself, always call functions by their bare name:
+
+```clojure
+;; ❌ Wrong — compiles fine in a hot-patched REPL but fails on JAR load
+(defn bean-tx [bean-name]
+  (let [b (lw/bean bean-name) ...]
+    ...))
+
+;; ✅ Correct — bare name, works both in REPL and on JAR load
+(defn bean-tx [bean-name]
+  (let [b (bean bean-name) ...]
+    ...))
+```
+
+The REPL hot-patch masks this bug because the `ns` form is re-evaluated with the alias
+already in scope. The error only surfaces when the JAR is loaded fresh (e.g. app restart),
+making it easy to ship broken code that passed all REPL tests.
+
+---
 
 ### `defonce` does not accept docstrings
 

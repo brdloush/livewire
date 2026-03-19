@@ -180,14 +180,13 @@
       <div class="feature-card">
         <div class="feature-icon">🔍</div>
         <h3>Live Bean &amp; Property Inspection</h3>
-        <p>Query any Spring bean, inspect resolved properties, and map the full wiring graph — what each bean injects and what depends on it. Find high-fan-out coupling candidates in one call. All against the running app, no source reading required.</p>
+        <p>Query any Spring bean, map the full dependency wiring graph, and inspect <code>@Transactional</code> boundaries — propagation, isolation, and read-only flags for every method. Find coupling smells and transaction misconfigurations in one call. All against the running app, no source reading required.</p>
         <div class="code-block"><pre><span class="c">;; wiring graph — auto-filtered to your own classes</span>
 <span class="p">(</span><span class="kw">lw/all-bean-deps</span><span class="p">)</span>
-<span class="c">;; =&gt; [{:bean "adminService" :class "…AdminService"</span>
-<span class="c">;;      :dependencies ["bookRepo" …] :dependents ["adminController"]}  …]</span>
 
-<span class="c">;; or drill into a single bean</span>
-<span class="p">(</span><span class="kw">lw/bean-deps</span> <span class="s">"adminService"</span><span class="p">)</span></pre></div>
+<span class="c">;; @Transactional surface of all app beans</span>
+<span class="p">(</span><span class="kw">lw/all-bean-tx</span><span class="p">)</span>
+<span class="c">;; =&gt; [{:bean "bookService" :methods [{:method "archiveBook" :read-only false …}  …]}  …]</span></pre></div>
       </div>
 
       <div class="feature-card">

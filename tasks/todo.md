@@ -38,6 +38,84 @@ existing read-side tracing story. Worth documenting in SKILL.md if confirmed.
 
 ## 💡 Ideas (not yet spec'd)
 
+### ~~`core` namespace — `@Transactional` boundary introspection~~
+
+✅ Done — `lw/bean-tx`, `lw/all-bean-tx` (`:app-only true` default), `lw-bean-tx` and
+`lw-all-bean-tx` CLI wrappers added. SKILL.md, README.md, and web pages updated.
+
+<!--
+
+**Context:**
+Transactional boundaries are one of the most common sources of subtle Spring bugs —
+unexpected rollbacks, silent no-ops on non-public methods, wrong propagation nesting,
+read-only violations, missing transactions on self-invocations. Currently neither an agent
+nor a human developer can see the effective transaction configuration without reading source.
+Livewire can expose this cleanly at runtime with no static analysis required.
+
+**What to implement:**
+Two functions in `net.brdloush.livewire.core` (aliased as `lw`):
+
+- **`(lw/bean-tx "beanName")`** — returns `{:bean … :class … :methods […]}` where each
+  method entry contains `:method`, `:propagation`, `:isolation`, `:read-only`,
+  `:rollback-for`, `:no-rollback-for`, `:timeout`. Only methods with an effective
+  `@Transactional` (directly or inherited from class level) are included.
+- **`(lw/all-bean-tx)`** — same `:app-only true` default as `all-bean-deps`; returns the
+  transactional surface of all application-level beans in one call.
+
+**Implementation notes:**
+
+Spring registers `transactionAttributeSource` as a bean when `@EnableTransactionManagement`
+is active. It is an `AnnotationTransactionAttributeSource` and its
+`.getTransactionAttribute(method, targetClass)` method returns the full `TransactionAttribute`
+for any method+class pair, or `nil` if the method is not transactional. This handles both
+method-level and class-level `@Transactional` correctly, including JPA repository defaults
+(`SimpleJpaRepository` is `@Transactional(readOnly = true)` at class level).
+
+Suggested algorithm (validate in the REPL first):
+1. Get `transactionAttributeSource` bean from the context — if absent, `@EnableTransactionManagement`
+   is not active; return an informative error.
+2. For each target bean: resolve the target class via `AopUtils/getTargetClass` (unwraps CGLIB proxy).
+3. Iterate `.getDeclaredMethods` on the target class — restrict to public methods only
+   (non-public `@Transactional` is silently ignored by Spring; surfacing them here as
+   non-transactional is correct behaviour and potentially the most useful diagnostic).
+4. Call `.getTransactionAttribute txAttrSource method targetClass` for each; collect non-nil results.
+5. Map `TransactionAttribute` fields to Clojure keywords:
+   - `.getPropagationBehavior` → keyword via `TransactionDefinition` constants
+   - `.getIsolationLevel` → keyword
+   - `.isReadOnly` → boolean
+   - `.getRollbackRules` → seq of class names (distinguish rollback vs no-rollback rules)
+   - `.getTimeout` → integer (-1 = default)
+
+**Propagation/isolation constants mapping** (validate exact int values in REPL):
+```
+PROPAGATION_REQUIRED=0 PROPAGATION_SUPPORTS=1 PROPAGATION_MANDATORY=2
+PROPAGATION_REQUIRES_NEW=3 PROPAGATION_NOT_SUPPORTED=4 PROPAGATION_NEVER=5
+PROPAGATION_NESTED=6
+ISOLATION_DEFAULT=-1 ISOLATION_READ_UNCOMMITTED=1 ISOLATION_READ_COMMITTED=2
+ISOLATION_REPEATABLE_READ=4 ISOLATION_SERIALIZABLE=8
+```
+
+**Known gaps (by design):**
+- Programmatic transactions (`TransactionTemplate`, direct `PlatformTransactionManager`) —
+  no annotation trail; undetectable without static analysis. Document in SKILL.md.
+- `@Transactional` via XML — effectively extinct; not worth handling.
+
+**Useful derived queries to document in SKILL.md:**
+```clojure
+;; Methods that look like reads but aren't marked read-only — potential performance smell
+(->> (lw/all-bean-tx)
+     (mapcat :methods)
+     (filter #(and (not (:read-only %))
+                   (re-find #"(?i)^(get|find|list|count|search|fetch)" (:method %)))))
+
+;; All REQUIRES_NEW methods — potential nested transaction complexity
+(->> (lw/all-bean-tx)
+     (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+     (filter #(= :requires-new (:propagation %))))
+```
+
+-->
+
 ### ~~`core` namespace — bean dependency introspection~~
 
 ✅ Done — `lw/bean-deps`, `lw/all-bean-deps` (`:app-only true` default, `:class` field),

@@ -37,6 +37,8 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-find-beans <regex>` | Filter bean names by regex |
 | `lw-bean-deps <beanName>` | Dependencies and dependents for one bean |
 | `lw-all-bean-deps` | Wiring maps for all app-level beans (auto-filtered to own package) |
+| `lw-bean-tx <beanName>` | `@Transactional` surface for one bean |
+| `lw-all-bean-tx` | `@Transactional` surface for all app-level beans (auto-filtered) |
 | `lw-props <regex>` | Filter environment properties by regex |
 | `lw-sql <query>` | Run a read-only SQL query |
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
@@ -147,11 +149,68 @@ clj-nrepl-eval --discover-ports
 | `(lw/bean-deps "name")` | Wiring map for one bean: `:class`, `:dependencies`, `:dependents` |
 | `(lw/all-bean-deps)` | Wiring maps for app-level beans (`:app-only true` by default) |
 | `(lw/all-bean-deps :app-only false)` | Wiring maps for all beans including Spring infrastructure |
+| `(lw/bean-tx "name")` | `@Transactional` surface for one bean: `:methods` with propagation, isolation, `:read-only`, rollback rules |
+| `(lw/all-bean-tx)` | `@Transactional` surface for all app-level beans (`:app-only true` by default); only beans with ≥1 transactional method included |
+| `(lw/all-bean-tx :app-only false)` | Include Spring infrastructure beans (verbose — JPA repos expose many overloaded variants) |
 | `(lw/all-properties)` | All resolved environment properties → map |
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
 | `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
 | `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
 | `(lw/run-as user & body)` | Run body with a Spring `SecurityContext` set — required for `@PreAuthorize`-guarded beans |
+
+### `bean-tx` / `all-bean-tx` — `@Transactional` boundary introspection
+
+Use these functions to map the effective transactional configuration of every bean method.
+They query Spring's `AnnotationTransactionAttributeSource` at runtime — no static analysis
+required. Both class-level and method-level `@Transactional` are resolved correctly,
+including JPA repository defaults from `SimpleJpaRepository`.
+
+`bean-tx` returns the full transactional surface of a single bean:
+
+```clojure
+(lw/bean-tx "bookService")
+;; => {:bean    "bookService"
+;;     :class   "com.example.BookService"
+;;     :methods [{:method "archiveBook" :propagation :required :isolation :default
+;;                :read-only false :timeout -1 :rollback-for [] :no-rollback-for []}
+;;               {:method "getAllBooks"  :propagation :required :isolation :default
+;;                :read-only true  :timeout -1 :rollback-for [] :no-rollback-for []}]}
+```
+
+`all-bean-tx` returns the same for every app-level bean that has at least one transactional
+method (`:app-only true` default, same auto-detection as `all-bean-deps`).
+
+> ⚠️ **JPA repository beans are verbose.** `SimpleJpaRepository` exposes many overloaded
+> method variants — calling `lw/bean-tx "bookRepository"` will return 50+ entries. The
+> `:app-only true` default on `all-bean-tx` excludes repository beans automatically.
+
+> ⚠️ **Programmatic transactions are not visible.** Methods using `TransactionTemplate` or
+> `PlatformTransactionManager` directly leave no annotation trail and will not appear here.
+
+**Common patterns:**
+
+```clojure
+;; Full transactional surface of the app — clean summary
+(lw/all-bean-tx)
+
+;; Methods that look like reads but are not marked read-only — performance smell
+(->> (lw/all-bean-tx)
+     (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+     (filter #(and (not (:read-only %))
+                   (re-find #"(?i)^(get|find|list|count|search|fetch)" (:method %)))))
+
+;; All REQUIRES_NEW methods — potential nested transaction complexity
+(->> (lw/all-bean-tx)
+     (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+     (filter #(= :requires-new (:propagation %))))
+
+;; Non-default rollback rules
+(->> (lw/all-bean-tx)
+     (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
+     (filter #(or (seq (:rollback-for %)) (seq (:no-rollback-for %)))))
+```
+
+---
 
 ### `bean-deps` / `all-bean-deps` — wiring graph introspection
 

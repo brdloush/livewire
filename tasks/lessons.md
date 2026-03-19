@@ -9,6 +9,10 @@ and removed from here.
 
 ---
 
+- 2026-03-19: README.md contains version strings in both the Maven and Gradle dependency
+  snippets — these must be bumped alongside web/index.html and web/getting-started.html during
+  the release web-update step (AGENTS.md step 9). Check with `grep -r "X.Y.Z" README.md web/`.
+
 - 2026-03-19: Running `bb install` for the next SNAPSHOT immediately after `bb bundle` overwrites
   the signed release artifacts in `target/provided/`. After `bb bundle`, do NOT run `bb install`
   or any build step until the user confirms the bundle has been uploaded and accepted by Maven

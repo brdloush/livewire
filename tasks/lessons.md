@@ -9,6 +9,12 @@ and removed from here.
 
 ---
 
+- 2026-03-19: Running `bb install` for the next SNAPSHOT immediately after `bb bundle` overwrites
+  the signed release artifacts in `target/provided/`. After `bb bundle`, do NOT run `bb install`
+  or any build step until the user confirms the bundle has been uploaded and accepted by Maven
+  Central. Explicitly tell the user "do not continue to the next step until Maven Central confirms"
+  before bumping the SNAPSHOT version.
+
 - 2026-03-16: After implementing `inspect-all-entities`, committed the code without updating
   SKILL.md — the user had to point it out. Any new user-facing function or CLI script must
   include SKILL.md documentation in the same commit, not as a follow-up. Before committing a

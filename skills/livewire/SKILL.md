@@ -12,6 +12,57 @@ the JVM beats static analysis every time.
 
 ---
 
+## Writing tests / creating test data
+
+**Before writing any test setup code, always prototype test data in the live REPL using `faker/build-entity`.**
+
+This applies whenever you need to:
+- Write a new integration test (service layer, repository, or otherwise)
+- Populate test data for manual exploration
+- Understand what a valid entity graph looks like
+
+### Test style — follow the project first
+
+**Always look at existing tests before writing a new one.** Match the project's conventions for:
+- `@SpringBootTest` environment (`MOCK`, `NONE`, `RANDOM_PORT`)
+- How test data is set up (repositories, `JdbcTemplate`, `@Sql`, etc.)
+- Transaction / rollback strategy (`@Transactional`, `@BeforeEach`/`@AfterEach` cleanup)
+- Assertion library (AssertJ, JUnit 5 built-ins, Hamcrest, etc.)
+
+The rules below are **fallback guidance** for when no existing pattern covers the case.
+
+### Fallback rules of thumb
+
+**Service-layer tests** — call the service bean directly; no MockMvc needed:
+- Use `WebEnvironment.MOCK` (not `NONE`) when the app has a Spring Security config — `HttpSecurity` is only available in a web context and `NONE` will fail at startup with `NoSuchBeanDefinitionException`.
+- `@Transactional` on the test class auto-rolls back each test, keeping the DB clean without explicit teardown.
+- After all test data is set up in `@BeforeEach`, call `entityManager.flush(); entityManager.clear()` before the test body runs. Without this, service calls in the same transaction may see stale lazy collections: if a parent entity was saved before its children, its collection is already "initialized" as empty in the L1 cache and Hibernate won't re-query even when children exist in the DB.
+
+**REST/controller tests** — use MockMvc against the HTTP layer when testing status codes, authentication, serialization, or HTTP-level behaviour.
+
+### REPL workflow for test data prototyping
+
+1. **Check faker is available:**
+   ```bash
+   clj-nrepl-eval -p 7888 "(faker/available?)"
+   ```
+
+2. **Prototype entity creation in the REPL** — use `:auto-deps? true :persist? true :rollback? true` to resolve the full dependency chain without leaving data behind:
+   ```bash
+   lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true}'
+   ```
+
+3. **Inspect the result** — note which fields were generated, what IDs were assigned, and which associations were resolved. This tells you exactly what setup code the test will need.
+
+4. **Adjust with overrides** if specific field values matter for your test assertions:
+   ```bash
+   lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true :overrides {:rating 5 :comment "Outstanding"}}'
+   ```
+
+5. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
+
+---
+
 ## Wrapper scripts
 
 This skill ships named wrapper scripts in a `bin/` subdirectory located in the

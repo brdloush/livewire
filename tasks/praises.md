@@ -114,6 +114,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   The praise signals that rigorous upfront investigation, even when it takes more turns, is
   more valued here than fast-but-fragile guessing.
 
+- 2026-03-20: "A-MA-ZING. Love your analytical thinking." — for reading spec/05-smart-bean.md,
+  immediately understanding the problem and solution, and producing a clear 3-task plan with
+  a precise call-out that the faker result-handling site is a documentation problem rather
+  than a code change.
+
+  *Why I think this was praised:* The spec contained a slight overreach (suggesting a code
+  change in faker that wasn't actually needed), and rather than faithfully translating it
+  into a task, I noticed the distinction and said so explicitly. Analytical thinking here
+  means not just understanding what to build, but also recognising where the spec can be
+  simplified — and being honest about it upfront rather than discovering it mid-implementation.
+
 - 2025-03-15: "Beautiful job." — for the complete `diff-entity` end-to-end REPL test session:
   no-op thunk returning `{:changed {}}`, real mutation via `bookRepository.save()` showing
   `{:availableCopies [3 2]}`, and DB rollback confirmed with `q/sql`.

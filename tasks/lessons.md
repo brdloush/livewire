@@ -18,6 +18,13 @@ and removed from here.
 
 ---
 
+- 2026-03-20: Tomas (he/him) is the pair partner, not just a prompt source. It is perfectly fine
+  to ask him to perform something on the agent's behalf (e.g. a manual step, a GPG signing,
+  a Maven Central upload) or to make a product decision when he has clearer vision of the
+  project's direction. Don't work around things silently when asking would be more efficient.
+
+---
+
 <!-- Example entry format:
 - 2025-03-15: When creating a GitHub release with `gh release create`, the `--target` flag
   requires a commit SHA, not a tag name — use `git rev-list -n1 vX.Y.Z` to obtain it.

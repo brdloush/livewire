@@ -305,6 +305,22 @@
 ;;               :archivedAt [nil "2026-03-15T23:49:52"]}}</span></pre></div>
       </div>
 
+      <div class="feature-card">
+        <div class="feature-icon">🎲</div>
+        <h3>Test Data Generation — build valid entities on the fly</h3>
+        <p>Construct realistic, persistable Hibernate entity instances from the REPL — no fixture files, no test annotations, no restart. Heuristics match property names and types to <code>net.datafaker</code> providers. Lookup tables (like <code>Genre</code>) are fetched from the DB to avoid unique-constraint violations. Persist inside a rolled-back transaction to get a real DB-assigned id without leaving any data behind.</p>
+        <div class="code-block"><pre><span class="c">;; Simple entity — all scalar fields filled with realistic data</span>
+<span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Author"</span><span class="p">)</span>
+
+<span class="c">;; Auto-resolve the full dependency chain</span>
+<span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Book"</span> <span class="p">{</span><span class="kw">:auto-deps?</span> <span class="hl-blue">true</span> <span class="kw">:persist?</span> <span class="hl-blue">true</span><span class="p">})</span>
+
+<span class="c">;; Speculative: get a real id, call your service, roll everything back</span>
+<span class="p">(</span><span class="kw">let</span> <span class="p">[</span><span class="n">review</span> <span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Review"</span>
+                <span class="p">{</span><span class="kw">:auto-deps?</span> <span class="hl-blue">true</span> <span class="kw">:persist?</span> <span class="hl-blue">true</span> <span class="kw">:rollback?</span> <span class="hl-blue">true</span><span class="p">})]</span>
+  <span class="p">(</span><span class="kw">.computeRating</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"ratingService"</span><span class="p">)</span> <span class="p">(</span><span class="kw">.getId</span> <span class="n">review</span><span class="p">)))</span></pre></div>
+      </div>
+
     </div>
   </div>
 </section>

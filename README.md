@@ -147,7 +147,7 @@ livewire:
 
 You'll see this in the logs on startup:
 ```
-[livewire] nREPL server started on port 7888 with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc)
+[livewire] nREPL server started on port 7888 with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc, faker)
 ```
 
 That's it. No annotations, no Spring profiles to configure, no code changes.
@@ -174,6 +174,7 @@ All 8 namespaces are pre-aliased in the `user` namespace at startup — no `requ
 | `hq` | `hot-queries` — live @Query swap + restore |
 | `jpa` | `jpa-query` — JPQL via live EntityManager |
 | `mvc` | `mvc` — response serialization |
+| `faker` | `faker` — test data generation via datafaker heuristics |
 
 Just connect and start typing — `(lw/info)` is a good smoke-test.
 
@@ -476,6 +477,42 @@ The diff shows exactly which fields changed and their old/new values:
 
 Useful for discovering unintended writes, verifying a fix touched exactly the right fields,
 or systematically calling suspect service methods until the guilty one confesses.
+
+### 🎲 Generate realistic test data on the fly
+
+No fixture files, no test annotations, no recompile. `faker/build-entity` constructs a valid
+Hibernate entity using realistic fake data, optionally persisting it in a rolled-back transaction
+so you can call services against a real, DB-assigned id without leaving any data behind:
+
+```clojure
+;; Simple entity — no required FKs, just scalar fields
+(faker/build-entity "Author")
+;; => #object[Author ... {:firstName "Evelyn", :lastName "Hartwell",
+;;            :birthYear 1923, :nationality "Montenegrins"}]
+
+;; Let Livewire resolve the full dependency chain automatically
+(faker/build-entity "Book" {:auto-deps? true :persist? true})
+
+;; Speculative pattern: persist + rollback — get a real DB-assigned id without leaving data behind
+(let [review (faker/build-entity "Review" {:auto-deps? true :persist? true :rollback? true})]
+  ;; Call your rating service with a real id — nothing persists after this block
+  (.computeAverageRating (lw/bean "ratingService") (.getId review)))
+```
+
+Property values are selected by a heuristic table matched against name and type — `firstName`,
+`email`, `isbn`, `*Year` suffix, `*At`/`*Since` suffix for timestamps, etc. String values are
+clamped to `@Column(length=…)` constraints. Lookup tables (e.g. `Genre`) are fetched from the DB
+rather than created new to avoid unique-constraint violations.
+
+Requires `net.datafaker:datafaker` on the target application's classpath. Call
+`(faker/available?)` first to confirm:
+
+```clojure
+(faker/available?)  ;; => true
+
+;; CLI
+;; lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true}'
+```
 
 ---
 

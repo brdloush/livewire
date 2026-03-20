@@ -703,6 +703,22 @@ mvn spring-boot:run \
               </div>
             </div>
 
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Build a test entity and call a service with it</h4>
+                <code class="try-prompt">Build me a test Review — with a realistic book and member — and call the rating service with it. Don't leave anything in the database.</code>
+                <p>
+                  Claude calls <code>faker/available?</code> to confirm datafaker is on the classpath,
+                  then uses <code>faker/build-entity</code> with <code>:auto-deps? true</code>,
+                  <code>:persist? true</code>, and <code>:rollback? true</code> to construct a full
+                  <code>Review → Book → Author</code> and <code>LibraryMember</code> graph, persist it
+                  for a real DB-assigned id, call your service, and roll everything back — zero rows
+                  left behind.
+                </p>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

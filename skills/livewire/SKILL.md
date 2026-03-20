@@ -59,7 +59,66 @@ The rules below are **fallback guidance** for when no existing pattern covers th
    lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true :overrides {:rating 5 :comment "Outstanding"}}'
    ```
 
-5. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
+5. **Prototype the full test logic in Clojure before writing Java** — after the entity graph is validated, prototype the entire test scenario (setup + service call + assertions) as a Clojure expression in the REPL. Use `clojure.test/is` for assertions. This catches issues with the service logic, lazy loading, and field mappings before a single line of Java is written.
+
+   ```clojure
+   ;; Example: prototype getReviewsForBook test in Clojure
+   (use 'clojure.test)
+   (lw/in-tx
+     (let [author  (doto (com.example.Author.) (.setFirstName "Jane") (.setLastName "Austen"))
+           _       (.save (lw/bean "authorRepository") author)
+           book    (doto (com.example.Book.) (.setTitle "Test Book") (.setAuthor author))
+           _       (.save (lw/bean "bookRepository") book)
+           member  (doto (com.example.LibraryMember.) (.setUsername "jdoe") (.setFullName "John Doe")
+                                                       (.setEmail "jdoe@test.com") (.setMemberSince (java.time.LocalDate/now)))
+           _       (.save (lw/bean "libraryMemberRepository") member)
+           review  (doto (com.example.Review.) (.setBook book) (.setMember member)
+                                                (.setRating (short 5)) (.setComment "Great") (.setReviewedAt (java.time.LocalDateTime/now)))
+           _       (.save (lw/bean "reviewRepository") review)
+           _       (do (.flush (lw/bean "entityManager")) (.clear (lw/bean "entityManager")))
+           result  (.getReviewsForBook (lw/bean "bookService") (.getId book))]
+       (is (= 1 (count result)))
+       (is (= 5 (.rating (first result))))
+       (is (= "John Doe" (.reviewerName (first result))))))
+   ```
+
+6. **If the nREPL is unavailable, ask the user to start the app — never skip prototyping**
+
+   The REPL-first rule is not optional. If `lw-start` finds no server, stop and ask:
+   > "The app doesn't seem to be running. Could you start it so I can prototype in the REPL before writing the test?"
+
+   Do not fall back to reasoning theoretically about what the test *should* do. A theoretical prototype defeats the entire purpose — the value is catching real issues (wrong bean names, L1 cache surprises, unexpected exceptions) against a live JVM before a single line of Java is written.
+
+7. **`@BeforeEach` entity setup — store IDs, not entity references**
+
+   When `@BeforeEach` ends with `entityManager.flush() + entityManager.clear()`, any entity references stored as instance fields become **detached**. Using them as `@ManyToOne` targets in test bodies relies on lenient Hibernate behaviour and is fragile.
+
+   **Preferred pattern:** store only the IDs, re-attach in test bodies via `getReferenceById()`:
+
+   ```java
+   private Long bookId;
+   private Long memberId;
+
+   @BeforeEach
+   void setUp() {
+       // ... create and save book, member ...
+       entityManager.flush();
+       entityManager.clear();
+       bookId = book.getId();     // store stable IDs
+       memberId = member.getId(); // discard the detached refs
+   }
+
+   @Test
+   void myTest() {
+       Book book = bookRepository.getReferenceById(bookId);         // Hibernate proxy, no DB hit
+       LibraryMember member = libraryMemberRepository.getReferenceById(memberId);
+       // use book and member as @ManyToOne targets — managed proxies, FK resolves cleanly
+   }
+   ```
+
+   `getReferenceById()` returns a Hibernate proxy with the ID set — no SELECT is fired, and Hibernate resolves the FK correctly on flush. This pattern is explicit, safe across inheritance hierarchies, and stays correct as the test class grows.
+
+8. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
 
 ---
 
@@ -1159,6 +1218,24 @@ Use `lw/bean "repositoryBeanName"` to access data — find the right name with `
 (lw/find-beans-matching ".*MyEntity.*[Rr]epo.*")
 (lw/bean "myEntityRepository")
 ```
+
+### `EntityManager` is not registered as a named bean — use type-based lookup
+
+`EntityManager` is a scoped proxy tied to the current persistence context. Spring does **not** register it under the name `"entityManager"`, so `(lw/bean "entityManager")` throws `NoSuchBeanDefinitionException`. Use the type-based form instead, which resolves the shared proxy bean (`jpaSharedEM_entityManagerFactory`) correctly:
+
+```clojure
+;; ❌ NoSuchBeanDefinitionException — "entityManager" is not a registered bean name
+(lw/bean "entityManager")
+
+;; ✅ type-based lookup resolves the shared proxy
+(let [em (lw/bean jakarta.persistence.EntityManager)]
+  (lw/in-tx
+    ;; ... persist entities ...
+    (.flush em)
+    (.clear em)))
+```
+
+This pattern is needed in REPL test prototyping when you need to flush and clear the L1 cache between setup and the service call under test.
 
 ### `lw-call-endpoint` and `lw/bean` expect the Spring bean name, not the class name
 

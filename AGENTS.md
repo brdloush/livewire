@@ -148,6 +148,26 @@ observations.
 Praise is also worth capturing. Use `tasks/praises.md` as a record of moments the
 user explicitly praised the work done — they signal what "good" looks like here.
 
+---
+
+## Collaboration improvement loop
+
+`tasks/human-improvements-ideas.md` is a **private, gitignored** capture buffer for
+agent observations about how the collaboration itself could be improved — things Tomas
+could do differently that would make the agent more effective.
+
+**At session start:** read it alongside `tasks/lessons.md`. Let its observations
+inform how you interpret the current session context.
+
+**When you notice something actionable** — a recurring friction, a missing piece of
+context, a habit that would save turns — append an entry:
+```
+- YYYY-MM-DD: <observation> — <why it would help>
+```
+
+Keep the bar high: only genuine, recurring patterns worth changing. One-off situational
+things (e.g. "app had no data today") do not belong here.
+
 **After any explicit praise from the user:**
 Append an entry to `tasks/praises.md` in this format:
 ```

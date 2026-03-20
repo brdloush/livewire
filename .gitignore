@@ -7,3 +7,6 @@
 /.lsp
 *.class
 *.jar
+
+# Private collaboration notes — not for public history
+/tasks/human-improvements-ideas.md

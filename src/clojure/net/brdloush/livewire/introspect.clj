@@ -4,6 +4,61 @@
             [clojure.string :as str]))
 
 ;;; ---------------------------------------------------------------------------
+;;; Annotation helpers (used by inspect-entity for @Column / @ManyToOne metadata)
+
+(defn- find-field
+  "Walks the class hierarchy (including superclasses / @MappedSuperclass) to find
+   a declared field by name. Returns nil if not found anywhere in the hierarchy."
+  [^Class cls ^String field-name]
+  (when cls
+    (or (try
+          (let [f (.getDeclaredField cls field-name)]
+            (.setAccessible f true)
+            f)
+          (catch NoSuchFieldException _ nil))
+        (recur (.getSuperclass cls) field-name))))
+
+(defn- find-getter
+  "Looks for a public getter method for the given field name (getXxx convention)."
+  [^Class cls ^String field-name]
+  (let [getter-name (str "get"
+                         (str/upper-case (subs field-name 0 1))
+                         (subs field-name 1))]
+    (->> (.getMethods cls)
+         (filter #(= getter-name (.getName %)))
+         first)))
+
+(defn- column-annotation-meta
+  "Reads @Column and @ManyToOne annotations for a single property, returning a map with
+   :nullable, :length (strings only), :unique, and :column-definition.
+   Returns all nils when neither annotation is present.
+
+   Rules:
+     - For @ManyToOne: :nullable = (.optional m2o)  (optional=false => nullable=false)
+     - For @Column:    :nullable = (.nullable col)   (nullable=false => :nullable false)
+     - :length is only populated for string properties (type = \"string\").
+     - :column-definition is nil when the annotation value is blank.
+     - :unique is nil (not false) when the column is not unique."
+  [^Class entity-cls ^String prop-name ^String prop-type]
+  (let [col-cls (Class/forName "jakarta.persistence.Column")
+        m2o-cls (Class/forName "jakarta.persistence.ManyToOne")
+        field   (find-field entity-cls prop-name)
+        getter  (find-getter entity-cls prop-name)
+        col     (or (when field (.getAnnotation field col-cls))
+                    (when getter (.getAnnotation getter col-cls)))
+        m2o     (or (when field (.getAnnotation field m2o-cls))
+                    (when getter (.getAnnotation getter m2o-cls)))]
+    {:nullable          (cond
+                          m2o  (.optional m2o)
+                          col  (.nullable col)
+                          :else nil)
+     :length            (when (and col (= "string" prop-type))
+                          (.length col))
+     :unique            (when (and col (.unique col)) true)
+     :column-definition (when (and col (not= "" (.columnDefinition col)))
+                          (.columnDefinition col))}))
+
+;;; ---------------------------------------------------------------------------
 ;;; Endpoints
 
 (defn list-endpoints
@@ -100,7 +155,8 @@
         mm (.getMetamodel sf)
         entity-name (resolve-entity-name emf entity-class)]
     (if-let [ep (try (safe-get-entity-persister mm entity-name) (catch Exception _ nil))]
-      (let [prop-names (seq (.getPropertyNames ep))]
+      (let [prop-names  (seq (.getPropertyNames ep))
+            entity-cls  (try (Class/forName entity-name) (catch Exception _ nil))]
         {:entity-name entity-name
          :table-name (.getTableName ep)
          :identifier {:name (.getIdentifierPropertyName ep)
@@ -109,26 +165,33 @@
          :properties (mapv (fn [pn]
                              (let [idx (.getPropertyIndex ep pn)
                                    prop-type (.getPropertyType ep pn)
+                                   prop-type-name (.getName prop-type)
                                    cascade (str (safe-get-cascade-style ep idx))
                                    fetch (str (.getFetchMode ep idx))
                                    cols (seq (.getPropertyColumnNames ep pn))
                                    is-collection (.isCollectionType prop-type)
-                                   is-entity (.isEntityType prop-type)]
-                               {:name pn
-                                :columns (vec cols)
-                                :type (.getName prop-type)
-                                :is-association (boolean (or is-collection is-entity))
-                                :collection is-collection
-                                :target-entity (cond
-                                                 is-collection
-                                                 (let [role (.getRole prop-type)
-                                                       cp (safe-get-collection-persister mm role)]
-                                                   (.getName (.getElementType cp)))
-                                                 is-entity
-                                                 (.getName prop-type)
-                                                 :else nil)
-                                :cascade (when (not= cascade "STYLE_NONE") cascade)
-                                :fetch (when (not= fetch "DEFAULT") fetch)}))
+                                   is-entity (.isEntityType prop-type)
+                                   ann-meta (when entity-cls
+                                              (try
+                                                (column-annotation-meta entity-cls pn prop-type-name)
+                                                (catch Exception _ {:nullable nil :length nil :unique nil :column-definition nil})))]
+                               (merge
+                                 {:name pn
+                                  :columns (vec cols)
+                                  :type prop-type-name
+                                  :is-association (boolean (or is-collection is-entity))
+                                  :collection is-collection
+                                  :target-entity (cond
+                                                   is-collection
+                                                   (let [role (.getRole prop-type)
+                                                         cp (safe-get-collection-persister mm role)]
+                                                     (.getName (.getElementType cp)))
+                                                   is-entity
+                                                   (.getName prop-type)
+                                                   :else nil)
+                                  :cascade (when (not= cascade "STYLE_NONE") cascade)
+                                  :fetch (when (not= fetch "DEFAULT") fetch)}
+                                 ann-meta)))
                            prop-names)})
       {:error (str "Entity not found: " entity-class)})))
 

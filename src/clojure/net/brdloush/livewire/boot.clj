@@ -40,7 +40,8 @@
              'net.brdloush.livewire.introspect
              'net.brdloush.livewire.trace
              'net.brdloush.livewire.jpa-query
-             'net.brdloush.livewire.mvc)
+             'net.brdloush.livewire.mvc
+             'net.brdloush.livewire.faker)
     (binding [*ns* (the-ns 'user)]
       (eval '(require '[net.brdloush.livewire.core :as lw]
                       '[net.brdloush.livewire.query :as q]
@@ -49,7 +50,8 @@
                       '[net.brdloush.livewire.query-watcher :as qw]
                       '[net.brdloush.livewire.hot-queries :as hq]
                       '[net.brdloush.livewire.jpa-query :as jpa]
-                      '[net.brdloush.livewire.mvc :as mvc])))
+                      '[net.brdloush.livewire.mvc :as mvc]
+                      '[net.brdloush.livewire.faker :as faker])))
     (catch Exception e
       (println "[livewire] Warning: Failed to auto-alias namespaces in user ns:" (.getMessage e)))))
 
@@ -65,7 +67,7 @@
       (reset! server-atom server)
       (init-user-ns!)
       (query-watcher/start-watcher!)
-      (println (str "[livewire] nREPL server started on port " port " with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc)")))))
+      (println (str "[livewire] nREPL server started on port " port " with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc, faker)")))))
 
 (defn stop!
   "Stops the nREPL server if it is running."

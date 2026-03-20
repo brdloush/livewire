@@ -218,6 +218,12 @@ lw-start
 ### 🔍 Inspect beans and properties
 
 ```clojure
+;; Convert any Java object to a Clojure map — works for both plain JavaBeans and
+;; Java records (DTOs). Use this instead of clojure.core/bean, which silently
+;; returns {} for records (no error, just missing fields).
+(lw/bean->map some-dto)
+;; => {:totalBooks 200, :totalAuthors 30, ...}
+
 ;; What repos are registered?
 (lw/find-beans-matching ".*Repository.*")
 ;; => ("bookRepository" "authorRepository" "reviewRepository" ...)

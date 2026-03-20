@@ -206,6 +206,7 @@ clj-nrepl-eval --discover-ports
 | `(lw/all-bean-tx :app-only false)` | Include Spring infrastructure beans (verbose — JPA repos expose many overloaded variants) |
 | `(lw/all-properties)` | All resolved environment properties → map |
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
+| `(lw/bean->map obj)` | Convert any Java object to a Clojure map — handles both regular JavaBeans and Java records (use this instead of `clojure.core/bean`) |
 | `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
 | `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
 | `(lw/run-as user & body)` | Run body with a Spring `SecurityContext` set — required for `@PreAuthorize`-guarded beans |
@@ -1182,6 +1183,26 @@ lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
 clj-nrepl-eval -p 7888 "(lw/find-beans-matching \".*[Aa]dmin.*\")"
 # => ("adminController" ...)
 lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
+```
+
+### `clojure.core/bean` silently returns `{}` for Java records
+
+Java records (DTOs, projections) generate accessor methods without the `get` prefix —
+`rating()`, `comment()`, etc. `clojure.core/bean` only sees `getX()` methods, so it returns
+an empty map `{}` with no error.
+
+**Always use `lw/bean->map` instead of `clojure.core/bean`** when converting any result object
+to a map — it dispatches to `getRecordComponents()` for records and falls back to
+`clojure.core/bean` for everything else:
+
+```clojure
+;; ❌ silent empty map for a Java record DTO
+(clojure.core/bean some-stats-dto)
+;; => {:class com.example.StatsDto}   ← only :class, all fields missing
+
+;; ✅ correct — full field map regardless of record vs plain class
+(lw/bean->map some-stats-dto)
+;; => {:totalBooks 200, :totalAuthors 30, :totalMembers 50, ...}
 ```
 
 ### `clojure.core/bean` on a Spring proxy exposes proxy internals, not domain properties

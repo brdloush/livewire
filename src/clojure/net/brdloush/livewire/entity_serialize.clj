@@ -27,7 +27,7 @@
       (if (contains? visited idc)
         "<circular>"
         (let [visited'    (conj visited idc)
-              b           (clojure.core/bean obj)
+              b           (core/bean->map obj)
               ;; Hibernate proxies have names like "Book$HibernateProxyXXX"
               base-name   (first (str/split (.getSimpleName (.getClass obj)) #"\$"))
               entity-meta (get meta-map base-name)]
@@ -58,8 +58,9 @@
 
                             :else
                             (entity->map meta-map page-size visited' v))])))))
-            ;; Not a known entity — fall back to string representation
-            (str obj)))))))
+            ;; Not a known Hibernate entity — could be a DTO/record or a plain object.
+            ;; Use bean->map so Java records return a proper field map instead of "{}".
+            (core/bean->map obj)))))))
 
 (defn resolve-class
   "Resolves a Hibernate entity name (string, e.g. \"Book\") or Java class to

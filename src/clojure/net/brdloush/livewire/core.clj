@@ -72,6 +72,35 @@
   (let [re (re-pattern pattern)]
     (filter #(re-find re %) (bean-names))))
 
+(defn bean->map
+  "Converts a Java object to a Clojure map, handling both regular JavaBeans
+   and Java records (introduced in Java 16).
+
+   `clojure.core/bean` works by scanning for `getX()` accessor methods.
+   Java records generate accessors without the `get` prefix (`rating()`, `comment()`,
+   etc.) — `clojure.core/bean` sees none of these and silently returns `{}`.
+
+   `bean->map` detects records via `Class.isRecord()` and uses
+   `Class.getRecordComponents()` instead, so the full field map is always returned
+   regardless of whether the object is a record or a plain JavaBean.
+
+   Examples:
+     ;; Java record (e.g. a DTO returned by a service/controller)
+     (lw/bean->map some-stats-dto)
+     ;; => {:totalBooks 200, :totalAuthors 30, :totalMembers 50, ...}
+
+     ;; Regular JPA entity — identical to (clojure.core/bean obj)
+     (lw/bean->map some-book-entity)
+     ;; => {:id 1, :title \"Pride and Prejudice\", :isbn \"...\", :archived false, ...}"
+  [obj]
+  (let [cls (.getClass obj)]
+    (if (.isRecord cls)
+      (into {}
+            (map (fn [c] [(keyword (.getName c))
+                          (.invoke (.getAccessor c) obj (object-array 0))])
+                 (.getRecordComponents cls)))
+      (clojure.core/bean obj))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Bean dependency introspection
 

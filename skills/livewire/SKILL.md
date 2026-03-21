@@ -54,6 +54,21 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
 3. **Inspect the result** — note which fields were generated, what IDs were assigned, and which associations were resolved. This tells you exactly what setup code the test will need.
 
+   > ⚠️ **Check for narrow numeric types before prototyping.**
+   > `lw-build-test-recipe` returns values but not their Java types. Before writing the Clojure
+   > prototype, run `lw-inspect-entity` on each entity in the recipe and note any properties
+   > with `:type "short"`, `:type "byte"`, or `:type "float"`. Clojure integer literals are
+   > `Long` by default — passing them to a setter that expects `Short` throws
+   > `ClassCastException` at runtime. Cast explicitly: `(short 1924)`, `(short 5)`, etc.
+   >
+   > ```bash
+   > # Quick: grep for narrow types across all entities involved in the recipe
+   > clj-nrepl-eval -p 7888 "(->> (map intro/inspect-entity [\"Review\" \"Book\" \"Author\" \"LibraryMember\"])
+   >                               (mapcat :properties)
+   >                               (filter #(#{\"short\" \"byte\" \"float\"} (:type %)))
+   >                               (mapv #(select-keys % [:name :type])))"
+   > ```
+
 4. **Adjust with overrides** if specific field values matter for your test assertions:
    ```bash
    lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true :overrides {:rating 5 :comment "Outstanding"}}'
@@ -1237,6 +1252,29 @@ clj-nrepl-eval -p 7888 "(hq/reset-all!)"
 
 Use the dedicated wrapper scripts (`lw-sql`, `lw-jpa-query`, `lw-call-endpoint`, etc.)
 for their named operations. For everything else, go straight to `clj-nrepl-eval`.
+
+### Wrapper script string arguments inherit the same shell hazards — avoid `!` in string values
+
+All wrapper scripts (`lw-build-entity`, `lw-build-test-recipe`, `lw-call-endpoint`, etc.) pass
+their arguments through the shell. **Any `!` inside a string literal in an EDN opts map will be
+treated as a zsh history expansion**, causing it to be mangled before Clojure ever sees it.
+
+This applies to `:overrides` comment strings or any other string value — not just Clojure symbol
+names:
+
+```bash
+# ❌ ! in string value triggers zsh history expansion
+lw-build-test-recipe Review '{:overrides {:comment "Absolutely wonderful!"}}'
+# Error: Unsupported escape character: \!
+
+# ✅ simply avoid ! in string values passed via wrapper scripts
+lw-build-test-recipe Review '{:overrides {:comment "Absolutely wonderful"}}'
+
+# ✅ or use clj-nrepl-eval directly with a double-quoted outer string
+clj-nrepl-eval -p 7888 "(faker/build-test-recipe \"Review\" {:overrides {:comment \"Absolutely wonderful!\"}})"
+```
+
+**Rule: when an override string needs `!`, switch to `clj-nrepl-eval` directly.**
 
 ### `intro/list-entities` uses `:name` and `:class`, not `:simple-name`
 The docstring mentions "simple name + FQN" but the actual map keys are `:name` and `:class`.

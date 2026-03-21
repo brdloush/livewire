@@ -7,6 +7,61 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.0] — 2026-03-21
+
+### Added
+
+- **`faker/build-entity`** — builds valid, optionally-persistable Hibernate entity instances
+  using realistic fake data from `net.datafaker`. Supports `:overrides`, `:auto-deps?`
+  (recursive `@ManyToOne` resolution), `:persist?`, and `:rollback?`. All datafaker access
+  is reflective — the namespace loads safely on apps without datafaker on the classpath.
+  Heuristic table covers common field names (`firstName`, `email`, `username`, `isbn`,
+  `*Year`, `*At`/`*Since`/`*Date`/`*Time` timestamps) and type fallbacks including
+  `String`, `int`/`long`/`short`, `BigDecimal`/`Double`/`Float`, `boolean`, `UUID`,
+  `LocalDate`, and `LocalDateTime`.
+- **`faker/available?`** — lightweight preflight check for `net.datafaker.Faker` on the classpath.
+- **`faker/build-test-recipe`** — builds the full entity graph and extracts all scalar field
+  values into an ordered map keyed by entity class name (root entity first, `@ManyToOne`
+  dependencies after). Use before writing integration test setup code so test values flow
+  directly from the validated REPL prototype rather than being invented.
+- **`lw-build-entity`** and **`lw-build-test-recipe`** CLI wrapper scripts.
+- **`lw/bean->map`** — converts any Java object to a Clojure map, handling both regular
+  JavaBeans and Java records (Java 16+). `clojure.core/bean` silently returns `{}` for
+  records because it only scans `getX()` accessors; `bean->map` uses
+  `Class.getRecordComponents()` for records and falls back to `clojure.core/bean` otherwise.
+- **`intro/inspect-entity`** and **`intro/inspect-all-entities`** now include `@Column` and
+  `@ManyToOne` annotation metadata per property: `:nullable`, `:length`, `:unique`, and
+  `:column-definition`. Read via reflection; walks the full class hierarchy including
+  `@MappedSuperclass`. Field annotations are tried first, getter annotations as fallback.
+- **`faker` alias** pre-wired in the `user` namespace at nREPL startup alongside the existing
+  `lw`, `q`, `intro`, `trace`, `qw`, `hq`, `jpa`, `mvc` aliases.
+
+### Fixed
+
+- **`faker/build-entity` lookup-table heuristic** — `LibraryMember` and similar domain
+  entities were incorrectly classified as reference/lookup tables (like `Genre`) because
+  they have unique string columns but no required `@ManyToOne` associations. Added a third
+  condition: the entity must have no `@OneToMany` / `@ManyToMany` collections. Domain
+  entities own collections; static lookup tables do not.
+- **`faker/build-entity` empty lookup-table** — when a dependency is correctly classified as
+  a lookup table but the table is empty (no seed data), the previous behaviour silently
+  passed `null` to a non-nullable FK → cryptic Hibernate `PropertyValueException` far from
+  the root cause. Now throws a descriptive `ex-info` naming the entity, the dep field, and
+  three concrete escape hatches.
+- **`faker/build-entity` override coercion** — `:overrides` values were passed to `.invoke`
+  without type coercion, causing `IllegalArgumentException` when a plain Clojure `int` was
+  supplied for a `Short` setter (e.g. `{:rating 5}`). `coerce-value` is now applied to
+  override values, matching the behaviour of heuristic-generated values.
+- **`entity_serialize/entity->map`** — replaced `clojure.core/bean` with `core/bean->map`
+  so DTO records returned by JPQL constructor expressions or service methods serialize as
+  proper Clojure maps instead of `{}` or string representations.
+
+### Changed
+
+- Startup log message updated to include `faker` in the alias list.
+
+---
+
 ## [0.7.0] — 2026-03-19
 
 ### Added

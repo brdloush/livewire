@@ -77,6 +77,11 @@
         (= tname "long")                            (long value)
         (= tname "java.lang.Boolean")               (boolean value)
         (= tname "boolean")                         (boolean value)
+        (= tname "java.math.BigDecimal")            (bigdec value)
+        (= tname "java.lang.Float")                 (float value)
+        (= tname "float")                           (float value)
+        (= tname "java.lang.Double")                (double value)
+        (= tname "double")                          (double value)
         (and (instance? java.util.Date value)
              (= tname "java.time.LocalDateTime"))
         (LocalDateTime/ofInstant (.toInstant ^java.util.Date value)
@@ -108,11 +113,14 @@
    ;; Suffix / substring patterns
    ["[Yy]ear$"     nil                    :year]
    ["[Cc]opies$"   nil                    :copies]
-   ["(At|Since)$"  nil                    :past-date]
+   ["(At|Since|Date|Time)$" nil           :past-date]
+   ["uuid"         nil                    :uuid]
    ;; Type-only fallbacks (nil name pattern = match any name)
    [nil            "string"               :lorem-word]
    [nil            "int|long|short|.*[Ii]nteger|.*[Ll]ong|.*[Ss]hort" :number]
-   [nil            "boolean|.*[Bb]oolean" :bool]])
+   [nil            ".*[Dd]ouble|.*[Ff]loat|.*[Bb]ig[Dd]ecimal" :decimal]
+   [nil            "boolean|.*[Bb]oolean" :bool]
+   [nil            ".*UUID"               :uuid]])
 
 (defn- generate-value
   "Selects a faker generator from heuristic-table and produces a value."
@@ -141,6 +149,8 @@
       :past-date   (past-fn)
       :lorem-word  (.word (.lorem faker))
       :number      (number-fn 1 1000)
+      :decimal     (.randomDouble (.number faker) (int 2) (long 1) (long 10000))
+      :uuid        (java.util.UUID/randomUUID)
       :bool        false
       nil)))
 

@@ -5,7 +5,7 @@ Each entry should carry enough context for a fresh agent to resume without askin
 
 ---
 
-_Last updated: 2026-03-20_
+_Last updated: 2026-03-21_
 
 ## 🚧 In Progress
 
@@ -74,6 +74,32 @@ the follow-up fix below.
 ---
 
 ## 💡 Ideas (not yet spec'd)
+
+### `faker` namespace — study PHP Faker's field-name guesser for heuristic inspiration
+
+**Context:** While researching whether net.datafaker has a built-in "guess generator by
+field name" feature (it doesn't), we discovered that the **PHP Faker** library does:
+its `Populator` uses name and column-type guessers — a column named `first_name` gets
+`firstName`, a `TIMESTAMP` column gets `dateTime`, etc. The Java ecosystem has no equivalent;
+our heuristic table in `faker.clj` fills this gap.
+
+**Why it's worth studying:** PHP Faker's guesser has been battle-tested across many real-world
+domains. Studying its guesser rules (field name → provider mappings) could reveal patterns
+and field names we haven't covered yet — particularly for financial, healthcare, address,
+or e-commerce domains.
+
+**Reference:**
+- PHP Faker Populator: https://github.com/fzaninotto/Faker (archived — see `src/Faker/ORM/*/Populator.php`)
+- The guesser logic: column names like `first_name`, `email`, `phone_number`, `address`,
+  `city`, `country`, `zip_code`, `company`, `website`, `description`, `created_at`, etc.
+  each map to a specific Faker formatter. Type-based fallbacks handle `TIMESTAMP`, `INTEGER`,
+  `FLOAT`, `BOOLEAN`, `TEXT` etc.
+
+**What to do:** read through the guesser source, extract the name→provider mappings, and
+consider which ones are missing from our `heuristic-table` in `faker.clj`. File a spec if
+a meaningful expansion is warranted.
+
+---
 
 ### ~~`core` namespace — `@Transactional` boundary introspection~~
 

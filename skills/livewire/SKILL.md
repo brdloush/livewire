@@ -157,6 +157,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
+| `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map — use as seed for test setup code and assertions |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
 
 > ⚠️ **Prefer `clj-nrepl-eval -p <port>` over `lw-eval` for arbitrary expressions.**
@@ -1118,6 +1119,68 @@ lw-build-entity Book '{:auto-deps? true}'
 
 # Build a Review, persist + rollback (speculative — nothing left in DB)
 lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true}'
+```
+
+---
+
+### `faker/build-test-recipe` — extract assertable values from a faker entity graph
+
+**Problem it solves:** after prototyping with `faker/build-entity`, the generated values
+(names, ratings, ISBNs, dates) are transient. Without capturing them, you have to *invent*
+equivalent values when writing the Java test — severing the connection between the validated
+prototype and the written test. `build-test-recipe` captures them for you.
+
+**Always run `lw-build-test-recipe` before writing any integration test setup code.**
+Read the output and use those exact values in `@BeforeEach` and assertions.
+
+```clojure
+(faker/build-test-recipe entity-name)
+(faker/build-test-recipe entity-name opts)   ;; opts: :overrides only (auto-deps/persist/rollback are always true)
+```
+
+The entity graph is always built with `:auto-deps? true :persist? true :rollback? true` —
+nothing is left in the database.
+
+**Output format:** ordered map keyed by entity class name (root entity first, `@ManyToOne`
+deps after in resolution order). Each value is a map of scalar fields only — strings, numbers,
+booleans, dates. `@Id` and collection properties are excluded. `null` values are included.
+
+```clojure
+(faker/build-test-recipe "Review")
+;; => {:Review  {:rating 5
+;;               :comment "A remarkable journey through the highs and lows of modern life."
+;;               :reviewedAt #object[LocalDateTime "2024-07-14T11:23:05"]}
+;;     :Book    {:title "The Midnight Crisis" :isbn "978-3-16-148410-0"
+;;               :publishedYear 1998 :availableCopies 3 :archived false}
+;;     :Author  {:firstName "Kip" :lastName "O'Reilly" :birthYear 1951 :nationality "American"}
+;;     :LibraryMember {:username "kelsey.schaden" :fullName "Kelsey Schaden"
+;;                     :email "kelsey.schaden@example.com"
+;;                     :memberSince #object[LocalDate "2019-03-22"]}}
+```
+
+**Workflow:**
+
+1. Run `lw-build-test-recipe Review` — note all the values.
+2. Write `@BeforeEach` using those exact values:
+   `member.setFullName("Kelsey Schaden")`, `review.setRating((short) 5)`, etc.
+3. Write assertions using the same values:
+   `assertThat(dto.reviewerName()).isEqualTo("Kelsey Schaden")`
+4. Run the Clojure service prototype (`lw-build-entity` + REPL call) to validate the happy path.
+5. Only then write the final Java test.
+
+**Overrides flow through to the recipe:**
+
+```clojure
+;; Specific values for assertions — they appear in the output as supplied
+(faker/build-test-recipe "Review" {:overrides {:rating 1 :comment "Terrible."}})
+;; => {:Review {:rating 1, :comment "Terrible.", ...} ...}
+```
+
+**CLI:**
+
+```bash
+lw-build-test-recipe Review
+lw-build-test-recipe Review '{:overrides {:rating 1 :comment "Terrible."}}'
 ```
 
 ---

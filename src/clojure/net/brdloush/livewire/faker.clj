@@ -285,12 +285,16 @@
               ;; Optional association: skip (caller can provide via :overrides)
               :else nil))))
 
-      ;; Apply overrides (always wins)
+      ;; Apply overrides (always wins). Coerce to the setter's parameter type so
+      ;; callers can pass plain Clojure longs/ints (e.g. {:rating 5}) without
+      ;; needing to box them manually (e.g. (short 5)).
       (doseq [[k v] overrides]
         (let [pname  (name k)
               setter (find-setter cls pname)]
           (when setter
-            (.invoke setter instance (object-array [v])))))
+            (let [param-type (first (.getParameterTypes setter))
+                  coerced    (coerce-value v param-type)]
+              (.invoke setter instance (object-array [coerced]))))))
 
       ;; Persist this instance if an EntityManager was provided.
       ;; Dependencies are persisted first (above), so the insert order is correct.
@@ -356,3 +360,81 @@
 
        :else
        (build-entity-internal entity-name opts #{} nil)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Test recipe extraction
+
+(defn- extract-scalars
+  "Extracts scalar field values from entity-name/instance into a map of keyword → value.
+   Excludes the @Id field and all association properties."
+  [entity-name instance]
+  (let [entity-meta  (intro/inspect-entity entity-name)
+        id-prop      (-> entity-meta :identifier :name)
+        scalar-props (->> (:properties entity-meta)
+                          (remove #(= (:name %) id-prop))
+                          (remove :is-association))
+        b            (core/bean->map instance)]
+    (into {} (map (fn [p] [(keyword (:name p)) (get b (keyword (:name p)))])
+                  scalar-props))))
+
+(defn- collect-recipe
+  "Recursively walks the entity instance graph, collecting scalar fields per entity.
+   Returns an ordered vector of [keyword-entity-name scalars-map] pairs.
+   Root entity is first; @ManyToOne dependencies follow in resolution order.
+   Each entity is visited at most once (seen guards cycles)."
+  [entity-name instance seen acc]
+  (if (contains? seen entity-name)
+    acc
+    (let [entity-meta (intro/inspect-entity entity-name)
+          m2o-props   (->> (:properties entity-meta)
+                           (filter #(and (:is-association %)
+                                         (not (:collection %)))))
+          b           (core/bean->map instance)
+          acc         (conj acc [(keyword entity-name) (extract-scalars entity-name instance)])]
+      (reduce (fn [acc p]
+                (let [dep-val  (get b (keyword (:name p)))
+                      dep-name (when-let [t (:target-entity p)]
+                                 (last (str/split t #"\.")))]
+                  (if (and dep-val dep-name)
+                    (collect-recipe dep-name dep-val (conj seen entity-name) acc)
+                    acc)))
+              acc
+              m2o-props))))
+
+(defn build-test-recipe
+  "Builds a faker entity graph (`:auto-deps? true :persist? true :rollback? true`) and
+   extracts all scalar field values into an ordered map keyed by entity class name.
+
+   The root entity appears first; its `@ManyToOne` dependencies follow in resolution
+   order (deepest dependency last). Each entity's map contains only scalar fields —
+   strings, numbers, booleans, dates — with the `@Id` field excluded. Null values are
+   included: a null on a nullable field is itself useful information for assertions.
+
+   Use this to capture faker-generated values *before* writing test setup code, so
+   the test uses the same concrete values that were validated in the REPL prototype
+   rather than invented replacements.
+
+   Options (merged over defaults):
+     :overrides — applied to the root entity (see build-entity)
+
+   Examples:
+
+     ;; Full recipe for a Review with its entire dependency graph
+     (faker/build-test-recipe \"Review\")
+     ;; => {:Review  {:rating 5, :comment \"A remarkable journey...\", :reviewedAt ...}
+     ;;     :Book    {:title \"The Midnight Crisis\", :isbn \"978-...\", ...}
+     ;;     :Author  {:firstName \"Kip\", :lastName \"O'Reilly\", ...}
+     ;;     :LibraryMember {:username \"kelsey.schaden\", :fullName \"Kelsey Schaden\", ...}}
+
+     ;; With overrides — overridden values appear in the recipe as supplied
+     (faker/build-test-recipe \"Review\" {:overrides {:rating 1 :comment \"Terrible\"}})
+
+   CLI: lw-build-test-recipe Review
+        lw-build-test-recipe Review '{:overrides {:rating 1}}'"
+  ([entity-name]
+   (build-test-recipe entity-name {}))
+  ([entity-name opts]
+   (let [opts     (merge {:auto-deps? true :persist? true :rollback? true} opts)
+         instance (build-entity entity-name opts)
+         pairs    (collect-recipe entity-name instance #{} [])]
+     (into (array-map) pairs))))

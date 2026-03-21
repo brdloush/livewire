@@ -148,30 +148,50 @@
 ;;; Lookup-table detection
 
 (defn- lookup-table?
-  "Returns true if entity-name looks like a reference/lookup table:
-   it has at least one unique string column and no required (@ManyToOne optional=false)
-   associations. Such entities are typically seeded by migrations — auto-creating them
-   would violate unique constraints."
+  "Returns true if entity-name looks like a reference/lookup table that should be
+   fetched from existing rows rather than created fresh.
+
+   All three conditions must hold:
+   1. Has at least one unique=true string column (e.g. Genre.name)
+   2. Has no required @ManyToOne associations (optional=false)
+   3. Has NO @OneToMany / @ManyToMany collections
+
+   The third condition is the key guard: domain entities like LibraryMember have
+   unique columns (username, email) but also own collections (reviews, loanRecords)
+   — they must be built fresh, not fetched from reference data."
   [entity-name]
   (let [props (:properties (intro/inspect-entity entity-name))]
     (and (some #(and (= "string" (:type %)) (true? (:unique %))) props)
          (not (some #(and (:is-association %)
                           (not (:collection %))
                           (false? (:nullable %)))
-                    props)))))
+                    props))
+         (not (some :collection props)))))
 
 (defn- fetch-existing-row
   "Fetches a random existing row from the repository for entity-name.
    Repository bean is located by convention: 'Genre' → 'genreRepository'.
-   Returns nil if no repository is found or if the table is empty."
-  [entity-name]
+   Throws a descriptive ex-info if the table is empty — a null silently passed
+   to a non-nullable FK produces a cryptic Hibernate error far from the cause."
+  [entity-name dep-field-name]
   (let [repo-name (str (str/lower-case (subs entity-name 0 1))
                        (subs entity-name 1)
                        "Repository")
-        repo      (try (core/bean repo-name) (catch Exception _ nil))]
-    (when repo
-      (core/in-readonly-tx
-        (first (shuffle (.findAll repo)))))))
+        repo      (try (core/bean repo-name) (catch Exception _ nil))
+        row       (when repo
+                    (core/in-readonly-tx
+                      (first (shuffle (.findAll repo)))))]
+    (when (and repo (nil? row))
+      (throw (ex-info
+               (str "faker/build-entity: dependency '" dep-field-name "' (→ " entity-name
+                    ") was detected as a lookup table, but the table is empty.\n"
+                    "Options:\n"
+                    "  • seed the " entity-name " table before calling build-entity\n"
+                    "  • pass an existing instance via :overrides {:" dep-field-name " <instance>}\n"
+                    "  • pass a freshly-built one via :overrides {:" dep-field-name
+                    " (faker/build-entity \"" entity-name "\" {:persist? true})}")
+               {:entity entity-name :dep-field dep-field-name :cause :lookup-table-empty})))
+    row))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Transaction wrapper
@@ -242,7 +262,7 @@
               ;; Required association (nullable=false) and auto-deps? -> resolve it
               (and auto-deps? (false? (:nullable p)))
               (let [dep (if (lookup-table? target-name)
-                          (fetch-existing-row target-name)
+                          (fetch-existing-row target-name pname)
                           (do
                             (when (contains? seen target-name)
                               (throw (ex-info

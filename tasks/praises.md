@@ -114,6 +114,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   The praise signals that rigorous upfront investigation, even when it takes more turns, is
   more valued here than fast-but-fragile guessing.
 
+- 2026-03-20: "Very good logical thinking. PERFECT!" — for inferring that spec/06-lookup-table-heuristic-refinement.md
+  was written during the exact test session that surfaced the bug, and reading it before proposing
+  any solution rather than jumping straight to a fix.
+
+  *Why I think this was praised:* The spec file existed in the repo but hadn't been mentioned.
+  Instead of either ignoring it or asking "should I read spec 06?", I noticed the filename matched
+  the bug being discussed, made the logical connection that it came from the failing session, and
+  read it immediately — discovering it contained a precise, already-validated proposal. Reading
+  available context before generating one's own solution is exactly what avoids re-inventing the
+  wheel or contradicting prior thinking.
+
 - 2026-03-20: "A-MA-ZING. Love your analytical thinking." — for reading spec/05-smart-bean.md,
   immediately understanding the problem and solution, and producing a clear 3-task plan with
   a precise call-out that the faker result-handling site is a documentation problem rather

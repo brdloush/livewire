@@ -36,7 +36,11 @@ existing read-side tracing story. Worth documenting in SKILL.md if confirmed.
 
 ---
 
-### faker support — Phase 0: extend `introspect` with `@Column` annotation metadata
+### ~~faker support — Phase 0: extend `introspect` with `@Column` annotation metadata~~
+
+✅ Done — `:nullable`, `:length`, `:unique`, `:column-definition` added to `inspect-entity` via reflection. Committed in `711c1f5`.
+
+<!--
 
 **Context:** The Hibernate runtime metamodel does not expose `nullable`, `length`, `unique`, or
 `columnDefinition`. These are needed by the faker heuristic generator to produce valid entities
@@ -57,58 +61,15 @@ without hitting DB constraint violations. This is a prerequisite for Phase 1.
 
 **Spec:** `specs/04-faker-support.md` § Phase 0
 
----
-
-### faker support — Phase 1: `net.brdloush.livewire.faker` namespace + `faker/build-entity`
-
-**Blocked by:** Phase 0 above (needs enriched `inspect-entity` output).
-
-**Context:** Core deliverable. A REPL function that constructs valid, optionally-persistable
-entity instances using datafaker heuristics. All datafaker access must be reflective — no
-`:import` of `net.datafaker` classes in the `ns` form (would break REPL startup on apps
-without the lib). See spec for full heuristic table, skip rules, and execution flow.
-
-**What to do:**
-1. Create `src/clojure/net/brdloush/livewire/faker.clj` with:
-   - `(faker/available?)` — lightweight `Class/forName` check; call this first in any agent workflow.
-   - `(faker/build-entity entity-name)` / `(faker/build-entity entity-name opts)`.
-   - Options: `:overrides` (always wins), `:auto-deps?` (recursive `@ManyToOne` resolution),
-     `:persist?` (via `EntityManager`), `:rollback?` (wraps in a tx that always rolls back).
-   - Internal: `make-faker`, `entity-class`, `find-setter`, heuristic-table `def`, `seen`-set
-     cycle guard, lookup-table detection (unique string col + no required FKs → fetch random row).
-   - Length clamping: truncate generated strings to `@Column(length=…)` if available.
-   - Skip rules: `@Id`, `@OneToMany`/`@ManyToMany` collections, properties in `:overrides`.
-2. Register `faker` alias in `boot.clj` auto-alias list.
-
-**Acceptance criteria:**
-- `(faker/build-entity "Author")` → `Author` instance with all string fields non-nil/non-blank.
-- `(faker/build-entity "Book" {:auto-deps? true :persist? true :rollback? true})` → `Book` with non-nil `id`, DB rolled back cleanly.
-- `(faker/build-entity "Review" {:auto-deps? true :persist? true :rollback? true})` → end-to-end, wires `Book` → `Author` and `LibraryMember` transitively.
-- `:overrides` always takes precedence.
-- `(faker/build-entity "Book")` without `:auto-deps?` and without `:author` override → descriptive error naming the missing association.
-- `Genre` (lookup table) is fetched from DB, never created new.
-
-**Spec:** `specs/04-faker-support.md` § Phase 1
+-->
 
 ---
 
-### faker support — Phase 1 deliverables: wrapper script, SKILL.md, README.md, web pages
+### ~~faker support — Phase 1: `net.brdloush.livewire.faker` + deliverables~~
 
-**Blocked by:** Phase 1 implementation above.
-
-**Context:** Per `AGENTS.md` feature delivery checklist. Covers items 2–6 from the spec's
-deliverables table.
-
-**What to do:**
-1. **Wrapper script** — `skills/livewire/bin/lw-build-entity`: accepts an entity name (and
-   optional EDN opts map) as CLI args, prints the built entity as a pretty-printed map.
-2. **SKILL.md** — new `faker/…` section: show `build-entity` with and without `:auto-deps?`,
-   show the speculative rollback pattern, note `(faker/available?)` as recommended preflight.
-3. **README.md** — extend "What you can do" with one paragraph + code snippet for `faker/build-entity`.
-4. **`web/getting-started.html`** — add "try this prompt" card: _"Build me a test Review and call the rating service with it"_.
-5. **`web/index.html`** — add a "Test data generation" feature card.
-
-**Spec:** `specs/04-faker-support.md` § 1.9 deliverables checklist
+✅ Done — `faker/build-entity`, `faker/available?`, `lw-build-entity` wrapper, SKILL.md section,
+README.md, web pages all shipped in `711c1f5` + `e0c4c65`. Lookup-table heuristic refined in
+the follow-up fix below.
 
 ---
 

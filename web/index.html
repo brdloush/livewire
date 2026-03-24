@@ -249,6 +249,18 @@
       </div>
 
       <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>HTTP Endpoint Introspection</h3>
+        <p>Discover every registered route with its auth requirements, parameter sources, and required/optional flags — all from the live <code>RequestMappingHandlerMapping</code>. Resolved <code>:required-roles</code> and <code>:required-authorities</code> let you construct a <code>lw/run-as</code> call mechanically, without parsing the raw SpEL string.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">intro/list-endpoints</span><span class="p">)</span>
+<span class="r">;; => [{:paths ["/api/books/{id}"], :methods ["GET"],
+;;      :required-roles ["MEMBER"],
+;;      :parameters [{:source :path, :required true,
+;;                    :type "java.lang.Long"}]}
+;;     ...]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
         <div class="feature-icon">👁️</div>
         <h3>Query Watcher — Auto-apply on Recompile</h3>
         <p>Livewire watches your compiled output directory and automatically applies any changed <code>@Query</code> JPQL to the live JVM within 500 ms of a recompile — no REPL call needed. <strong>Last one wins:</strong> a recompile overrides a REPL swap, and a new REPL swap overrides the last recompile.</p>

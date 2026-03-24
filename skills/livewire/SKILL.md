@@ -455,7 +455,7 @@ the plain string form will fail with `AuthorizationDeniedException` — not
 
 | Expression | What it returns |
 |---|---|
-| `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, params, `:pre-authorize`) |
+| `(intro/list-endpoints)` | All registered HTTP endpoints (path, method, controller, handler, enriched params, `:pre-authorize`, `:required-roles`, `:required-authorities`) |
 | `(intro/list-entities)` | All Hibernate-managed entities — simple name, FQN, and DB table name |
 | `(intro/inspect-entity "Name")` | Table name, columns, and relations for one entity |
 | `(intro/inspect-all-entities)` | Table name, columns, and relations for **all** entities in one call |
@@ -475,6 +475,16 @@ overrides, join tables, and relation types, without needing to know the DB diale
 - Entity name (`:name`)
 - Fully-qualified class name (`:class`)
 - DB table name (`:table-name`) — included directly in `list-entities` output, no extra calls needed
+
+**Cap large entity listings at 25 rows.** If `intro/list-entities` returns more than 25 entities,
+render only the first 25 in the markdown table and append a note such as:
+
+> Showing 25 of 42 entities. Ask for more if you need the full list.
+
+Do **not** silently truncate — always state both the number shown and the total. The user can then
+ask for the rest, or narrow the listing with a filter (e.g. `(filter #(re-find #"Order" %) ...)`).
+This cap applies to the rendered table only; the full result is already in memory and no extra REPL
+call is needed to retrieve the remainder.
 
 ```clojure
 ;; ✅ preferred: list all entities, then inspect one
@@ -497,6 +507,24 @@ sequences) that are outside Hibernate's metamodel.
 
 ### Calling controller methods from the REPL
 
+#### Read the source method body before fetching sample data
+
+**Before querying for sample IDs or constructing any call, read the method implementation.**
+
+A parameter named `memberId: UUID` does not necessarily map to `LibraryMember.id`. It might be a
+legacy system ID, an external reference, or a UID from a related entity (e.g. `member.externalRef`).
+The method body always reveals the actual lookup — e.g. `findByExternalRef(memberId)` immediately
+signals that the parameter is *not* the JPA primary key.
+
+**Mandatory sequence:**
+1. List method signatures (to learn parameter types and names)
+2. **Read the source** — find what lookup the method performs for each parameter
+3. Only then write a JPQL query targeting the correct field/entity
+4. Call the method with valid IDs
+
+Skipping step 2 leads to calling with wrong IDs, misreading empty results, and unnecessary
+round-trips.
+
 #### ⚠️ Never invoke mutating endpoints without explicit user instruction
 
 Only call controller methods that correspond to **read-only (`GET`) endpoints** on your own
@@ -516,20 +544,40 @@ If one is present, **always wrap the call in `lw/run-as`** — without it the RE
 `SecurityContext` and Spring Security throws `AuthenticationCredentialsNotFoundException`.
 
 ```clojure
-;; Discover what auth an endpoint requires
+;; Discover what auth an endpoint requires and build the run-as vector mechanically
 (->> (intro/list-endpoints)
      (filter #(re-find #"books" (str (:paths %))))
-     (mapv #(select-keys % [:paths :handler-method :pre-authorize])))
-;; => [{:paths ["/api/books"], :handler-method "getBooks", :pre-authorize "hasRole('MEMBER')"}
+     (mapv #(select-keys % [:paths :handler-method :pre-authorize :required-roles :required-authorities])))
+;; => [{:paths ["/api/books"], :handler-method "getBooks",
+;;      :pre-authorize "hasRole('MEMBER')", :required-roles ["MEMBER"]}
 ;;     ...]
 
-;; Call it with the appropriate role
-(lw/run-as "member1"
+;; Call it using :required-roles directly — no manual SpEL parsing needed
+(lw/run-as ["ROLE_MEMBER"]
   (.getBooks (lw/bean "bookController")))
 ```
 
 `:pre-authorize` reflects both method-level and class-level `@PreAuthorize` annotations —
 so it's always populated when security is in play, regardless of where the annotation lives.
+
+`:required-roles` and `:required-authorities` are parsed from the SpEL expression and let
+you construct the `lw/run-as` vector mechanically without reading the raw string.
+They handle `hasRole`, `hasAnyRole`, `hasAuthority`, and `hasAnyAuthority`.
+If the expression uses none of these patterns (e.g. custom SpEL), the keys are absent
+and you must fall back to reading `:pre-authorize` directly.
+
+Each parameter map in `:parameters` now includes:
+- `:source` — `:path` | `:query` | `:body` | `:header` | `:unknown`
+- `:required` — `true` / `false` (nil for `:unknown`)
+- `:default-value` — present only for `:query` / `:header` params that declare a default
+
+```clojure
+;; Inspect a single endpoint's parameters — source, required, default-value
+(->> (intro/list-endpoints)
+     (filter #(= "/api/books/{id}" (first (:paths %))))
+     (mapv :parameters))
+;; => [[{:name nil, :type "java.lang.Long", :source :path, :required true}]]
+```
 
 **When presenting `list-endpoints` results to the user, always include these fields for each endpoint:**
 - HTTP method(s) (`:methods`)
@@ -537,6 +585,8 @@ so it's always populated when security is in play, regardless of where the annot
 - Controller class name (`:controller`)
 - Handler method name (`:handler-method`)
 - Required role / `@PreAuthorize` expression (`:pre-authorize`, or "none" if absent)
+- `:required-roles` / `:required-authorities` when present (use these to construct `lw/run-as`)
+- For each parameter: `:name`, `:type`, `:source`, `:required`, and `:default-value` when present
 
 #### CLI shortcut: `lw-call-endpoint`
 
@@ -895,23 +945,92 @@ Wrap it in `select-keys` to avoid triggering lazy associations you don't need.
 
 ## ⚠️ Important Rules
 
-### Always limit SQL queries when fetching sample data or IDs
-Tables in a live app can contain millions of rows. **Always add a `TOP` / `LIMIT` / `FETCH FIRST`
-clause** when querying for sample data, example IDs, or exploratory results. The default cap is
-**20 rows**.
+### Always use JPQL (`lw-jpa-query`) for data queries — raw SQL is the last resort
+
+**Default to `lw-jpa-query` for any query that fetches application data** — even simple things
+like "get me some sample IDs". Raw `lw-sql` / `q/sql` is reserved for:
+- DB-level metadata: indexes, constraints, `information_schema` columns
+- DDL statements (`CREATE INDEX`, `ALTER TABLE`)
+- Queries involving tables with no Hibernate entity mapping
+
+If you find yourself reaching for `lw-sql` to fetch entity data, stop and write JPQL instead.
+
+```bash
+# ❌ raw SQL for entity data — wrong default
+lw-sql "SELECT TOP 5 id FROM dbo.loan_record"
+
+# ✅ JPQL — no schema prefix needed, uses entity property names, auto-paginated
+lw-jpa-query 'SELECT lr.id FROM LoanRecord lr' 0 5
+```
+
+This rule applies even when the query seems trivially simple. JPQL never requires knowing
+the schema prefix, never uses DB column names, and integrates naturally with
+`lw-inspect-entity` output.
+
+---
+
+### Always inspect entities before writing any SQL or JPQL query
+
+**Never guess table names, column names, or join paths.** The Livewire introspection API gives you exact mappings in one call — use it every time before writing a query, no matter how obvious the schema seems.
+
+**Workflow — mandatory before every query:**
+
+1. **Find the entity name** — if you don't know it yet, list all entities and grep:
+   ```bash
+   lw-list-entities   # then grep for keywords
+   ```
+
+2. **Inspect the entity (and any entity you want to join to)**:
+   ```bash
+   lw-inspect-entity Book
+   lw-inspect-entity Author   # if you need to join
+   ```
+   Check `:table-name`, `:columns`, and `:relations` (`:type`, `:target-entity`, join columns). This tells you:
+   - The exact table and column names for raw SQL
+   - The JPQL property path for JPA queries (`b.author.lastName`, not `author_id`)
+   - Which side owns the FK and what the join column is
+
+3. **Write JPQL, not raw SQL** — see the "Always use JPQL" rule above. JPQL uses entity property names, handles schema-qualified table names automatically, and composes joins via the object graph. The entity inspection above gives you everything you need to write it correctly.
+
+4. **Only then write the query.**
+
+```clojure
+;; ❌ guessing — likely to fail with wrong table name, schema, or column
+(lw/in-readonly-tx (q/sql "SELECT id FROM loan_record WHERE returned = 1"))
+
+;; ✅ inspect first
+;; lw-inspect-entity LoanRecord  →  table "loan_record", no "returned" column — it's "return_date"
+;; lw-inspect-entity LoanRecord  →  relation: member → LibraryMember, join column member_id, property "member"
+;; Then write JPQL using the discovered property path:
+(jpa/jpa-query "SELECT lr.id, lr.member.id FROM LoanRecord lr WHERE lr.returnDate IS NULL" :page 0 :page-size 10)
+```
+
+---
+
+### Always limit queries when fetching sample data or IDs
+Tables in a live app can contain millions of rows. **Always cap results** when querying for
+sample data, example IDs, or exploratory results. The default cap is **20 rows**.
+
+Prefer `lw-jpa-query` — it paginates automatically via its `page` / `page-size` arguments:
+
+```bash
+# ✅ JPQL — page 0, 5 results, no risk of runaway fetch
+lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 5
+```
+
+If you must use raw SQL (DB-level metadata, no entity mapping), add an explicit row limit:
 
 ```clojure
 ;; ❌ may return millions of rows and hang the REPL
 (lw/in-readonly-tx (q/sql "SELECT id FROM book"))
 
-;; ✅ safe — cap at 20 (PostgreSQL / most dialects)
-(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 20"))
-
-;; ✅ also fine with FETCH FIRST (SQL standard)
-(lw/in-readonly-tx (q/sql "SELECT id, title FROM book FETCH FIRST 20 ROWS ONLY"))
+;; ✅ cap explicitly for raw SQL
+(lw/in-readonly-tx (q/sql "SELECT TOP 20 id, title FROM book"))        ; MS SQL Server
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 20"))      ; PostgreSQL / MySQL
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book FETCH FIRST 20 ROWS ONLY"))  ; SQL standard
 ```
 
-Apply the same discipline to JPQL queries via `EntityManager` and to repository calls —
+Apply the same discipline to repository calls —
 if a method returns a `List`, confirm the table is small before calling it without a
 `Pageable` / `limit`.
 
@@ -1362,6 +1481,49 @@ clj-nrepl-eval -p 7888 "(lw/find-beans-matching \".*[Aa]dmin.*\")"
 # => ("adminController" ...)
 lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
 ```
+
+### `lw-call-endpoint` cannot pass UUID arguments — use `clj-nrepl-eval` directly
+
+`lw-call-endpoint` passes positional args through the shell as Clojure expressions. UUID strings
+like `c97f032f-8e52-4084-9716-1b4ac7295dcc` are **not valid Clojure literals** — they fail with
+"Unable to resolve symbol". Quoting them as strings doesn't help either, because the Java method
+expects `java.util.UUID`, not `String` — resulting in "No matching method taking N args".
+
+**Rule:** whenever a controller method takes a `UUID` parameter, drop to `clj-nrepl-eval` directly
+and wrap the ID string with `java.util.UUID/fromString`:
+
+```bash
+# ❌ bare UUID — treated as unresolvable Clojure symbol
+lw-call-endpoint myController myMethod ROLE_ADMIN c97f032f-8e52-4084-9716-1b4ac7295dcc
+
+# ❌ quoted string — Java method expects UUID, not String → "No matching method"
+lw-call-endpoint myController myMethod ROLE_ADMIN '"c97f032f-8e52-4084-9716-1b4ac7295dcc"'
+
+# ✅ clj-nrepl-eval with explicit UUID conversion
+clj-nrepl-eval -p 7888 "(lw/run-as [\"admin\" \"ROLE_ADMIN\"] (.myMethod (lw/bean \"myController\") (java.util.UUID/fromString \"c97f032f-8e52-4084-9716-1b4ac7295dcc\")))"
+```
+
+### `lw-call-endpoint` cannot handle optional (nullable) parameters
+
+`lw-call-endpoint` only accepts positional trailing args and has no syntax for passing `nil`.
+If the Java/Kotlin method has optional parameters (e.g. `consultantId: UUID?`), passing fewer
+args than the method arity causes "No matching method taking N args" — even when the remaining
+params are nullable.
+
+**Rule:** whenever a method has optional/nullable parameters, use `clj-nrepl-eval` and pass
+`nil` explicitly for each omitted optional arg:
+
+```bash
+# ❌ only 1 arg, but method has 2 params (second is nullable UUID) → "No matching method taking 1 args"
+lw-call-endpoint myController myMethod ROLE_ADMIN '"some-id"'
+
+# ✅ explicit nil for the optional second param
+clj-nrepl-eval -p 7888 "(lw/run-as [\"admin\" \"ROLE_ADMIN\"] (.myMethod (lw/bean \"myController\") (java.util.UUID/fromString \"c97f032f-8e52-4084-9716-1b4ac7295dcc\") nil))"
+```
+
+**Tip:** always read the controller method signature before calling — check parameter count and
+types. If any param is a `UUID` or nullable (`?` in Kotlin), reach for `clj-nrepl-eval` instead
+of `lw-call-endpoint`.
 
 ### `clojure.core/bean` silently returns `{}` for Java records
 

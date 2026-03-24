@@ -405,12 +405,16 @@ picks it up automatically — same result, no REPL call:
 ### 🧭 Introspect the app's structure
 
 ```clojure
-;; All HTTP endpoints with their auth requirements
+;; All HTTP endpoints — auth, param sources, and required/optional flags
 (->> (intro/list-endpoints)
      (filter #(re-find #"books" (str (:paths %))))
-     (mapv #(select-keys % [:paths :methods :handler-method :pre-authorize])))
+     (mapv #(select-keys % [:paths :methods :handler-method :pre-authorize :required-roles :parameters])))
 ;; => [{:paths ["/api/books"], :methods ["GET"],
-;;      :handler-method "getBooks", :pre-authorize "hasRole('MEMBER')"}]
+;;      :handler-method "getBooks", :pre-authorize "hasRole('MEMBER')",
+;;      :required-roles ["MEMBER"], :parameters []}
+;;     {:paths ["/api/books/{id}"], :methods ["GET"],
+;;      :handler-method "getBookById", :required-roles ["MEMBER"],
+;;      :parameters [{:name nil, :type "java.lang.Long", :source :path, :required true}]}]
 
 ;; All Hibernate-managed entities
 (map :name (intro/list-entities))

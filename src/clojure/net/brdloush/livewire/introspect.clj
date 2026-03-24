@@ -61,36 +61,113 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Endpoints
 
+(def ^:private pv-cls
+  (delay (Class/forName "org.springframework.web.bind.annotation.PathVariable")))
+(def ^:private rp-cls
+  (delay (Class/forName "org.springframework.web.bind.annotation.RequestParam")))
+(def ^:private rb-cls
+  (delay (Class/forName "org.springframework.web.bind.annotation.RequestBody")))
+(def ^:private rh-cls
+  (delay (Class/forName "org.springframework.web.bind.annotation.RequestHeader")))
+(def ^:private pa-cls
+  (delay (Class/forName "org.springframework.security.access.prepost.PreAuthorize")))
+(def ^:private default-none-sentinel
+  "The sentinel string Spring uses for @RequestParam/@RequestHeader defaultValue
+   when no default has been specified (ValueConstants/DEFAULT_NONE)."
+  (delay (.get (.getField (Class/forName "org.springframework.web.bind.annotation.ValueConstants")
+                          "DEFAULT_NONE")
+               nil)))
+
+(defn- param-source-info
+  "Returns a map with :source (:path/:query/:body/:header/:unknown), :required, and
+   optionally :default-value for a Spring MethodParameter."
+  [p]
+  (cond
+    (.hasParameterAnnotation p @pv-cls)
+    (let [ann (.getParameterAnnotation p @pv-cls)]
+      {:source :path :required (.required ann)})
+
+    (.hasParameterAnnotation p @rp-cls)
+    (let [ann (.getParameterAnnotation p @rp-cls)
+          dv  (.defaultValue ann)]
+      (merge {:source :query :required (.required ann)}
+             (when (not= dv @default-none-sentinel) {:default-value dv})))
+
+    (.hasParameterAnnotation p @rb-cls)
+    {:source :body :required (.required (.getParameterAnnotation p @rb-cls))}
+
+    (.hasParameterAnnotation p @rh-cls)
+    (let [ann (.getParameterAnnotation p @rh-cls)
+          dv  (.defaultValue ann)]
+      (merge {:source :header :required (.required ann)}
+             (when (not= dv @default-none-sentinel) {:default-value dv})))
+
+    :else {:source :unknown :required nil}))
+
+(defn- parse-pre-authorize
+  "Parses a @PreAuthorize SpEL string into resolved :required-roles and
+   :required-authorities vectors. Returns nil when spel-str is nil.
+   Returns an empty map when the expression uses none of the recognised patterns."
+  [spel-str]
+  (when spel-str
+    (let [roles-single (->> (re-seq #"hasRole\('([^']+)'\)" spel-str) (mapv second))
+          roles-any    (->> (re-seq #"hasAnyRole\(([^)]+)\)" spel-str)
+                            (mapcat #(re-seq #"'([^']+)'" (second %)))
+                            (mapv second))
+          auths-single (->> (re-seq #"hasAuthority\('([^']+)'\)" spel-str) (mapv second))
+          auths-any    (->> (re-seq #"hasAnyAuthority\(([^)]+)\)" spel-str)
+                            (mapcat #(re-seq #"'([^']+)'" (second %)))
+                            (mapv second))
+          roles (vec (distinct (concat roles-single roles-any)))
+          auths (vec (distinct (concat auths-single auths-any)))]
+      (cond-> {}
+        (seq roles) (assoc :required-roles roles)
+        (seq auths) (assoc :required-authorities auths)))))
+
 (defn list-endpoints
   "Introspects RequestMappingHandlerMapping.
    Returns a data structure of all HTTP endpoints: method, path, controller class,
-   handler method name, parameters, and produces/consumes media types."
+   handler method name, parameters, and produces/consumes media types.
+
+   Each parameter map includes:
+     :name          — parameter name (may be nil when debug info is absent)
+     :type          — fully-qualified type name
+     :source        — :path | :query | :body | :header | :unknown
+     :required      — true/false (nil for :unknown)
+     :default-value — (query/header only) present when a default has been declared
+
+   Each endpoint map may also include:
+     :required-roles        — vector of role strings parsed from @PreAuthorize hasRole/hasAnyRole
+     :required-authorities  — vector of authority strings parsed from @PreAuthorize hasAuthority/hasAnyAuthority"
   []
   (let [rmhm (core/bean "requestMappingHandlerMapping")
         handler-methods (.getHandlerMethods rmhm)]
     (for [[rmi hm] handler-methods]
-      (let [methods (seq (.getMethods (.getMethodsCondition rmi)))
-            paths (or (when-let [ppc (try (.getPathPatternsCondition rmi) (catch Exception _ nil))]
-                        (seq (.getPatterns ppc)))
-                      (when-let [pc (try (.getPatternsCondition rmi) (catch Exception _ nil))]
-                        (seq (.getPatterns pc))))
+      (let [methods  (seq (.getMethods (.getMethodsCondition rmi)))
+            paths    (or (when-let [ppc (try (.getPathPatternsCondition rmi) (catch Exception _ nil))]
+                           (seq (.getPatterns ppc)))
+                         (when-let [pc (try (.getPatternsCondition rmi) (catch Exception _ nil))]
+                           (seq (.getPatterns pc))))
             produces (seq (.getExpressions (.getProducesCondition rmi)))
             consumes (seq (.getExpressions (.getConsumesCondition rmi)))
-            m (.getMethod hm)]
-        {:methods (mapv str methods)
-         :paths (mapv str paths)
-         :produces (mapv str produces)
-         :consumes (mapv str consumes)
-         :controller (.getName (.getBeanType hm))
-         :handler-method (.getName m)
-         :pre-authorize (or (some-> (.getAnnotation m org.springframework.security.access.prepost.PreAuthorize) .value)
-                            (some-> (.getAnnotation (.getDeclaringClass m) org.springframework.security.access.prepost.PreAuthorize) .value))
-         :parameters (mapv (fn [p]
-                             {:name (.getParameterName p)
-                              :type (.getName (.getParameterType p))})
-                           (.getMethodParameters hm))}))))
-
-;;; ---------------------------------------------------------------------------
+            m        (.getMethod hm)
+            pa-str   (or (some-> (.getAnnotation m @pa-cls) .value)
+                         (some-> (.getAnnotation (.getDeclaringClass m) @pa-cls) .value))
+            auth-map (parse-pre-authorize pa-str)]
+        (merge
+          {:methods        (mapv str methods)
+           :paths          (mapv str paths)
+           :produces       (mapv str produces)
+           :consumes       (mapv str consumes)
+           :controller     (.getName (.getBeanType hm))
+           :handler-method (.getName m)
+           :pre-authorize  pa-str
+           :parameters     (mapv (fn [p]
+                                   (merge {:name (.getParameterName p)
+                                           :type (.getName (.getParameterType p))}
+                                          (param-source-info p)))
+                                 (.getMethodParameters hm))}
+          auth-map))))); ---------------------------------------------------------------------------
 ;;; Hibernate Metamodel — cross-compatibility helpers (must precede callers)
 
 (defn- safe-get-entity-persister [mm entity-name]

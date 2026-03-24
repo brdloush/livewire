@@ -513,11 +513,13 @@ mvn spring-boot:run \
               <span class="try-tag tag-explore">Explore</span>
               <div class="try-card-text">
                 <h4>Map all endpoints and their access rules</h4>
-                <code class="try-prompt">List all HTTP endpoints. Which ones require authentication, and what roles are needed?</code>
+                <code class="try-prompt">List all HTTP endpoints. For each one, show the required roles and what parameters it expects.</code>
                 <p>
                   <code>intro/list-endpoints</code> returns every route with its <code>@PreAuthorize</code>
-                  expression. Claude turns that into a readable table — useful before probing any
-                  secured controller.
+                  expression, plus resolved <code>:required-roles</code> / <code>:required-authorities</code>
+                  vectors so you can construct a <code>lw/run-as</code> call mechanically.
+                  Each parameter carries <code>:source</code> (<code>:path</code>, <code>:query</code>, <code>:body</code>, <code>:header</code>),
+                  <code>:required</code>, and <code>:default-value</code> when applicable.
                 </p>
               </div>
             </div>

@@ -425,7 +425,8 @@ picks it up automatically — same result, no REPL call:
 (intro/inspect-entity "Book")
 ;; => {:table-name "book",
 ;;     :identifier {:name "id", :columns ["id"], :type "long"},
-;;     :properties [{:name "title", :columns ["title"], :type "string", :is-association false} ...]}
+;;     :properties [{:name "title", :columns ["title"], :type "string", :is-association false,
+;;                   :constraints ["@NotBlank" "@Size(min=0,max=255)"]} ...]}
 
 ;; Full domain model in one call — great for ER diagrams
 (intro/inspect-all-entities)
@@ -511,9 +512,13 @@ so you can call services against a real, DB-assigned id without leaving any data
 ```
 
 Property values are selected by a heuristic table matched against name and type — `firstName`,
-`email`, `isbn`, `*Year` suffix, `*At`/`*Since` suffix for timestamps, etc. String values are
-clamped to `@Column(length=…)` constraints. Lookup tables (e.g. `Genre`) are fetched from the DB
-rather than created new to avoid unique-constraint violations.
+`email`, `isbn`, `*Year` suffix, `*At`/`*Since` suffix for timestamps, etc. `jakarta.validation.constraints`
+annotations are respected at generation time: `@Min`/`@Max` clamp numeric ranges, `@Size` clamps
+string length (taking the most restrictive of `@Size(max=…)` and `@Column(length=…)`), `@Email`
+ensures a valid email address, and `@Positive`/`@PositiveOrZero` force non-negative values. If you
+pass an override that violates `@NotNull`, `@NotBlank`, `@Min`, or `@Max`, `build-entity` throws
+immediately with a clear message — before any transaction is opened. Lookup tables (e.g. `Genre`)
+are fetched from the DB rather than created new to avoid unique-constraint violations.
 
 Requires `net.datafaker:datafaker` on the target application's classpath. Call
 `(faker/available?)` first to confirm:

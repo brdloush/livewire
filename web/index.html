@@ -320,7 +320,7 @@
       <div class="feature-card">
         <div class="feature-icon">🎲</div>
         <h3>Test Data Generation — build valid entities on the fly</h3>
-        <p>Construct realistic, persistable Hibernate entity instances from the REPL — no fixture files, no test annotations, no restart. Heuristics match property names and types to <code>net.datafaker</code> providers. Lookup tables (like <code>Genre</code>) are fetched from the DB to avoid unique-constraint violations. Persist inside a rolled-back transaction to get a real DB-assigned id without leaving any data behind.</p>
+        <p>Construct realistic, persistable Hibernate entity instances from the REPL — no fixture files, no test annotations, no restart. Heuristics match property names and types to <code>net.datafaker</code> providers. <code>jakarta.validation.constraints</code> annotations are respected at generation time — <code>@Min</code>/<code>@Max</code> clamp numeric ranges, <code>@Email</code> ensures valid addresses, <code>@Size</code> clamps string length — and overrides that violate <code>@NotNull</code> or <code>@Min</code>/<code>@Max</code> throw immediately with a clear message instead of a cryptic Hibernate error at flush time. Lookup tables (like <code>Genre</code>) are fetched from the DB to avoid unique-constraint violations. Persist inside a rolled-back transaction to get a real DB-assigned id without leaving any data behind.</p>
         <div class="code-block"><pre><span class="c">;; Simple entity — all scalar fields filled with realistic data</span>
 <span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Author"</span><span class="p">)</span>
 

@@ -30,19 +30,19 @@
   []
   (try
     (clojure.lang.Reflector/invokeConstructor
-      (Class/forName "net.datafaker.Faker")
-      (object-array []))
+     (Class/forName "net.datafaker.Faker")
+     (object-array []))
     (catch ClassNotFoundException _
       (throw (ex-info
-        (str "net.datafaker.Faker not found on the classpath.\n"
-             "Add the following dependency to your project:\n\n"
-             "  Maven:  <dependency>\n"
-             "            <groupId>net.datafaker</groupId>\n"
-             "            <artifactId>datafaker</artifactId>\n"
-             "            <version>2.5.4</version>\n"
-             "          </dependency>\n\n"
-             "  Gradle: implementation 'net.datafaker:datafaker:2.5.4'")
-        {:missing-class "net.datafaker.Faker"})))))
+              (str "net.datafaker.Faker not found on the classpath.\n"
+                   "Add the following dependency to your project:\n\n"
+                   "  Maven:  <dependency>\n"
+                   "            <groupId>net.datafaker</groupId>\n"
+                   "            <artifactId>datafaker</artifactId>\n"
+                   "            <version>2.5.4</version>\n"
+                   "          </dependency>\n\n"
+                   "  Gradle: implementation 'net.datafaker:datafaker:2.5.4'")
+              {:missing-class "net.datafaker.Faker"})))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Reflection helpers
@@ -67,21 +67,21 @@
   (when (some? value)
     (let [tname (.getName target-type)]
       (cond
-        (.isInstance target-type value)             value
+        (.isInstance target-type value) value
         (.isAssignableFrom target-type (class value)) value
-        (= tname "java.lang.Short")                 (short value)
-        (= tname "short")                           (short value)
-        (= tname "java.lang.Integer")               (int value)
-        (= tname "int")                             (int value)
-        (= tname "java.lang.Long")                  (long value)
-        (= tname "long")                            (long value)
-        (= tname "java.lang.Boolean")               (boolean value)
-        (= tname "boolean")                         (boolean value)
-        (= tname "java.math.BigDecimal")            (bigdec value)
-        (= tname "java.lang.Float")                 (float value)
-        (= tname "float")                           (float value)
-        (= tname "java.lang.Double")                (double value)
-        (= tname "double")                          (double value)
+        (= tname "java.lang.Short") (short value)
+        (= tname "short") (short value)
+        (= tname "java.lang.Integer") (int value)
+        (= tname "int") (int value)
+        (= tname "java.lang.Long") (long value)
+        (= tname "long") (long value)
+        (= tname "java.lang.Boolean") (boolean value)
+        (= tname "boolean") (boolean value)
+        (= tname "java.math.BigDecimal") (bigdec value)
+        (= tname "java.lang.Float") (float value)
+        (= tname "float") (float value)
+        (= tname "java.lang.Double") (double value)
+        (= tname "double") (double value)
         (and (instance? java.util.Date value)
              (= tname "java.time.LocalDateTime"))
         (LocalDateTime/ofInstant (.toInstant ^java.util.Date value)
@@ -100,58 +100,58 @@
    Evaluated top-to-bottom; first match wins. Name patterns are matched
    case-insensitively against the camelCase property name."
   [;; Exact name matches
-   ["^firstName$"  "string"               :first-name]
-   ["^lastName$"   "string"               :last-name]
-   ["^fullName$"   "string"               :full-name]
-   ["email"        "string"               :email]
-   ["username"     "string"               :username]
-   ["^title$"      "string"               :book-title]
-   ["^isbn$"       "string"               :isbn]
-   ["nationality"  "string"               :nationality]
-   ["comment"      "string"               :lorem-para]
-   ["^rating$"     nil                    :rating]
+   ["^firstName$" "string" :first-name]
+   ["^lastName$" "string" :last-name]
+   ["^fullName$" "string" :full-name]
+   ["email" "string" :email]
+   ["username" "string" :username]
+   ["^title$" "string" :book-title]
+   ["^isbn$" "string" :isbn]
+   ["nationality" "string" :nationality]
+   ["comment" "string" :lorem-para]
+   ["^rating$" nil :rating]
    ;; Suffix / substring patterns
-   ["[Yy]ear$"     nil                    :year]
-   ["[Cc]opies$"   nil                    :copies]
-   ["(At|Since|Date|Time)$" nil           :past-date]
-   ["uuid"         nil                    :uuid]
+   ["[Yy]ear$" nil :year]
+   ["[Cc]opies$" nil :copies]
+   ["(At|Since|Date|Time)$" nil :past-date]
+   ["uuid" nil :uuid]
    ;; Type-only fallbacks (nil name pattern = match any name)
-   [nil            "string"               :lorem-word]
-   [nil            "int|long|short|.*[Ii]nteger|.*[Ll]ong|.*[Ss]hort" :number]
-   [nil            ".*[Dd]ouble|.*[Ff]loat|.*[Bb]ig[Dd]ecimal" :decimal]
-   [nil            "boolean|.*[Bb]oolean" :bool]
-   [nil            ".*UUID"               :uuid]])
+   [nil "string" :lorem-word]
+   [nil "int|long|short|.*[Ii]nteger|.*[Ll]ong|.*[Ss]hort" :number]
+   [nil ".*[Dd]ouble|.*[Ff]loat|.*[Bb]ig[Dd]ecimal" :decimal]
+   [nil "boolean|.*[Bb]oolean" :bool]
+   [nil ".*UUID" :uuid]])
 
 (defn- generate-value
   "Selects a faker generator from heuristic-table and produces a value."
   [faker prop-name prop-type-name]
-  (let [number-fn  #(.numberBetween (.number faker) (int %1) (int %2))
-        past-fn    #(.past (.date faker) (int 730) TimeUnit/DAYS)
-        match?     (fn [[name-pat type-pat _]]
-                     (and (or (nil? name-pat)
-                              (re-find (re-pattern (str "(?i)" name-pat)) prop-name))
-                          (or (nil? type-pat)
-                              (re-find (re-pattern (str "(?i)" type-pat)) prop-type-name))))
+  (let [number-fn #(.numberBetween (.number faker) (int %1) (int %2))
+        past-fn #(.past (.date faker) (int 730) TimeUnit/DAYS)
+        match? (fn [[name-pat type-pat _]]
+                 (and (or (nil? name-pat)
+                          (re-find (re-pattern (str "(?i)" name-pat)) prop-name))
+                      (or (nil? type-pat)
+                          (re-find (re-pattern (str "(?i)" type-pat)) prop-type-name))))
         [_ _ gen-key] (first (filter match? heuristic-table))]
     (case gen-key
-      :first-name  (.firstName (.name faker))
-      :last-name   (.lastName (.name faker))
-      :full-name   (str (.firstName (.name faker)) " " (.lastName (.name faker)))
-      :email       (.emailAddress (.internet faker))
-      :username    (.username (.internet faker))
-      :book-title  (.title (.book faker))
-      :isbn        (.isbn13 (.code faker) true)
+      :first-name (.firstName (.name faker))
+      :last-name (.lastName (.name faker))
+      :full-name (str (.firstName (.name faker)) " " (.lastName (.name faker)))
+      :email (.emailAddress (.internet faker))
+      :username (.username (.internet faker))
+      :book-title (.title (.book faker))
+      :isbn (.isbn13 (.code faker) true)
       :nationality (.nationality (.nation faker))
-      :lorem-para  (.paragraph (.lorem faker))
-      :rating      (number-fn 1 6)
-      :year        (number-fn 1850 2024)
-      :copies      (number-fn 1 10)
-      :past-date   (past-fn)
-      :lorem-word  (.word (.lorem faker))
-      :number      (number-fn 1 1000)
-      :decimal     (.randomDouble (.number faker) (int 2) (long 1) (long 10000))
-      :uuid        (java.util.UUID/randomUUID)
-      :bool        false
+      :lorem-para (.paragraph (.lorem faker))
+      :rating (number-fn 1 6)
+      :year (number-fn 1850 2024)
+      :copies (number-fn 1 10)
+      :past-date (past-fn)
+      :lorem-word (.word (.lorem faker))
+      :number (number-fn 1 1000)
+      :decimal (.randomDouble (.number faker) (int 2) (long 1) (long 10000))
+      :uuid (java.util.UUID/randomUUID)
+      :bool false
       nil)))
 
 ;;; ---------------------------------------------------------------------------
@@ -187,20 +187,20 @@
   (let [repo-name (str (str/lower-case (subs entity-name 0 1))
                        (subs entity-name 1)
                        "Repository")
-        repo      (try (core/bean repo-name) (catch Exception _ nil))
-        row       (when repo
-                    (core/in-readonly-tx
-                      (first (shuffle (.findAll repo)))))]
+        repo (try (core/bean repo-name) (catch Exception _ nil))
+        row (when repo
+              (core/in-readonly-tx
+               (first (shuffle (.findAll repo)))))]
     (when (and repo (nil? row))
       (throw (ex-info
-               (str "faker/build-entity: dependency '" dep-field-name "' (→ " entity-name
-                    ") was detected as a lookup table, but the table is empty.\n"
-                    "Options:\n"
-                    "  • seed the " entity-name " table before calling build-entity\n"
-                    "  • pass an existing instance via :overrides {:" dep-field-name " <instance>}\n"
-                    "  • pass a freshly-built one via :overrides {:" dep-field-name
-                    " (faker/build-entity \"" entity-name "\" {:persist? true})}")
-               {:entity entity-name :dep-field dep-field-name :cause :lookup-table-empty})))
+              (str "faker/build-entity: dependency '" dep-field-name "' (→ " entity-name
+                   ") was detected as a lookup table, but the table is empty.\n"
+                   "Options:\n"
+                   "  • seed the " entity-name " table before calling build-entity\n"
+                   "  • pass an existing instance via :overrides {:" dep-field-name " <instance>}\n"
+                   "  • pass a freshly-built one via :overrides {:" dep-field-name
+                   " (faker/build-entity \"" entity-name "\" {:persist? true})}")
+              {:entity entity-name :dep-field dep-field-name :cause :lookup-table-empty})))
     row))
 
 ;;; ---------------------------------------------------------------------------
@@ -213,16 +213,68 @@
   (let [tt (doto (TransactionTemplate. (core/bean PlatformTransactionManager))
              (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW))]
     (.execute tt
-      (reify TransactionCallback
-        (doInTransaction [_ status]
-          (let [result (thunk)]
-            (when rollback? (.setRollbackOnly status))
-            result))))))
+              (reify TransactionCallback
+                (doInTransaction [_ status]
+                  (let [result (thunk)]
+                    (when rollback? (.setRollbackOnly status))
+                    result))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Core builder
 
 (declare build-entity)
+
+(defn- apply-constraint-adjustments
+  "Adjusts a raw generated value to satisfy constraint metadata.
+   Returns the adjusted value. Prints a warning for @Pattern fields (generation
+   not supported)."
+  [entity-name prop-name raw cm faker]
+  (cond
+    ;; @Pattern — warn and leave as-is
+    (:pattern cm)
+    (do (println (str "[faker] WARNING: " entity-name "." prop-name
+                      " has @Pattern(regexp=\"" (:pattern cm) "\") — "
+                      "regex-constrained generation is not supported. "
+                      "Value generated by name heuristic; validate manually."))
+        raw)
+
+    ;; @Email fallback — heuristic produced a non-email string
+    (and (:email? cm) (string? raw) (not (re-find #"@" (str raw))))
+    (.emailAddress (.internet faker))
+
+    ;; @PositiveOrZero on a negative number
+    (and (:positive-or-zero? cm) (number? raw) (neg? raw))
+    (Math/abs (double raw))
+
+    ;; @Positive on a non-positive number
+    (and (:positive? cm) (number? raw) (not (pos? raw)))
+    (max 1 (Math/abs (double raw)))
+
+    ;; @Min / @Max numeric clamping
+    (and (number? raw) (or (:min cm) (:max cm)))
+    (let [lo (or (:min cm) Long/MIN_VALUE)
+          hi (or (:max cm) Long/MAX_VALUE)]
+      (max lo (min hi raw)))
+
+    :else raw))
+
+(defn- clamp-string
+  "Clamps a string to respect both @Size(min/max) and @Column(length),
+   taking the most restrictive maximum. Pads to size-min with spaces if needed."
+  [s cm col-length]
+  (let [size-max (:size-max cm)
+        size-min (when (and (:size-min cm) (pos? (:size-min cm))) (:size-min cm))
+        effective-max (cond
+                        (and size-max col-length) (min size-max col-length)
+                        size-max size-max
+                        col-length col-length
+                        :else nil)
+        trimmed (if (and effective-max (> (count s) effective-max))
+                  (subs s 0 effective-max)
+                  s)]
+    (if (and size-min (< (count trimmed) size-min))
+      (str trimmed (apply str (repeat (- size-min (count trimmed)) \a)))
+      trimmed)))
 
 (defn- build-entity-internal
   "Internal recursive builder.
@@ -230,43 +282,86 @@
    em is the EntityManager to use for persistence, or nil when not persisting."
   [entity-name opts seen em]
   (let [{:keys [overrides auto-deps?]} opts
-        overrides  (or overrides {})
-        entity     (intro/inspect-entity entity-name)]
+        overrides (or overrides {})
+        entity (intro/inspect-entity entity-name)]
     (when (:error entity)
       (throw (ex-info (str "Entity not found: " entity-name) {:entity entity-name})))
-    (let [fqn        (:entity-name entity)
-          cls        (Class/forName fqn)
-          instance   (.newInstance cls)
-          faker      (make-faker)
-          id-prop    (-> entity :identifier :name)
+    (let [fqn (:entity-name entity)
+          cls (Class/forName fqn)
+          instance (.newInstance cls)
+          faker (make-faker)
+          id-prop (-> entity :identifier :name)
+          all-props (:properties entity)
+          ;; Build constraint index once per entity
+          cmap (try (into {} (map (fn [p] [(:name p) (intro/constraint-meta cls (:name p))])
+                                  all-props))
+                    (catch Exception _ {}))
+          ;; Fail-fast: validate all overrides against constraints before touching the entity
+          _ (doseq [[k v] overrides]
+              (let [pname (name k)
+                    cm (get cmap pname {})]
+                (when (and (:not-null? cm) (nil? v))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " nil} — "
+                               entity-name "." pname " is @NotNull")
+                          {:entity entity-name :field pname :constraint :not-null :value v})))
+                (when (and (:not-blank? cm) (or (nil? v) (and (string? v) (str/blank? v))))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " " (pr-str v) "} — "
+                               entity-name "." pname " is @NotBlank")
+                          {:entity entity-name :field pname :constraint :not-blank :value v})))
+                (when (and (number? v) (:min cm) (< v (:min cm)))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " " v "} — "
+                               entity-name "." pname " is @Min(" (:min cm) ")")
+                          {:entity entity-name :field pname :constraint :min :value v :min (:min cm)})))
+                (when (and (number? v) (:max cm) (> v (:max cm)))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " " v "} — "
+                               entity-name "." pname " is @Max(" (:max cm) ")")
+                          {:entity entity-name :field pname :constraint :max :value v :max (:max cm)})))
+                (when (and (number? v) (:positive-or-zero? cm) (neg? v))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " " v "} — "
+                               entity-name "." pname " is @PositiveOrZero")
+                          {:entity entity-name :field pname :constraint :positive-or-zero :value v})))
+                (when (and (number? v) (:positive? cm) (not (pos? v)))
+                  (throw (ex-info
+                          (str "Cannot apply override {" k " " v "} — "
+                               entity-name "." pname " is @Positive")
+                          {:entity entity-name :field pname :constraint :positive :value v})))))
           ;; Skip: id, collection associations, and properties covered by :overrides
-          props      (->> (:properties entity)
-                          (remove #(= (:name %) id-prop))
-                          (remove #(:collection %))
-                          (remove #(contains? overrides (keyword (:name %))))
-                          (remove #(contains? overrides (symbol (:name %)))))]
+          props (->> all-props
+                     (remove #(= (:name %) id-prop))
+                     (remove #(:collection %))
+                     (remove #(contains? overrides (keyword (:name %))))
+                     (remove #(contains? overrides (symbol (:name %)))))]
 
       ;; Set heuristic values for scalar properties
       (doseq [p (remove :is-association props)]
-        (let [pname  (:name p)
-              ptype  (:type p)
-              raw    (generate-value faker pname ptype)
-              ;; Length clamp for strings
-              raw    (if (and (string? raw) (:length p))
-                       (subs raw 0 (min (count raw) (:length p)))
-                       raw)
+        (let [pname (:name p)
+              ptype (:type p)
+              cm (get cmap pname {})
+              raw (generate-value faker pname ptype)
+              ;; Apply constraint-aware adjustments
+                            raw    (when (some? raw)
+                                     (apply-constraint-adjustments entity-name pname raw cm faker))
+              ;; String clamping: @Size + @Column(length) — take most restrictive max
+              raw (if (string? raw)
+                    (clamp-string raw cm (:length p))
+                    raw)
               setter (find-setter cls pname)]
           (when (and setter (some? raw))
             (let [param-type (first (.getParameterTypes setter))
-                  coerced    (coerce-value raw param-type)]
+                  coerced (coerce-value raw param-type)]
               (.invoke setter instance (object-array [coerced]))))))
 
       ;; Resolve ManyToOne associations
       (doseq [p (filter #(and (:is-association %) (not (:collection %))) props)]
-        (let [pname       (:name p)
+        (let [pname (:name p)
               target-name (when-let [t (:target-entity p)]
                             (last (str/split t #"\.")))
-              setter      (find-setter cls pname)]
+              setter (find-setter cls pname)]
           (when (and setter target-name)
             (cond
               ;; Required association (nullable=false) and auto-deps? -> resolve it
@@ -276,21 +371,21 @@
                           (do
                             (when (contains? seen target-name)
                               (throw (ex-info
-                                       (str "Circular dependency detected while building " entity-name
-                                            " — already resolving " target-name)
-                                       {:cycle (conj seen target-name)})))
+                                      (str "Circular dependency detected while building " entity-name
+                                           " — already resolving " target-name)
+                                      {:cycle (conj seen target-name)})))
                             (build-entity-internal target-name opts (conj seen entity-name) em)))]
                 (.invoke setter instance (object-array [dep])))
 
               ;; Required association but no auto-deps? -> throw descriptive error
               (and (not auto-deps?) (false? (:nullable p)))
               (throw (ex-info
-                       (str "Cannot build " entity-name ": required association '" pname
-                            "' (→ " target-name ") is not provided.\n"
-                            "Either:\n"
-                            "  • pass it via :overrides {:" pname " <instance>}\n"
-                            "  • set :auto-deps? true to let Livewire resolve it automatically")
-                       {:entity entity-name :missing-association pname :target target-name}))
+                      (str "Cannot build " entity-name ": required association '" pname
+                           "' (→ " target-name ") is not provided.\n"
+                           "Either:\n"
+                           "  • pass it via :overrides {:" pname " <instance>}\n"
+                           "  • set :auto-deps? true to let Livewire resolve it automatically")
+                      {:entity entity-name :missing-association pname :target target-name}))
 
               ;; Optional association: skip (caller can provide via :overrides)
               :else nil))))
@@ -298,12 +393,13 @@
       ;; Apply overrides (always wins). Coerce to the setter's parameter type so
       ;; callers can pass plain Clojure longs/ints (e.g. {:rating 5}) without
       ;; needing to box them manually (e.g. (short 5)).
+      ;; Constraint validation already ran above — apply unconditionally here.
       (doseq [[k v] overrides]
-        (let [pname  (name k)
+        (let [pname (name k)
               setter (find-setter cls pname)]
           (when setter
             (let [param-type (first (.getParameterTypes setter))
-                  coerced    (coerce-value v param-type)]
+                  coerced (coerce-value v param-type)]
               (.invoke setter instance (object-array [coerced]))))))
 
       ;; Persist this instance if an EntityManager was provided.
@@ -378,12 +474,12 @@
   "Extracts scalar field values from entity-name/instance into a map of keyword → value.
    Excludes the @Id field and all association properties."
   [entity-name instance]
-  (let [entity-meta  (intro/inspect-entity entity-name)
-        id-prop      (-> entity-meta :identifier :name)
+  (let [entity-meta (intro/inspect-entity entity-name)
+        id-prop (-> entity-meta :identifier :name)
         scalar-props (->> (:properties entity-meta)
                           (remove #(= (:name %) id-prop))
                           (remove :is-association))
-        b            (core/bean->map instance)]
+        b (core/bean->map instance)]
     (into {} (map (fn [p] [(keyword (:name p)) (get b (keyword (:name p)))])
                   scalar-props))))
 
@@ -396,13 +492,13 @@
   (if (contains? seen entity-name)
     acc
     (let [entity-meta (intro/inspect-entity entity-name)
-          m2o-props   (->> (:properties entity-meta)
-                           (filter #(and (:is-association %)
-                                         (not (:collection %)))))
-          b           (core/bean->map instance)
-          acc         (conj acc [(keyword entity-name) (extract-scalars entity-name instance)])]
+          m2o-props (->> (:properties entity-meta)
+                         (filter #(and (:is-association %)
+                                       (not (:collection %)))))
+          b (core/bean->map instance)
+          acc (conj acc [(keyword entity-name) (extract-scalars entity-name instance)])]
       (reduce (fn [acc p]
-                (let [dep-val  (get b (keyword (:name p)))
+                (let [dep-val (get b (keyword (:name p)))
                       dep-name (when-let [t (:target-entity p)]
                                  (last (str/split t #"\.")))]
                   (if (and dep-val dep-name)
@@ -444,7 +540,7 @@
   ([entity-name]
    (build-test-recipe entity-name {}))
   ([entity-name opts]
-   (let [opts     (merge {:auto-deps? true :persist? true :rollback? true} opts)
+   (let [opts (merge {:auto-deps? true :persist? true :rollback? true} opts)
          instance (build-entity entity-name opts)
-         pairs    (collect-recipe entity-name instance #{} [])]
+         pairs (collect-recipe entity-name instance #{} [])]
      (into (array-map) pairs))))

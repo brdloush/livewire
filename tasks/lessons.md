@@ -23,6 +23,10 @@ and removed from here.
   a Maven Central upload) or to make a product decision when he has clearer vision of the
   project's direction. Don't work around things silently when asking would be more efficient.
 
+- 2026-03-25: Never run git commands (commit, add, push, etc.) in other projects such as
+  bloated-shelf. Git discipline applies only to the livewire repo. If changes to a companion
+  app are needed as part of a feature, make them — but leave committing them to Tomas.
+
 ---
 
 <!-- Example entry format:

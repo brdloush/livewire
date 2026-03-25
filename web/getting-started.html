@@ -721,6 +721,23 @@ mvn spring-boot:run \
               </div>
             </div>
 
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Know what breaks before you change it</h4>
+                <code class="try-prompt">I'm about to optimise the query in adminService/getSystemStats. What HTTP endpoints and scheduled jobs call it — directly or via other services?</code>
+                <p>
+                  Claude calls <code>cg/blast-radius</code>, which walks the live bytecode
+                  upward from the target method and cross-references every caller against
+                  registered HTTP handlers and <code>@Scheduled</code> jobs. For this method
+                  it surfaces both <code>GET /api/admin/stats</code> and the nightly
+                  <code>@Scheduled</code> reporter in a single result — entry-point types you
+                  might not have connected to an <code>AdminService</code> change at all.
+                  Takes ~30 ms on first run; cached for the rest of the session.
+                </p>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

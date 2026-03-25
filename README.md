@@ -147,7 +147,7 @@ livewire:
 
 You'll see this in the logs on startup:
 ```
-[livewire] nREPL server started on port 7888 with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc, faker)
+[livewire] nREPL server started on port 7888 with user aliases (lw, q, intro, trace, qw, hq, jpa, mvc, faker, cg)
 ```
 
 That's it. No annotations, no Spring profiles to configure, no code changes.
@@ -175,6 +175,7 @@ All 8 namespaces are pre-aliased in the `user` namespace at startup — no `requ
 | `jpa` | `jpa-query` — JPQL via live EntityManager |
 | `mvc` | `mvc` — response serialization |
 | `faker` | `faker` — test data generation via datafaker heuristics |
+| `cg` | `callgraph` — blast-radius impact analysis |
 
 Just connect and start typing — `(lw/info)` is a good smoke-test.
 
@@ -523,6 +524,35 @@ Requires `net.datafaker:datafaker` on the target application's classpath. Call
 ;; CLI
 ;; lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true}'
 ```
+
+
+### 💥 Analyze blast radius before changing anything
+
+Before modifying a repository, service method, or query, see which HTTP endpoints,
+schedulers, and event listeners would be affected — straight from the live bytecode:
+
+```clojure
+;; Which endpoints call bookRepository/findAll, directly or via services?
+(cg/blast-radius "bookRepository" "findAll")
+;; => {:target   {:bean "bookRepository" :method "findAll"}
+;;     :affected [{:bean "bookService"    :method "getAllBooks"      :depth 1 :entry-point nil}
+;;                {:bean "bookController" :method "getBooks"         :depth 2
+;;                 :entry-point {:type :http-endpoint :paths ["/api/books"] :http-methods ["GET"]
+;;                               :pre-authorize "hasRole('MEMBER')"}}
+;;                {:bean "bookStatsReporter" :method "reportNightlyStats" :depth 2
+;;                 :entry-point {:type :scheduler :cron "0 0 2 * * *"}}]
+;;     :warnings ["Method name 'findAll' matched multiple signatures — all overloads are included"]}
+
+;; What breaks if I change bookService/archiveBook?
+(cg/blast-radius "bookService" "archiveBook")
+
+;; CLI
+;; lw-blast-radius bookRepository findAll
+;; lw-blast-radius bookService archiveBook
+```
+
+The call-graph index is built once (~30ms for a typical app) and cached for the session.
+Call `(cg/reset-blast-radius-cache!)` after hot-patching a class.
 
 ---
 

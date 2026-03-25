@@ -33,7 +33,7 @@
   []
   (or @-ctx
       (throw (IllegalStateException.
-               "Livewire: ApplicationContext not set. Is the nREPL server running?"))))
+              "Livewire: ApplicationContext not set. Is the nREPL server running?"))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Bean access
@@ -152,15 +152,15 @@
      ;;     :dependencies [\"bookRepository\"]
      ;;     :dependents   [\"adminController\" \"bookController\"]}"
   [bean-name]
-  (let [bf  (bean-factory)
+  (let [bf (bean-factory)
         cls (clean-class-name
-              (try (some-> (.getBeanDefinition bf bean-name) .getBeanClassName)
-                   (catch Exception _ nil)))]
-    {:bean         bean-name
-     :class        cls
+             (try (some-> (.getBeanDefinition bf bean-name) .getBeanClassName)
+                  (catch Exception _ nil)))]
+    {:bean bean-name
+     :class cls
      :dependencies (filterv clean-dep-name? (.getDependenciesForBean bf bean-name))
-     :dependents   (try (filterv clean-dep-name? (.getDependentBeans bf bean-name))
-                        (catch Exception _ []))}))
+     :dependents (try (filterv clean-dep-name? (.getDependentBeans bf bean-name))
+                      (catch Exception _ []))}))
 
 (defn all-bean-deps
   "Returns a seq of dependency maps (see bean-deps) for beans in the application context.
@@ -188,8 +188,8 @@
          (take 10)
          (mapv #(select-keys % [:bean :class :dependencies])))"
   [& {:keys [app-only] :or {app-only true}}]
-  (let [c   (ctx)
-        bf  (.getBeanFactory c)
+  (let [c (ctx)
+        bf (.getBeanFactory c)
         pkg (when app-only (app-root-package))]
     (->> (.getBeanDefinitionNames c)
          (filter (fn [n]
@@ -197,8 +197,14 @@
                      (and (< (.getRole bd) 2)
                           (not (clojure.string/includes? n "."))
                           (if pkg
-                            (some-> (.getBeanClassName bd)
-                                    (clojure.string/starts-with? pkg))
+                            (or (some-> (.getBeanClassName bd)
+                                        (clojure.string/starts-with? pkg))
+                                ;; Fallback: check the bean instance's proxy interfaces.
+                                ;; Catches Spring Data JPA repos whose BeanClassName is
+                                ;; JpaRepositoryFactoryBean (a Spring class), while their
+                                ;; app-defined repository interface sits on the JDK proxy.
+                                (some #(clojure.string/starts-with? (.getName %) pkg)
+                                      (.getInterfaces (.getClass (.getBean c n)))))
                             true)))))
          (mapv bean-deps))))
 
@@ -206,32 +212,32 @@
 ;;; Transactional boundary introspection
 
 (def ^:private propagation-names
-  {TransactionDefinition/PROPAGATION_REQUIRED     :required
-   TransactionDefinition/PROPAGATION_SUPPORTS     :supports
-   TransactionDefinition/PROPAGATION_MANDATORY    :mandatory
+  {TransactionDefinition/PROPAGATION_REQUIRED :required
+   TransactionDefinition/PROPAGATION_SUPPORTS :supports
+   TransactionDefinition/PROPAGATION_MANDATORY :mandatory
    TransactionDefinition/PROPAGATION_REQUIRES_NEW :requires-new
    TransactionDefinition/PROPAGATION_NOT_SUPPORTED :not-supported
-   TransactionDefinition/PROPAGATION_NEVER        :never
-   TransactionDefinition/PROPAGATION_NESTED       :nested})
+   TransactionDefinition/PROPAGATION_NEVER :never
+   TransactionDefinition/PROPAGATION_NESTED :nested})
 
 (def ^:private isolation-names
-  {TransactionDefinition/ISOLATION_DEFAULT          :default
+  {TransactionDefinition/ISOLATION_DEFAULT :default
    TransactionDefinition/ISOLATION_READ_UNCOMMITTED :read-uncommitted
-   TransactionDefinition/ISOLATION_READ_COMMITTED   :read-committed
-   TransactionDefinition/ISOLATION_REPEATABLE_READ  :repeatable-read
-   TransactionDefinition/ISOLATION_SERIALIZABLE     :serializable})
+   TransactionDefinition/ISOLATION_READ_COMMITTED :read-committed
+   TransactionDefinition/ISOLATION_REPEATABLE_READ :repeatable-read
+   TransactionDefinition/ISOLATION_SERIALIZABLE :serializable})
 
 (defn- tx-attr->map
   "Converts a Spring TransactionAttribute to a plain Clojure map."
   [attr]
-  {:propagation     (get propagation-names (.getPropagationBehavior attr) (.getPropagationBehavior attr))
-   :isolation       (get isolation-names (.getIsolationLevel attr) (.getIsolationLevel attr))
-   :read-only       (.isReadOnly attr)
-   :timeout         (.getTimeout attr)
-   :rollback-for    (vec (keep #(when (and (instance? RollbackRuleAttribute %)
-                                           (not (instance? NoRollbackRuleAttribute %)))
-                                  (.getExceptionName %))
-                               (.getRollbackRules attr)))
+  {:propagation (get propagation-names (.getPropagationBehavior attr) (.getPropagationBehavior attr))
+   :isolation (get isolation-names (.getIsolationLevel attr) (.getIsolationLevel attr))
+   :read-only (.isReadOnly attr)
+   :timeout (.getTimeout attr)
+   :rollback-for (vec (keep #(when (and (instance? RollbackRuleAttribute %)
+                                        (not (instance? NoRollbackRuleAttribute %)))
+                               (.getExceptionName %))
+                            (.getRollbackRules attr)))
    :no-rollback-for (vec (keep #(when (instance? NoRollbackRuleAttribute %)
                                   (.getExceptionName %))
                                (.getRollbackRules attr)))})
@@ -266,12 +272,12 @@
      ;;     :methods [{:method \"archiveBook\" :propagation :required :read-only false ...}
      ;;               {:method \"getAllBooks\"  :propagation :required :read-only true  ...}]}"
   [bean-name]
-  (let [b          (bean bean-name)
+  (let [b (bean bean-name)
         target-cls (AopUtils/getTargetClass b)
-        cls-name   (clean-class-name (.getName target-cls))
-        txas       (try (bean "transactionAttributeSource") (catch Exception _ nil))]
-    {:bean    bean-name
-     :class   cls-name
+        cls-name (clean-class-name (.getName target-cls))
+        txas (try (bean "transactionAttributeSource") (catch Exception _ nil))]
+    {:bean bean-name
+     :class cls-name
      :methods (if-not txas
                 []
                 (->> (.getDeclaredMethods target-cls)
@@ -315,8 +321,8 @@
          (mapcat (fn [b] (map #(assoc % :bean (:bean b)) (:methods b))))
          (filter #(= :requires-new (:propagation %))))"
   [& {:keys [app-only] :or {app-only true}}]
-  (let [c   (ctx)
-        bf  (.getBeanFactory c)
+  (let [c (ctx)
+        bf (.getBeanFactory c)
         pkg (when app-only (app-root-package))]
     (->> (.getBeanDefinitionNames c)
          (filter (fn [n]
@@ -338,16 +344,16 @@
    Java version, active profiles, etc.)."
   []
   (let [env (.getEnvironment (ctx))]
-    {:application-name    (.getProperty env "spring.application.name" "unknown")
-     :active-profiles     (vec (.getActiveProfiles env))
-     :java-version        (System/getProperty "java.version")
-     :os-name             (System/getProperty "os.name")
-     :spring-version      (try (org.springframework.core.SpringVersion/getVersion)
-                               (catch Throwable _ nil))
+    {:application-name (.getProperty env "spring.application.name" "unknown")
+     :active-profiles (vec (.getActiveProfiles env))
+     :java-version (System/getProperty "java.version")
+     :os-name (System/getProperty "os.name")
+     :spring-version (try (org.springframework.core.SpringVersion/getVersion)
+                          (catch Throwable _ nil))
      :spring-boot-version (try (org.springframework.boot.SpringBootVersion/getVersion)
                                (catch Throwable _ nil))
-     :hibernate-version   (try (org.hibernate.Version/getVersionString)
-                               (catch Throwable _ nil))}))
+     :hibernate-version (try (org.hibernate.Version/getVersionString)
+                             (catch Throwable _ nil))}))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Property inspection
@@ -393,11 +399,11 @@
   `(let [tt# (doto (TransactionTemplate. (bean PlatformTransactionManager))
                (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW))]
      (.execute tt#
-       (reify TransactionCallback
-         (doInTransaction [_# status#]
-           (let [result# (do ~@body)]
-             (.setRollbackOnly status#)
-             result#))))))
+               (reify TransactionCallback
+                 (doInTransaction [_# status#]
+                   (let [result# (do ~@body)]
+                     (.setRollbackOnly status#)
+                     result#))))))
 
 (defmacro in-readonly-tx
   "Executes body inside a read-only Spring transaction.
@@ -413,9 +419,9 @@
                (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW)
                (.setReadOnly true))]
      (.execute tt#
-       (reify TransactionCallback
-         (doInTransaction [_# _status#]
-           (do ~@body))))))
+               (reify TransactionCallback
+                 (doInTransaction [_# _status#]
+                   (do ~@body))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Security
@@ -432,7 +438,7 @@
     ;; Vector form: [username "ROLE_X" "ROLE_Y"]
     (vector? user-or-auth)
     (let [username (first user-or-auth)
-          roles    (mapv #(SimpleGrantedAuthority. (str %)) (rest user-or-auth))]
+          roles (mapv #(SimpleGrantedAuthority. (str %)) (rest user-or-auth))]
       (UsernamePasswordAuthenticationToken. username "password" roles))
 
     ;; Plain string: grant ROLE_USER + ROLE_ADMIN
@@ -443,7 +449,7 @@
 
     :else
     (throw (IllegalArgumentException.
-             "run-as requires a String, Vector [user role1 role2], or Authentication object"))))
+            "run-as requires a String, Vector [user role1 role2], or Authentication object"))))
 
 (defmacro run-as
   "Runs body with the given user context set in the Spring SecurityContextHolder.
@@ -454,8 +460,8 @@
    Restores the original SecurityContext afterwards. Essential for authorization debugging."
   [user-or-auth & body]
   `(let [auth-obj# (net.brdloush.livewire.core/->authentication ~user-or-auth)
-         ctx#      (SecurityContextImpl. auth-obj#)
-         old-ctx#  (SecurityContextHolder/getContext)]
+         ctx# (SecurityContextImpl. auth-obj#)
+         old-ctx# (SecurityContextHolder/getContext)]
      (SecurityContextHolder/setContext ctx#)
      (try
        (do ~@body)

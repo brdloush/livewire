@@ -173,6 +173,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
 | `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map — use as seed for test setup code and assertions |
+| `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
 
 > ⚠️ **Prefer `clj-nrepl-eval -p <port>` over `lw-eval` for arbitrary expressions.**
@@ -1686,3 +1687,106 @@ Ensure the app is running with a current Livewire JAR.
 (hq/reset-query! "bookRepository" "findByIdWithDetails")
 ;; => :restored
 ```
+
+
+---
+
+## Call Graph API — `net.brdloush.livewire.callgraph`
+
+### `cg/blast-radius` — method-level call graph and entry-point impact analysis
+
+Given a bean name and a method name, `blast-radius` walks the bean dependency graph
+upward (from dependency toward dependents), intersects with a bytecode-level call
+graph extracted at runtime via ASM, and returns the set of bean methods that
+transitively invoke the target — annotated with their distance from the target and,
+for entry-point beans, their observable surface.
+
+**Use this before modifying any repository, service method, or query** — to know the
+full impact before acting, not after.
+
+```clojure
+(cg/blast-radius bean-name method-name)
+(cg/blast-radius bean-name method-name :app-only true)   ; default
+(cg/blast-radius bean-name method-name :app-only false)  ; include Spring infra beans
+```
+
+**Arguments:**
+- `bean-name` — Spring bean name string (same as accepted by `lw/bean`)
+- `method-name` — simple method name string; if overloaded, all overloads are included and a warning is emitted
+
+**Returns:**
+```clojure
+{:target   {:bean   "bookRepository"
+            :method "findAllWithAuthorAndGenres"}
+
+ :affected [{:bean    "bookService"
+             :method  "getAllBooks"
+             :depth   1
+             :entry-point nil}
+
+            {:bean    "bookController"
+             :method  "getBooks"
+             :depth   2
+             :entry-point {:type          :http-endpoint
+                           :paths         ["/api/books"]
+                           :http-methods  ["GET"]
+                           :pre-authorize "hasRole('MEMBER')"}}
+
+            {:bean    "bookStatsReporter"
+             :method  "reportNightlyStats"
+             :depth   2
+             :entry-point {:type :scheduler
+                           :cron "0 0 2 * * *"}}]
+
+ :warnings ["Method name 'findAll' matched multiple signatures — all overloads are included"]}
+```
+
+- `:depth` — hop count from the target bean. Depth 1 = direct caller.
+- `:entry-point` — present for HTTP endpoints (`@RequestMapping`), `@Scheduled` methods, and `@EventListener` methods. `nil` for internal service beans.
+- `:warnings` — notes about analysis gaps (overloads, event-listener limitations, etc.)
+
+**Cache management:**
+
+The bytecode call-graph index is built once and cached. After hot-patching a class
+or recompiling sources during a session, clear it:
+
+```clojure
+(cg/reset-blast-radius-cache!)
+```
+
+**Examples:**
+
+```clojure
+;; Which HTTP endpoints call bookRepository/findAll, directly or via services?
+(cg/blast-radius "bookRepository" "findAll")
+
+;; What is affected if I change bookService/archiveBook?
+(cg/blast-radius "bookService" "archiveBook")
+
+;; Include Spring infrastructure beans in the analysis
+(cg/blast-radius "bookRepository" "findAll" :app-only false)
+```
+
+### CLI: `lw-blast-radius`
+
+```bash
+lw-blast-radius bookRepository findAll
+lw-blast-radius bookService archiveBook
+```
+
+### ⚠️ Known limitations
+
+- **`ApplicationEventPublisher` calls are invisible.** If bean A calls the target method
+  in response to a Spring event published by bean B, the path B → A will appear but the
+  event publication from B will not be traced further up.
+- **`@Async` wrappers.** The direct call site is found in bytecode, but the initiating
+  caller of the async method may be in a different thread and not visible.
+- **Reflection and lambdas.** `Method.invoke()` and lambda-based dispatch are not traceable.
+- **Depth > 1 is best-effort.** At depth 1 the method-level match is precise (bytecode
+  confirms the call). At depth 2+, the BFS knows bean B depends on bean A which depends
+  on the target — but does not re-verify that B.methodX specifically calls A.methodY.
+  Entry-point annotation at depth 2+ (via `intro/list-endpoints`) is accurate for HTTP
+  handlers because the handler method is matched directly; for intermediate service hops
+  the method name is the best-guess caller.
+- **Overloads.** If the target method name matches multiple overloads, all are included
+  and a warning is emitted. Disambiguation requires a full JVM method descriptor.

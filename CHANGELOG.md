@@ -7,6 +7,51 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.0] — 2026-03-25
+
+### Added
+
+- **`cg/blast-radius`** — method-level call graph and entry-point impact analysis. Given a
+  bean name and method name, walks the bean dependency graph upward via BFS, intersects with
+  a bytecode call graph extracted at runtime via ASM, and returns every bean method that
+  transitively calls the target — annotated with `:depth` (hop count) and `:entry-point`
+  (HTTP endpoint, `@Scheduled`, or `@EventListener` metadata). The call-graph index is built
+  once (~30ms for a typical app) and cached; `(cg/reset-blast-radius-cache!)` invalidates it.
+  New namespace `net.brdloush.livewire.callgraph` (`cg` alias), `lw-blast-radius` CLI wrapper.
+- **`intro/constraint-meta`** — reads `jakarta.validation.constraints` (and `javax` fallback)
+  from a field or getter by reflection. Returns a map of constraint keys (`:not-null?`,
+  `:not-blank?`, `:email?`, `:past?`, `:min`, `:max`, `:size-min`, `:size-max`, `:positive?`,
+  `:positive-or-zero?`, `:pattern`).
+- **`intro/read-constraints`** — returns a `{field-name → constraint-map}` index for all
+  properties of a named entity. Suitable for use before writing test data or queries.
+- **`:constraints` key in `inspect-entity`** — every property map in `inspect-entity` output
+  now carries a `:constraints` vector of human-readable annotation strings, e.g.
+  `["@NotNull" "@Size(min=0,max=100)"]`. Empty vector when none.
+- **Constraint-aware `faker/build-entity`**:
+  - *Fail-fast override validation* — before any setter is called, overrides are checked
+    against `@NotNull`, `@NotBlank`, `@Min`, `@Max`, `@Positive`, `@PositiveOrZero`.
+    Throws `ex-info` immediately with a clear message naming the entity, field, and
+    violated annotation. Previously surfaced as an opaque `ConstraintViolationException`
+    from Hibernate at flush time.
+  - *Constraint-aware generation* — `@Min`/`@Max` clamp numeric ranges; `@Email` falls back
+    to `faker.internet().emailAddress()` when the name heuristic wouldn't produce an email;
+    `@Positive`/`@PositiveOrZero` reflect negatives; `@Size(max=…)` takes the most
+    restrictive max vs `@Column(length=…)`; `@Pattern` emits a warning (regex generation
+    is not supported).
+- **`intro/list-endpoints`** now includes `:required-roles` and `:required-authorities`
+  (parsed from `@PreAuthorize` SpEL) and enriched `:parameters` maps with `:source`
+  (`:path`/`:query`/`:body`/`:header`), `:required`, and `:default-value`.
+- **`cg` alias** pre-wired in the `user` namespace at nREPL startup.
+
+### Fixed
+
+- **`all-bean-deps :app-only true`** now correctly includes Spring Data JPA repository beans.
+  Previously, beans whose `BeanClassName` is `JpaRepositoryFactoryBean` (a Spring class)
+  were silently excluded even though the app-defined repository interface is app code. Fixed
+  by falling back to the bean instance's proxy interfaces when `BeanClassName` doesn't match
+  the root package. Applies to both `core/all-bean-deps` and the internal predicate used by
+  `callgraph/blast-radius`.
+
 ## [0.8.0] — 2026-03-21
 
 ### Added

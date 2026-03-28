@@ -7,6 +7,46 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.0] — 2026-03-29
+
+### Added
+
+- **`cg/method-dep-map`** — for each method on a bean, returns the subset of its injected
+  dependencies it directly touches in bytecode (ASM `GETFIELD` analysis). Includes
+  `:dep-frequency` (all deps ranked by how many methods use them — count-1 deps are prime
+  extraction candidates), `:expand-private?` (folds private helper deps into their public
+  callers), `:intra-calls?` (adds which sibling methods each method calls), and `:callers?`
+  (the inverse — adds which siblings call each method). Kotlin `$default` synthetic variants
+  are correctly resolved. `lw-method-dep-map` CLI wrapper.
+- **`cg/blast-radius "*"` wildcard** — runs blast-radius for every method on a bean and
+  returns a unified, deduplicated result. All four indexes are built once, making the total
+  time roughly equivalent to a single call. `:per-method? true` option returns
+  `{method → {:callers [...]}}` instead of a flat list.
+- **`cg/dead-methods`** — analyses public methods only (JVM `ACC_PUBLIC`; private/package-
+  private methods excluded). Splits results into `:dead` (no callers anywhere — deletion
+  candidates) and `:internal-only` (called only from sibling methods — visibility leaks /
+  refactoring candidates). Each `:internal-only` entry carries `:intra-callers`. Automatically
+  warns when messaging-annotated beans or db-scheduler (kagkarlsson) `Task` beans are detected.
+  `lw-dead-methods` CLI wrapper.
+- **`lw-blast-radius-all`** CLI wrapper — calls `blast-radius "*" :per-method? true` in one
+  command, returning `{method → {:callers [...]}}` for every method on a bean.
+- **Static `@Scheduled` annotation scanning** — `build-scheduled-index` now scans
+  `getDeclaredMethods` via reflection as primary strategy, falling back to
+  `ScheduledAnnotationBeanPostProcessor`. Works in local dev profiles where
+  `@EnableScheduling` is inactive.
+- **Kotlin `$default` call resolution in `blast-radius`** — callers using default argument
+  values (which compile to `method$default` call sites) are no longer missed.
+- **`lw/info` `:datasource`** — includes primary DataSource details: product name/version,
+  JDBC URL, user, driver. HikariCP pool name and max size when applicable.
+
+### Fixed
+
+- **`cg/dead-methods` private-method false positives** — now correctly filters to `ACC_PUBLIC`
+  only; private/package-private methods are excluded.
+- **SKILL.md example accuracy** — all code examples and prompt cards audited against live
+  bloated-shelf (Spring Boot 4 / Hibernate 7 / seed data). Fixed several incorrect examples
+  and descriptions.
+
 ## [0.9.0] — 2026-03-25
 
 ### Added

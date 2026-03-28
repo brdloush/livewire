@@ -323,6 +323,24 @@
       </div>
 
       <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>Method-level Dependency Fingerprinting</h3>
+        <p>For each method on a bean, see exactly which injected dependencies it touches in bytecode. <code>:dep-frequency</code> ranks deps by how many methods use them — count-1 deps are prime extraction candidates. <code>:intra-calls?</code> adds which siblings each method calls; <code>:callers?</code> adds the inverse. Kotlin <code>$default</code> synthetic call variants resolved automatically.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">cg/method-dep-map</span> <span class="s">"adminService"</span><span class="p">)</span>
+<span class="r">;; :methods    [{:method "getSystemStats"
+;;               :deps ["authorRepository" "bookRepository" ...]
+;;               :orchestrator? false} ...]
+;; :dep-frequency [{:dep "bookRepository"
+;;                  :used-by-count 2} ...]</span>
+
+<span class="c">;; Who has no external callers? Split :dead from :internal-only</span>
+<span class="p">(</span><span class="kw">cg/dead-methods</span> <span class="s">"bookService"</span><span class="p">)</span>
+<span class="r">;; {:dead [] :internal-only [{:method "archiveBook"
+;;                             :intra-callers ["adminHelper"]}]
+;;  :warnings ["2 @EventListener beans detected — ...]}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
         <div class="feature-icon">🎲</div>
         <h3>Test Data Generation — build valid entities on the fly</h3>
         <p>Construct realistic, persistable Hibernate entity instances from the REPL — no fixture files, no test annotations, no restart. Heuristics match property names and types to <code>net.datafaker</code> providers. <code>jakarta.validation.constraints</code> annotations are respected at generation time — <code>@Min</code>/<code>@Max</code> clamp numeric ranges, <code>@Email</code> ensures valid addresses, <code>@Size</code> clamps string length — and overrides that violate <code>@NotNull</code> or <code>@Min</code>/<code>@Max</code> throw immediately with a clear message instead of a cryptic Hibernate error at flush time. Lookup tables (like <code>Genre</code>) are fetched from the DB to avoid unique-constraint violations. Persist inside a rolled-back transaction to get a real DB-assigned id without leaving any data behind.</p>

@@ -778,6 +778,38 @@ mvn spring-boot:run \
             <div class="try-card">
               <span class="try-tag tag-explore">Explore</span>
               <div class="try-card-text">
+                <h4>Find methods with no callers before a refactor</h4>
+                <code class="try-prompt">Which public methods on bookService have no known callers? Are any truly dead, or just called internally?</code>
+                <p>
+                  Claude calls <code>cg/dead-methods</code>, which checks every public method
+                  against the full blast-radius index. Results split into <strong>:dead</strong>
+                  (no callers anywhere — delete candidates) and <strong>:internal-only</strong>
+                  (called only by sibling methods — public by accident, refactoring candidates).
+                  Automatically warns if messaging beans or db-scheduler tasks are present,
+                  since their callers are not statically visible.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Map which deps each method actually uses</h4>
+                <code class="try-prompt">For each method on adminService, which of its injected dependencies does it actually touch? Which deps appear in the most methods?</code>
+                <p>
+                  Claude calls <code>cg/method-dep-map</code>, which walks the bean's bytecode
+                  and returns the exact dependency footprint per method. The <code>:dep-frequency</code>
+                  ranking immediately shows load-bearing deps (used by many methods) vs.
+                  extraction candidates (used by only one). With <code>:intra-calls?</code>
+                  and <code>:callers?</code>, the full internal call graph is visible in one shot
+                  — no source reading required.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
                 <h4>See what @Query methods the watcher is monitoring</h4>
                 <code class="try-prompt">Which @Query methods is the query watcher currently tracking? Are any queries hot-swapped right now?</code>
                 <p>

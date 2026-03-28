@@ -175,7 +175,7 @@ All 8 namespaces are pre-aliased in the `user` namespace at startup — no `requ
 | `jpa` | `jpa-query` — JPQL via live EntityManager |
 | `mvc` | `mvc` — response serialization |
 | `faker` | `faker` — test data generation via datafaker heuristics |
-| `cg` | `callgraph` — blast-radius impact analysis |
+| `cg` | `callgraph` — blast-radius impact analysis, method-dep-map, dead-methods |
 
 Just connect and start typing — `(lw/info)` is a good smoke-test.
 
@@ -241,9 +241,13 @@ lw-start
 (lw/props-matching "spring\\.datasource\\.url")
 ;; => {"spring.datasource.url" "jdbc:postgresql://localhost:32808/test"}
 
-;; Runtime environment summary
+;; Runtime environment summary + primary DataSource details
 (lw/info)
-;; => {:spring-boot "4.0.1", :spring "7.0.2", :hibernate "7.2.0.Final", :java "25", ...}
+;; => {:spring-boot "4.0.1", :spring "7.0.2", :hibernate "7.2.0.Final", :java "25", ...
+;;     :datasource {:db-product "PostgreSQL 16.9"
+;;                  :jdbc-url "jdbc:postgresql://localhost:5432/myapp"
+;;                  :db-user "app" :driver "PostgreSQL JDBC Driver 42.7.8"
+;;                  :pool-name "HikariPool-1" :pool-size-max 10}}
 
 ;; Wiring of a single bean — what it injects and what injects it
 (lw/bean-deps "bookService")
@@ -552,13 +556,72 @@ schedulers, and event listeners would be affected — straight from the live byt
 ;; What breaks if I change bookService/archiveBook?
 (cg/blast-radius "bookService" "archiveBook")
 
+;; All methods at once — per-method {method → {:callers [...]}} map
+;; Methods with empty :callers have no known entry points
+(cg/blast-radius "bookService" "*" :per-method? true)
+
 ;; CLI
 ;; lw-blast-radius bookRepository findAll
 ;; lw-blast-radius bookService archiveBook
+;; lw-blast-radius-all bookService        ← per-method map, one command
 ```
 
 The call-graph index is built once (~30ms for a typical app) and cached for the session.
 Call `(cg/reset-blast-radius-cache!)` after hot-patching a class.
+
+### 🔬 Find dead and internal-only methods
+
+Identifies public methods with no inbound callers. Splits into two categories so you know
+whether to delete or refactor:
+
+```clojure
+(cg/dead-methods "bookService")
+;; => {:bean              "bookService"
+;;     :dead              []          ; no callers anywhere — true dead code
+;;     :internal-only     [{:method "archiveBook" :intra-callers ["adminHelper"]} ...]
+;;     :reachable-count   4
+;;     :dead-count        0
+;;     :internal-only-count 1
+;;     :warnings          ["2 @EventListener beans detected — ..."]}
+```
+
+- **`:dead`** — no callers inside or outside the bean. Delete candidates.
+- **`:internal-only`** — called only by sibling methods. Public by accident
+  (testability, Kotlin default visibility). Refactoring candidates.
+
+Only `ACC_PUBLIC` methods are analysed. Warns automatically when messaging beans
+(`@EventListener`, `@KafkaListener`, etc.) or db-scheduler tasks are detected, since
+those callers are not statically traceable.
+
+```bash
+# CLI
+lw-dead-methods bookService
+```
+
+### 🗺️ Map method-level dependencies
+
+For each method on a bean, see exactly which injected deps it uses in bytecode — the
+missing link between "this bean has 6 deps" and "where to cut":
+
+```clojure
+(cg/method-dep-map "adminService")
+;; => {:bean "adminService"
+;;     :methods [{:method "getSystemStats"
+;;                :deps   ["authorRepository" "bookRepository" "reviewRepository" ...]
+;;                :orchestrator? false}
+;;               {:method "getTop10MostLoanedBooks"
+;;                :deps   ["bookRepository"]
+;;                :orchestrator? false}]
+;;     :dep-frequency [{:dep "bookRepository" :used-by-count 2 :methods [...]} ...]
+;;     :unaccounted-deps []}
+
+;; Add intra-class call direction for split planning
+(cg/method-dep-map "adminService" :intra-calls? true)   ; which siblings does each method call?
+(cg/method-dep-map "adminService" :callers? true)        ; which siblings call each method?
+
+;; CLI
+;; lw-method-dep-map adminService
+```
 
 ---
 

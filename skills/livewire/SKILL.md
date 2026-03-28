@@ -414,12 +414,13 @@ Use `run-as` whenever calling a bean that is protected by Spring Security (`@Pre
 
 ```clojure
 ;; Call a @PreAuthorize-guarded controller or service
-(lw/run-as "admin"
+;; Always use the vector form so the required role is explicit
+(lw/run-as ["user" "ROLE_MEMBER"]
   (.getBookById (lw/bean "bookController") 25))
 
 ;; Combine with in-readonly-tx for repository access under a security context
 ;; Always page or limit — never call .findAll on a large table (see pitfalls)
-(lw/run-as "admin"
+(lw/run-as ["user" "ROLE_MEMBER"]
   (lw/in-readonly-tx
     (->> (.findAll (lw/bean "bookRepository")
                    (org.springframework.data.domain.PageRequest/of 0 3))
@@ -726,11 +727,36 @@ The CLI output is wrapped in `trace/trace-sql`, so you always get `:result`, `:c
 ### Scalar projections
 
 `jpa/jpa-query` and `lw-jpa-query` also work for **scalar projections** — queries that select
-expressions or aggregates rather than full entities. `Object[]` rows are automatically unpacked
-into maps with positional keys `:col0`, `:col1`, etc.
+expressions or aggregates rather than full entities.
+
+**Prefer `AS` aliases** — they produce named keys directly and are the clearest option:
+
+```clojure
+(jpa/jpa-query
+  "SELECT b.title AS title, COUNT(lr) AS loans
+   FROM Book b JOIN b.loanRecords lr
+   GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC"
+  :page 0 :page-size 5)
+;; => [{:title "The Green Bay Tree",          :loans 7}
+;;     {:title "Let Us Now Praise Famous Men", :loans 7}
+;;     {:title "Vanity Fair",                  :loans 7} ...]
+```
+
+> ⚠️ **Hibernate 7 lowercases `AS` alias names.** `AS avgRating` becomes `:avgrating`,
+> `AS loanCount` becomes `:loancount`. Always use lowercase alias names in the query
+> to avoid confusion:
+> ```clojure
+> ;; ✅ lowercase alias — key is :avgrating, no surprise
+> "SELECT AVG(r.rating) AS avgrating FROM ..."
+> ;; ❌ mixed-case alias — still returns :avgrating, looks wrong
+> "SELECT AVG(r.rating) AS avgRating FROM ..."
+> ```
+
+If no `AS` aliases are present, `Object[]` rows are unpacked into maps with positional
+keys `:col0`, `:col1`, etc. Use `clojure.set/rename-keys` to name them after the fact:
 
 ```bash
-# Aggregate query — returns {:col0 <title>, :col1 <count>} maps
+# No aliases — returns {:col0 <title>, :col1 <count>} maps
 lw-jpa-query 'SELECT b.title, COUNT(lr) FROM Book b JOIN b.loanRecords lr GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC' 0 5
 ```
 
@@ -738,15 +764,10 @@ lw-jpa-query 'SELECT b.title, COUNT(lr) FROM Book b JOIN b.loanRecords lr GROUP 
 ;; => {:duration-ms 26,
 ;;     :result [{:col0 "Vanity Fair",                  :col1 7}
 ;;              {:col0 "Let Us Now Praise Famous Men", :col1 7}
-;;              {:col0 "The Green Bay Tree",           :col1 7}
-;;              {:col0 "The Mermaids Singing",         :col1 6}
-;;              {:col0 "This Lime Tree Bower",         :col1 6}],
+;;              {:col0 "The Green Bay Tree",           :col1 7} ...],
 ;;     :count 1, ...}
-```
 
-If you want named keys instead of `:col0`/`:col1`, rename them in Clojure after the fact:
-
-```clojure
+;; Rename after the fact if you didn't use AS aliases
 (->> (:result (jpa/jpa-query "SELECT b.title, COUNT(lr) FROM Book b JOIN b.loanRecords lr GROUP BY b.id, b.title ORDER BY COUNT(lr) DESC"
                               :page 0 :page-size 5))
      (mapv #(clojure.set/rename-keys % {:col0 :title :col1 :loan-count})))
@@ -1660,9 +1681,12 @@ Ensure the app is running with a current Livewire JAR.
 ## Examples
 
 ```clojure
-;; What DB URL is the app actually using?
-(lw/props-matching "spring\\.datasource\\.url")
-;; => {"spring.datasource.url" "jdbc:postgresql://localhost:5432/myapp"}
+;; JPA configuration — always present, includes open-in-view, show-sql, etc.
+(lw/props-matching "spring\\.jpa.*")
+;; => {"spring.jpa.open-in-view" "false", "spring.jpa.show-sql" "false", ...}
+
+;; Note: spring.datasource.url is dynamically bound on Testcontainers-based apps
+;; and will not appear in props-matching — use spring.jpa.* for reliable inspection
 
 ;; Which repository beans exist?
 (lw/find-beans-matching ".*Repository.*")

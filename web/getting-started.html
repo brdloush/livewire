@@ -533,9 +533,12 @@ mvn spring-boot:run \
                   Claude calls <code>lw/all-bean-deps</code> to get the full wiring graph,
                   pre-filtered to your own application beans (auto-detected via
                   <code>@SpringBootApplication</code> — no configuration needed). It sorts by
-                  dependency count to surface high-fan-out candidates, then inspects individual
-                  beans with <code>lw/bean-deps</code> and suggests how to break them apart —
-                  by responsibility, process, or domain area.
+                  dependency count to surface high-fan-out candidates. In bloated-shelf this
+                  immediately surfaces <code>gottaInjectThemAllService</code> — a service that
+                  injects every single repository in the app. Its name is the punchline; the
+                  wiring graph is the proof. Claude also spots <code>architectureBreakingController</code>
+                  on the high-dependents side of <code>bookRepository</code> — a controller
+                  wiring a repository directly, bypassing the service layer entirely.
                 </p>
               </div>
             </div>
@@ -544,13 +547,16 @@ mvn spring-boot:run \
               <span class="try-tag tag-explore">Explore</span>
               <div class="try-card-text">
                 <h4>Audit transactional boundaries</h4>
-                <code class="try-prompt">Which service methods are not marked read-only but probably should be? Are there any suspicious transaction configurations?</code>
+                <code class="try-prompt">Give me the full @Transactional map of the app. Which methods are read-only and which ones write? Are there any surprising configurations?</code>
                 <p>
                   Claude calls <code>lw/all-bean-tx</code> to map the effective
                   <code>@Transactional</code> configuration of every app bean at runtime —
                   propagation, isolation, read-only flag, rollback rules. No source reading
-                  needed. It then cross-references method names against their read-only flag
-                  to surface methods that look like reads but aren't marked accordingly.
+                  needed. In a well-configured app like bloated-shelf, every <code>get*</code>
+                  and <code>find*</code> method comes back <code>read-only: true</code>, and
+                  <code>archiveBook</code> stands out as the only write path —
+                  exactly one method with <code>read-only: false</code>. The configuration
+                  validates cleanly. In a less careful app, this call surfaces the surprises.
                 </p>
               </div>
             </div>
@@ -601,9 +607,12 @@ mvn spring-boot:run \
                 <h4>Ask a business question without writing code</h4>
                 <code class="try-prompt">Which genres have the most books in this library? And which ones are borrowed the most?</code>
                 <p>
-                  Claude writes and executes ad-hoc SQL via <code>q/sql</code> — joining
-                  <code>genre → book_genre → loan_record</code> in a single query you didn't
-                  have to write yourself. Results straight from the live database.
+                  Claude uses <code>jpa/jpa-query</code> to answer both questions with JPQL
+                  aggregations — no raw SQL, no schema guessing. It first runs
+                  <code>intro/inspect-entity</code> to discover that the many-to-many lives
+                  on <code>Book.genres</code> (not on <code>Genre</code>), then traverses
+                  from the <code>Book</code> side correctly. Results come back as named maps:
+                  <em>Historical Fiction leads in book count (35), Poetry leads in loans (74).</em>
                 </p>
               </div>
             </div>
@@ -614,9 +623,13 @@ mvn spring-boot:run \
                 <h4>Surface operational data on the spot</h4>
                 <code class="try-prompt">Are there any overdue loans right now? Show me the member name, book title, and how many days overdue.</code>
                 <p>
-                  Multi-table SQL with a date comparison — the kind of thing that would normally
-                  require adding a new repository method, compiling, and restarting. Here it's
-                  a single prompt against the live database.
+                  Claude writes and runs a JPQL query against the live <code>EntityManager</code>
+                  — traversing <code>LoanRecord → member.fullName</code> and
+                  <code>LoanRecord → book.title</code> by property path, no column name guessing
+                  required. In bloated-shelf the answer is
+                  <strong style="color: var(--text)">104 overdue loans</strong>, ranked oldest
+                  first. The kind of operational insight that would normally mean a new
+                  repository method, a recompile, and a restart.
                 </p>
               </div>
             </div>
@@ -627,8 +640,12 @@ mvn spring-boot:run \
                 <h4>Rank data with aggregations</h4>
                 <code class="try-prompt">Which authors have the highest average review rating? Show top 10.</code>
                 <p>
-                  Claude joins <code>review → book → author</code>, aggregates with
-                  <code>AVG</code> and <code>GROUP BY</code>, and returns a ranked table.
+                  Claude writes a JPQL aggregation —
+                  <code>AVG(r.rating)</code> grouped by author, joined through
+                  <code>Author → books → reviews</code> — and executes it via
+                  <code>jpa/jpa-query</code>. Results come back as named Clojure maps with
+                  review counts alongside the average, so you can spot authors with suspiciously
+                  high ratings from only a handful of reviews.
                   Pure ad-hoc analysis — no Spring code touched.
                 </p>
               </div>
@@ -667,7 +684,7 @@ mvn spring-boot:run \
               <span class="try-tag tag-diagnose">Diagnose</span>
               <div class="try-card-text">
                 <h4>Find out exactly what a service method changes — without touching the database</h4>
-                <code class="try-prompt">I suspect .archiveBook is modifying more fields than it should on Book 42. Show me exactly what it changes, but don't actually persist anything.</code>
+                <code class="try-prompt">I suspect .archiveBook is modifying more fields than it should on Book 100. Show me exactly what it changes, but don't actually persist anything.</code>
                 <p>
                   Claude calls <code>q/diff-entity</code>, which runs the service method inside a
                   transaction that is <strong>always rolled back</strong>. It captures the entity
@@ -695,12 +712,15 @@ mvn spring-boot:run \
               <span class="try-tag tag-fix">Fix</span>
               <div class="try-card-text">
                 <h4>Fix the N+1 live, without restarting</h4>
-                <code class="try-prompt">Fix the N+1 on GET /api/books. Don't restart the app — hot-swap the query, verify it worked, then write the fix to source.</code>
+                <code class="try-prompt">Fix the N+1 on GET /api/books/by-genre/{genreId}. Don't restart the app — hot-swap the query, verify it worked, then write the fix to source.</code>
                 <p>
-                  The payoff. Claude uses <code>hq/hot-swap-query!</code> to patch the
-                  <code>@Query</code> JPQL live, re-runs <code>trace/trace-sql</code> to
-                  confirm the query count dropped, writes the fix to <code>BookRepository.java</code>,
-                  then calls <code>hq/reset-all!</code>. Zero restarts. Typically under 90 seconds.
+                  The payoff. Claude uses <code>hq/hot-swap-query!</code> to patch
+                  <code>findByGenreId</code> live — adding <code>JOIN FETCH</code> for author,
+                  genres, reviews, and reviewer — re-runs <code>trace/trace-sql</code> to
+                  confirm the query count drops from
+                  <strong style="color: var(--text)">123 → 1</strong>,
+                  writes the fix to <code>BookRepository.java</code>,
+                  then calls <code>hq/reset-all!</code>. Zero restarts.
                 </p>
               </div>
             </div>
@@ -730,10 +750,43 @@ mvn spring-boot:run \
                   Claude calls <code>cg/blast-radius</code>, which walks the live bytecode
                   upward from the target method and cross-references every caller against
                   registered HTTP handlers and <code>@Scheduled</code> jobs. For this method
-                  it surfaces both <code>GET /api/admin/stats</code> and the nightly
-                  <code>@Scheduled</code> reporter in a single result — entry-point types you
-                  might not have connected to an <code>AdminService</code> change at all.
-                  Takes ~30 ms on first run; cached for the rest of the session.
+                  it surfaces both <code>GET /api/admin/stats</code> and a nightly
+                  <code>@Scheduled</code> reporter running at <code>0 0 2 * * *</code> —
+                  a cron job you might never have thought to connect to an
+                  <code>AdminService</code> change. The call-graph index is built once and
+                  cached for the rest of the session.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>Spot an architecture violation in the wiring graph</h4>
+                <code class="try-prompt">Are there any controllers that bypass the service layer and wire directly to repositories?</code>
+                <p>
+                  Claude calls <code>lw/all-bean-deps</code>, filters for controllers with
+                  repository dependencies, and surfaces the violation immediately — no source
+                  reading required. In bloated-shelf this reveals
+                  <code>architectureBreakingController</code> injecting <code>bookRepository</code>
+                  directly, bypassing the service layer entirely. The name makes the intent
+                  obvious; the wiring graph makes it provable.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-explore">Explore</span>
+              <div class="try-card-text">
+                <h4>See what @Query methods the watcher is monitoring</h4>
+                <code class="try-prompt">Which @Query methods is the query watcher currently tracking? Are any queries hot-swapped right now?</code>
+                <p>
+                  Claude calls <code>qw/status</code> to list every <code>@Query</code> method
+                  the watcher knows about — their current JPQL as it sits on disk — and
+                  <code>hq/list-swapped</code> to check whether any are currently patched.
+                  In bloated-shelf the watcher tracks 7 queries across 4 repositories.
+                  A good orientation call before any hot-swap session: confirms the baseline
+                  and ensures nothing is unexpectedly already swapped.
                 </p>
               </div>
             </div>

@@ -479,12 +479,13 @@ No database changes — the thunk runs inside a transaction that always rolls ba
 The diff shows exactly which fields changed and their old/new values:
 
 ```clojure
-(q/diff-entity "Book" 42
-  (fn [] (.archiveBook (lw/bean "bookService") 42)))
-;; => {:before  {:archived false, :archivedAt nil, :availableCopies 3}
-;;     :after   {:archived true,  :archivedAt "2026-03-15T23:49", :availableCopies 3}
+(q/diff-entity "Book" 100
+  (fn [] (.archiveBook (lw/bean "bookService") (long 100))))
+;; => {:before  {:archived false, :archivedAt nil, :availableCopies 5,
+;;               :title "A Handful of Dust", ...}
+;;     :after   {:archived true,  :archivedAt "2026-03-28T16:16:20", :availableCopies 5}
 ;;     :changed {:archived   [false true]
-;;               :archivedAt [nil "2026-03-15T23:49"]}}
+;;               :archivedAt [nil "2026-03-28T16:16:20"]}}
 ```
 
 Useful for discovering unintended writes, verifying a fix touched exactly the right fields,

@@ -173,7 +173,10 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
 | `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map — use as seed for test setup code and assertions |
-| `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method |
+| `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method. Pass `'*'` as method for the full inbound call graph (flat, deduplicated). |
+| `lw-blast-radius-all <beanName>` | Per-method inbound call graph for every method on a bean: `{method → {:callers [...]}}`. Methods with empty `:callers` are dead-code candidates. All indexes built once — same speed as a single call. |
+| `lw-method-dep-map <beanName>` | For each method on a bean, the subset of its injected dependencies that method actually uses in bytecode. Includes `:dep-frequency` ranking. Options: `:expand-private?` folds private helper deps into their public callers; `:intra-calls?` adds which siblings this method calls; `:callers?` adds which siblings call this method (inverse of `:intra-calls?`). |
+| `lw-dead-methods <beanName>` | Analyses public methods on a bean. Splits into `:dead` (no callers anywhere — delete candidates) and `:internal-only` (called only from sibling methods — visibility leaks, refactoring candidates). Warns when messaging beans or db-scheduler tasks are detected. |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
 
 > ⚠️ **Prefer `clj-nrepl-eval -p <port>` over `lw-eval` for arbitrary expressions.**
@@ -268,7 +271,7 @@ clj-nrepl-eval --discover-ports
 | Expression | What it returns |
 |---|---|
 | `(lw/ctx)` | Live Spring `ApplicationContext` |
-| `(lw/info)` | Env summary (Spring version, Java, OS, active profiles) |
+| `(lw/info)` | Env summary (Spring version, Java, OS, active profiles) + primary DataSource details (db product/version, JDBC URL, driver, pool config) |
 | `(lw/bean "name")` | Bean by name |
 | `(lw/bean MyService)` | Bean by type |
 | `(lw/beans-of-type DataSource)` | All beans of a type → map |
@@ -1380,6 +1383,38 @@ lw-build-test-recipe Review '{:overrides {:rating 1 :comment "Terrible."}}'
 
 ## ⚠️ Known Pitfalls
 
+### Inspect unfamiliar return types before using them — don't guess field names or collection types
+
+When calling a controller or service method that returns a type you haven't worked with before,
+**always inspect the result's structure first** before writing code that traverses it. Guessing
+field names or assuming collection types leads to multiple failed attempts and wasted round-trips.
+
+**Mandatory pattern for unfamiliar return types:**
+
+```clojure
+;; Step 1 — fetch once and inspect structure in a single call
+(let [result (lw/run-as ["user" "ROLE_X"] (.someMethod (lw/bean "someController")))]
+  {:result-type   (type result)
+   :sample-field  (lw/bean->map result)              ; reveals actual field names
+   :nested-type   (type (.getSomeCollection result))  ; check if List, Map, Set, etc.
+   :sample-nested (lw/bean->map (first (.values (.getSomeCollection result))))})
+```
+
+This single call tells you:
+- The actual Java type of the result (may be a DTO, record, or proxy)
+- Exact field names (`.getDisplay` not `.getTitle`, etc.)
+- Whether a collection is a `List`, `LinkedHashMap`, `Set`, etc. — which determines how to iterate it
+
+**Step 2 — only then write the real query** using the confirmed field names and collection access pattern.
+
+Common surprises:
+- Collections returned as `LinkedHashMap` (keyed by ID) → iterate with `.values()`, not directly
+- Field named `.display` or `.label` instead of the expected `.name` or `.title`
+- Nested DTOs that are Java records → use `lw/bean->map`, not `clojure.core/bean`
+
+Skipping the inspection step and guessing field names is the single most common cause of
+unnecessary REPL round-trips when working with controller return values.
+
 ### New repository methods require a restart — the query-watcher cannot inject them
 
 The query-watcher can only hot-swap JPQL strings in `@Query` methods that **already existed at startup**.
@@ -1681,6 +1716,16 @@ Ensure the app is running with a current Livewire JAR.
 ## Examples
 
 ```clojure
+;; Full env + datasource summary — always run this first
+(lw/info)
+;; => {:application-name "bloated-shelf", :active-profiles ["dev" "seed"],
+;;     :java-version "25.0.1", :spring-boot-version "4.0.1",
+;;     :hibernate-version "7.2.0.Final",
+;;     :datasource {:db-product "PostgreSQL 16.9",
+;;                  :jdbc-url "jdbc:postgresql://localhost:32769/test?loggerLevel=OFF",
+;;                  :db-user "test", :driver "PostgreSQL JDBC Driver 42.7.8",
+;;                  :pool-name "HikariPool-1", :pool-size-max 10}}
+
 ;; JPA configuration — always present, includes open-in-view, show-sql, etc.
 (lw/props-matching "spring\\.jpa.*")
 ;; => {"spring.jpa.open-in-view" "false", "spring.jpa.show-sql" "false", ...}
@@ -1828,11 +1873,40 @@ or recompiling sources during a session, clear it:
 (cg/blast-radius "bookRepository" "findAll" :app-only false)
 ```
 
-### CLI: `lw-blast-radius`
+**Wildcard `"*"` — full inbound call graph for all methods at once**
+
+Pass `"*"` as the method name to run blast-radius for every method on the bean and get a
+unified, deduplicated result. All four indexes (HTTP endpoints, scheduler, event listeners,
+call graph) are built once and reused across all methods — so the total time is roughly
+the same as a single call, not N × single call.
+
+```clojure
+;; Unified inbound call graph for the entire bean — deduplicates by [bean method]
+(cg/blast-radius "bookService" "*")
+;; => {:target {:bean "bookService" :method "*"}
+;;     :affected [{:bean "bookController" :method "getBooks" :depth 1
+;;                 :entry-point {:type :http-endpoint :paths ["/api/books"] ...}}
+;;                {:bean "bookController" :method "getBookById" :depth 1
+;;                 :entry-point {:type :http-endpoint :paths ["/api/books/{id}"] ...}}
+;;                ...]
+;;     :warnings [...]}
+```
+
+Use `"*"` when you need to understand the full surface of a bean — e.g. before a major
+refactor, or to confirm that every public method is reachable via HTTP and none are orphaned.
+
+### CLI: `lw-blast-radius` / `lw-blast-radius-all`
 
 ```bash
-lw-blast-radius bookRepository findAll
+# Single method — who calls bookService.archiveBook?
 lw-blast-radius bookService archiveBook
+
+# All methods flat — full inbound call graph for the bean
+lw-blast-radius bookService '*'
+
+# Per-method map — {method → {:callers [...]}} for every method
+# Methods with empty :callers are dead-code candidates
+lw-blast-radius-all bookService
 ```
 
 ### ⚠️ Known limitations
@@ -1851,3 +1925,183 @@ lw-blast-radius bookService archiveBook
   the method name is the best-guess caller.
 - **Overloads.** If the target method name matches multiple overloads, all are included
   and a warning is emitted. Disambiguation requires a full JVM method descriptor.
+- **Kotlin default-parameter calls are resolved.** When a Kotlin function has default
+  parameters, call sites use a synthetic `method$default` wrapper. blast-radius checks
+  both `method` and `method$default` in the call-graph index, so callers using default
+  argument values are not missed.
+- **`@Scheduled` index absent when `@EnableScheduling` is not active.** When the scheduler
+  is not wired up (e.g. disabled in dev profiles), blast-radius prints a one-time diagnostic
+  explaining why — including the active profile list — and omits scheduler entry points from
+  results. The message is printed at most once per JVM session.
+
+---
+
+### `cg/method-dep-map` — method-level dependency fingerprinting
+
+`lw/all-bean-deps` tells you *how many* dependencies a bean has. `method-dep-map` tells you
+*which ones each method actually uses* — the missing link for identifying split boundaries
+in a bloated bean.
+
+```clojure
+(cg/method-dep-map bean-name)
+(cg/method-dep-map bean-name :expand-private? true)
+(cg/method-dep-map bean-name :intra-calls? true)
+```
+
+**Returns:**
+```clojure
+{:bean             "adminService"
+ :class            "com.example.AdminService"
+ :methods          [{:method        "getSystemStats"
+                     :deps          ["authorRepository" "bookRepository"
+                                     "libraryMemberRepository" "reviewRepository"
+                                     "loanRecordRepository"]
+                     :orchestrator? false}
+                    {:method        "getTop10MostLoanedBooks"
+                     :deps          ["bookRepository"]
+                     :orchestrator? false}]
+ :dep-frequency    [{:dep "bookRepository" :used-by-count 2 :methods ["getSystemStats" "getTop10MostLoanedBooks"]}
+                    {:dep "authorRepository" :used-by-count 1 :methods ["getSystemStats"]}
+                    ...]
+ :unaccounted-deps []}
+```
+
+- **`:deps`** — the bean's injected dependencies that this method directly touches in bytecode,
+  resolved by field type → `ApplicationContext` lookup.
+- **`:orchestrator?`** — `true` when the method's dep-set is a superset of ≥ 2 other methods'
+  dep-sets. These methods sequence sub-operations rather than performing a single concern; they
+  are poor candidates for assignment to any one extracted service.
+- **`:dep-frequency`** — all injected dependencies ranked by how many distinct methods use them,
+  descending. High-count deps are load-bearing (every extracted service will need them, or they
+  belong in a shared facade). Count-1 deps are prime extraction candidates — they can move with
+  their single method without splitting anything.
+- **`:unaccounted-deps`** — injected beans not referenced in any public method. Possible dead
+  injections, or deps used only in `@PostConstruct` / field initializers.
+
+**`:callers?` option (default `false`)**
+
+When `true`, adds `:intra-callers` to each method entry — the siblings that call IT (the
+inverse of `:intra-calls?`). Reveals which methods are only called internally, making them
+visibility-leak candidates rather than true dead code. `dead-methods` uses this data
+automatically to populate `:internal-only`.
+
+```clojure
+(cg/method-dep-map "bookService" :callers? true)
+;; each method entry gains :intra-callers showing who calls it within the same bean
+```
+
+**`:intra-calls?` option (default `false`)**
+
+When `true`, adds an `:intra-calls` key to each method entry listing the sibling
+methods on the same bean it directly calls. Self-calls, `$default` synthetics,
+and constructors are excluded. Essential for refactoring splits: if method A calls
+method B internally, moving A without B will break the service.
+
+```clojure
+(cg/method-dep-map "bookService" :intra-calls? true)
+;; :methods contains entries like:
+;; {:method "getAllBooks"
+;;  :deps   ["bookRepository"]
+;;  :intra-calls []
+;;  :orchestrator? false}
+;;
+;; A larger service would show e.g.:
+;; {:method "createBook"
+;;  :intra-calls ["validateIsbn" "notifySubscribers" "updateIndex"]
+;;  :orchestrator? true}
+```
+
+Use `:intra-calls?` alongside `:dep-frequency` when planning a split: methods with
+no intra-calls and a count-1 dep are the cleanest candidates to extract first.
+
+**`:expand-private?` option (default `false`)**
+
+When `true`, private and package-private helper methods are suppressed from `:methods` and their
+field accesses are folded into the public methods that call them (one level of inlining). This
+surfaces the *real* dep footprint of each public method rather than showing helpers as independent
+entries.
+
+```clojure
+;; Without expand (default) — each method shows only its directly accessed fields
+(cg/method-dep-map "bookService")
+;; :methods contains e.g. getAllBooks with deps [bookRepository]
+;; AND any private helpers listed as independent entries
+
+;; With expand — private helper deps are folded into the public callers that call them
+(cg/method-dep-map "bookService" :expand-private? true)
+;; private helper methods are suppressed from :methods;
+;; their dep accesses are attributed to the public method that calls them
+```
+
+**When to use it:**
+
+- An agent has spotted a bean with many injected dependencies via `lw/all-bean-deps`. Use
+  `method-dep-map` to see how those deps distribute across methods — natural clusters suggest
+  extractable services.
+- Use `:dep-frequency` to distinguish load-bearing deps (used by many methods) from extraction
+  candidates (used by only 1 method). Deps with `used-by-count 1` can move with their method
+  cleanly.
+- Before a refactor: use `:expand-private? true` to confirm the real dep footprint of each
+  public method, including what its private helpers need.
+- To surface orchestrator methods that should stay in a thin facade while the rest is split out.
+
+**Known limitations:**
+- Reflection and lambda captures are invisible to the scanner.
+- `@PostConstruct` and field initializer accesses go into `:unaccounted-deps`.
+- Without `:expand-private?`, private helper methods appear as independent entries; their field
+  accesses are not attributed to their public callers.
+- `:expand-private?` expands one level of private calls only. Chains of private helpers calling
+  other private helpers are not recursed further.
+
+### CLI: `lw-method-dep-map`
+
+```bash
+lw-method-dep-map adminService
+lw-method-dep-map bookService
+```
+
+---
+
+### `cg/dead-methods` — unreachable public method detection
+
+Returns the public methods on a bean that have no callers in the application — no HTTP endpoint,
+scheduler, or event listener transitively invokes them. These are candidates for removal,
+dead-code investigation, or evidence of missing wiring.
+
+```clojure
+(cg/dead-methods bean-name)
+```
+
+**Returns:**
+```clojure
+{:bean                "bookService"
+ :dead                []                   ; true dead code — no callers anywhere
+ :internal-only       [{:method "archiveBook" :intra-callers ["someOrchestrator"]} ...]
+ :reachable-count     4
+ :dead-count          0
+ :internal-only-count 1
+ :warnings            ["2 @EventListener bean methods detected — ..."]}
+```
+
+**Two distinct result categories:**
+
+- **`:dead`** — public methods with no external callers AND no intra-class callers. Nothing calls these, inside or outside the bean. Primary candidates for deletion.
+- **`:internal-only`** — public methods with no external callers but called by at least one sibling method. Public by accident (testability, Kotlin default visibility). These are **refactoring candidates**, not deletion candidates — they reveal that a method's public visibility exceeds its actual call surface.
+
+**Only public methods (JVM ACC_PUBLIC) are analysed.** Private and package-private methods are excluded regardless of whether they are called.
+
+⚠️ **False-positive caveat.** Methods invoked only via `ApplicationEventPublisher`, NATS,
+Kafka, or other messaging infrastructure will appear in `:dead` or `:internal-only` even
+though they are actively used. The `:warnings` key automatically lists any detected messaging
+beans and db-scheduler tasks — cross-reference before acting.
+
+The scheduler index is built by static `@Scheduled` annotation scanning (no `@EnableScheduling`
+required), so scheduled entry points are correctly detected even in local dev profiles where
+the scheduler is typically disabled.
+
+### CLI: `lw-dead-methods`
+
+```bash
+lw-dead-methods bookService
+lw-dead-methods adminService
+```

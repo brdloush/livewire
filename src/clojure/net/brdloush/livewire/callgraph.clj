@@ -24,6 +24,7 @@
      (cg/reset-blast-radius-cache!)"
   (:require [net.brdloush.livewire.core :as core]
             [net.brdloush.livewire.introspect :as intro]
+            [clojure.set :as set]
             [clojure.string :as str])
   (:import [org.springframework.asm ClassReader ClassVisitor MethodVisitor Opcodes]
            [org.springframework.aop.support AopUtils]))
@@ -55,11 +56,11 @@
   "Like core/all-bean-deps but uses the improved app-bean? predicate so that
    Spring Data JPA repository beans are included when :app-only true."
   [& {:keys [app-only] :or {app-only true}}]
-  (let [c   (core/ctx)
-        bf  (.getBeanFactory c)
+  (let [c (core/ctx)
+        bf (.getBeanFactory c)
         pkg (when app-only
               (let [names (.getBeanNamesForAnnotation
-                            c org.springframework.boot.autoconfigure.SpringBootApplication)]
+                           c org.springframework.boot.autoconfigure.SpringBootApplication)]
                 (when (seq names)
                   (-> c (.getBean (first names)) .getClass .getPackage .getName))))]
     (->> (.getBeanDefinitionNames c)
@@ -100,19 +101,19 @@
    method-call instruction found."
   [bean-instance]
   (let [real-cls (AopUtils/getTargetClass bean-instance)
-        stream   (class->bytecode-stream real-cls)
-        calls    (atom [])]
+        stream (class->bytecode-stream real-cls)
+        calls (atom [])]
     (when stream
       (.accept (ClassReader. stream)
-        (proxy [ClassVisitor] [Opcodes/ASM9]
-          (visitMethod [_access method-name _desc _sig _exns]
-            (let [caller method-name]
-              (proxy [MethodVisitor] [Opcodes/ASM9]
-                (visitMethodInsn [_opcode owner callee-method _desc _itf]
-                  (swap! calls conj {:caller-method caller
-                                     :callee-owner  (str/replace owner "/" ".")
-                                     :callee-method callee-method}))))))
-        0))
+               (proxy [ClassVisitor] [Opcodes/ASM9]
+                 (visitMethod [_access method-name _desc _sig _exns]
+                   (let [caller method-name]
+                     (proxy [MethodVisitor] [Opcodes/ASM9]
+                       (visitMethodInsn [_opcode owner callee-method _desc _itf]
+                         (swap! calls conj {:caller-method caller
+                                            :callee-owner (str/replace owner "/" ".")
+                                            :callee-method callee-method}))))))
+               0))
     @calls))
 
 (defn- build-call-graph-index*
@@ -121,18 +122,18 @@
   []
   (let [all-deps (app-bean-deps)]
     (reduce
-      (fn [idx {:keys [bean]}]
-        (try
-          (reduce (fn [idx {:keys [caller-method callee-owner callee-method]}]
-                    (update idx [callee-owner callee-method]
-                            (fnil conj []) {:bean bean :method caller-method}))
-                  idx
-                  (extract-call-sites (core/bean bean)))
-          (catch Exception e
-            (println (str "[callgraph] skip " bean ": " (.getMessage e)))
-            idx)))
-      {}
-      all-deps)))
+     (fn [idx {:keys [bean]}]
+       (try
+         (reduce (fn [idx {:keys [caller-method callee-owner callee-method]}]
+                   (update idx [callee-owner callee-method]
+                           (fnil conj []) {:bean bean :method caller-method}))
+                 idx
+                 (extract-call-sites (core/bean bean)))
+         (catch Exception e
+           (println (str "[callgraph] skip " bean ": " (.getMessage e)))
+           idx)))
+     {}
+     all-deps)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Call-graph index cache
@@ -165,7 +166,7 @@
    on the JDK proxy, not on SimpleJpaRepository)."
   [bean-name]
   (try
-    (let [b        (core/bean bean-name)
+    (let [b (core/bean bean-name)
           real-cls (AopUtils/getTargetClass b)
           proxy-ifaces (.getInterfaces (.getClass b))]
       (-> #{(.getName real-cls)}
@@ -187,9 +188,9 @@
          (keep (fn [{:keys [controller handler-method] :as ep}]
                  (when-let [bn (get fqcn->bean controller)]
                    [[bn handler-method]
-                    {:type          :http-endpoint
-                     :paths         (:paths ep)
-                     :http-methods  (:methods ep)
+                    {:type :http-endpoint
+                     :paths (:paths ep)
+                     :http-methods (:methods ep)
                      :pre-authorize (:pre-authorize ep)}])))
          (into {}))))
 
@@ -200,7 +201,7 @@
   (if (= "org.springframework.scheduling.config.Task$OutcomeTrackingRunnable"
          (.getName (.getClass runnable)))
     (let [f (doto (.getDeclaredField (.getClass runnable) "runnable")
-               (.setAccessible true))]
+              (.setAccessible true))]
       (.get f runnable))
     runnable))
 
@@ -217,34 +218,69 @@
         all-bean-names))
 
 (defn- build-scheduled-index
-  "Returns {[bean-name method-name] -> {:type :scheduler :cron|:fixed-delay|:fixed-rate ...}}
-   by reflecting over ScheduledAnnotationBeanPostProcessor."
+  "Returns {[bean-name method-name] -> {:type :scheduler :cron|:fixed-delay|:fixed-rate ...}}.
+
+   Primary strategy: static annotation scanning — walks getDeclaredMethods of every app bean
+   class and inspects @Scheduled directly. Works even when @EnableScheduling is not active
+   (the common case in local dev profiles).
+
+   Fallback: if the primary scan returns nothing, tries the runtime
+   ScheduledAnnotationBeanPostProcessor (for programmatic task registration via @Bean).
+
+   The two approaches are complementary: @Scheduled catches annotation-driven tasks,
+   the processor catches programmatic tasks. Running both and merging is safe — duplicate
+   keys from the same method are idempotent."
   []
-  (try
-    (let [processor (core/bean org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor)
-          all-beans (core/bean-names)
-          smr-cls   (Class/forName "org.springframework.scheduling.support.ScheduledMethodRunnable")]
-      (->> (.getScheduledTasks processor)
-           (keep (fn [st]
-                   (let [task     (.getTask st)
-                         runnable (unwrap-scheduled-runnable (.getRunnable task))]
-                     (when (instance? smr-cls runnable)
-                       (let [target      (.getTarget runnable)
-                             method-name (.getName (.getMethod runnable))
-                             bean-name   (bean-name-for-target target all-beans)
-                             task-info   (condp instance? task
-                                           org.springframework.scheduling.config.CronTask
-                                           {:type :scheduler :cron (.getExpression task)}
-                                           org.springframework.scheduling.config.FixedDelayTask
-                                           {:type :scheduler :fixed-delay (.getInterval task)}
-                                           org.springframework.scheduling.config.FixedRateTask
-                                           {:type :scheduler :fixed-rate (.getInterval task)}
-                                           {:type :scheduler})]
-                         (when bean-name [[bean-name method-name] task-info]))))))
-           (into {})))
-    (catch Exception e
-      (println "[callgraph] @Scheduled index error:" (.getMessage e))
-      {})))
+  (let [scheduled-cls (try (Class/forName "org.springframework.scheduling.annotation.Scheduled")
+                           (catch Exception _ nil))
+        ;; --- primary: static annotation scan ---
+        static-index
+        (when scheduled-cls
+          (->> (app-bean-deps)
+               (mapcat (fn [{:keys [bean]}]
+                         (try
+                           (let [b (core/bean bean)
+                                 cls (AopUtils/getTargetClass b)]
+                             (->> (seq (.getDeclaredMethods cls))
+                                  (keep (fn [m]
+                                          (when-let [ann (.getAnnotation m scheduled-cls)]
+                                            (let [cron (.cron ann)
+                                                  fdly (.fixedDelay ann)
+                                                  frate (.fixedRate ann)]
+                                              [[bean (.getName m)]
+                                               (cond
+                                                 (seq cron) {:type :scheduler :cron cron}
+                                                 (pos? fdly) {:type :scheduler :fixed-delay fdly}
+                                                 (pos? frate) {:type :scheduler :fixed-rate frate}
+                                                 :else {:type :scheduler})]))))))
+                           (catch Exception _ []))))
+               (into {})))
+        ;; --- fallback: runtime processor (programmatic task registration) ---
+        runtime-index
+        (try
+          (let [processor (core/bean org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor)
+                all-beans (core/bean-names)
+                smr-cls (Class/forName "org.springframework.scheduling.support.ScheduledMethodRunnable")]
+            (->> (.getScheduledTasks processor)
+                 (keep (fn [st]
+                         (let [task (.getTask st)
+                               runnable (unwrap-scheduled-runnable (.getRunnable task))]
+                           (when (instance? smr-cls runnable)
+                             (let [target (.getTarget runnable)
+                                   method-name (.getName (.getMethod runnable))
+                                   bean-name (bean-name-for-target target all-beans)
+                                   task-info (condp instance? task
+                                               org.springframework.scheduling.config.CronTask
+                                               {:type :scheduler :cron (.getExpression task)}
+                                               org.springframework.scheduling.config.FixedDelayTask
+                                               {:type :scheduler :fixed-delay (.getInterval task)}
+                                               org.springframework.scheduling.config.FixedRateTask
+                                               {:type :scheduler :fixed-rate (.getInterval task)}
+                                               {:type :scheduler})]
+                               (when bean-name [[bean-name method-name] task-info]))))))
+                 (into {})))
+          (catch Exception _ {}))]
+    (merge static-index runtime-index)))
 
 (defn- find-event-listener-methods
   "Returns seq of {:bean :method :event-types} for every @EventListener-annotated
@@ -253,8 +289,8 @@
   (let [cls (AopUtils/getTargetClass bean-obj)]
     (->> (seq (.getMethods cls))
          (filter #(.isAnnotationPresent % org.springframework.context.event.EventListener))
-         (map (fn [m] {:bean        bean-name
-                       :method      (.getName m)
+         (map (fn [m] {:bean bean-name
+                       :method (.getName m)
                        :event-types (mapv #(.getSimpleName %) (.getParameterTypes m))})))))
 
 (defn- build-event-listener-index
@@ -271,7 +307,308 @@
        (into {})))
 
 ;;; ---------------------------------------------------------------------------
+;;; Internal: field-access extraction and bean resolution for method-dep-map
+
+(defn- extract-intra-class-calls
+  "Walks the bytecode of bean-instance's real class and returns a map of
+   method-name -> #{called-method-names} for calls made within the same class.
+   Used by method-dep-map to expand private helper call sites."
+  [bean-instance]
+  (let [real-cls (AopUtils/getTargetClass bean-instance)
+        class-internal (str/replace (.getName real-cls) "." "/")
+        resource-path (str class-internal ".class")
+        cl (or (.getClassLoader real-cls) (ClassLoader/getSystemClassLoader))
+        stream (.getResourceAsStream cl resource-path)
+        calls (atom [])]
+    (when stream
+      (.accept (ClassReader. stream)
+               (proxy [ClassVisitor] [Opcodes/ASM9]
+                 (visitMethod [_access method-name _desc _sig _exns]
+                   (proxy [MethodVisitor] [Opcodes/ASM9]
+                     (visitMethodInsn [_opcode owner callee _desc _itf]
+                       (when (= owner class-internal)
+                         (swap! calls conj {:caller method-name :callee callee}))))))
+               0))
+    (->> @calls
+         (group-by :caller)
+         (map (fn [[caller cs]] [caller (set (map :callee cs))]))
+         (into {}))))
+
+(defn- extract-field-accesses
+  "Walks the bytecode of bean-instance's real class and returns a seq of
+   {:method method-name :field field-name} for every GETFIELD instruction found."
+  [bean-instance]
+  (let [real-cls (AopUtils/getTargetClass bean-instance)
+        resource-path (str (.replace (.getName real-cls) "." "/") ".class")
+        cl (or (.getClassLoader real-cls) (ClassLoader/getSystemClassLoader))
+        stream (.getResourceAsStream cl resource-path)
+        accesses (atom [])]
+    (when stream
+      (.accept (ClassReader. stream)
+               (proxy [ClassVisitor] [Opcodes/ASM9]
+                 (visitMethod [_access method-name _desc _sig _exns]
+                   (proxy [MethodVisitor] [Opcodes/ASM9]
+                     (visitFieldInsn [opcode _owner field-name _desc]
+                       (when (= opcode Opcodes/GETFIELD)
+                         (swap! accesses conj {:method method-name :field field-name}))))))
+               0))
+    @accesses))
+
+(defn- field->bean-name
+  "Given the real (unwrapped) class and a field name, returns the Spring bean
+   name whose type matches the field's declared type — or nil if the field is
+   not a Spring bean. Walks the superclass chain to find inherited fields."
+  [real-cls field-name]
+  (let [field (or (try (.getDeclaredField real-cls field-name)
+                       (catch NoSuchFieldException _ nil))
+                  (loop [c (.getSuperclass real-cls)]
+                    (when c
+                      (or (try (.getDeclaredField c field-name)
+                               (catch NoSuchFieldException _ nil))
+                          (recur (.getSuperclass c))))))]
+    (when field
+      (let [field-type (.getType field)]
+        (some (fn [bn]
+                (try
+                  (when (instance? field-type (core/bean bn)) bn)
+                  (catch Exception _ nil)))
+              (core/bean-names))))))
+
+(defn- add-orchestrator-flag
+  "Marks a method as :orchestrator? true when its dep-set is a proper superset
+   of at least two other methods' dep-sets — i.e. it sequences sub-operations
+   rather than performing a single concern."
+  [methods]
+  (let [dep-sets (mapv #(set (:deps %)) methods)]
+    (mapv (fn [{:keys [deps] :as m} own-set]
+            (let [subsumed (->> dep-sets
+                                (remove #(= % own-set))
+                                (filter #(set/subset? % own-set))
+                                count)]
+              (assoc m :orchestrator? (>= subsumed 2))))
+          methods dep-sets)))
+
+;;; ---------------------------------------------------------------------------
 ;;; Public API
+
+(defn method-dep-map
+  "For each method on a bean, returns the subset of the bean's injected
+   dependencies that method directly references in its bytecode.
+
+   This answers the question 'which of this bean's dependencies does each
+   method actually use?' — the missing link between lw/all-bean-deps (which
+   gives the full injection set) and blast-radius (which traces callers upward).
+   Use it to identify natural split boundaries in a bloated bean.
+
+   Arguments:
+     bean-name — Spring bean name (string), same as accepted by lw/bean
+
+   Returns:
+     {:bean             \"adminService\"
+      :class            \"com.example.AdminService\"
+      :methods          [{:method \"getSystemStats\"
+                          :deps   [\"bookRepository\" \"authorRepository\" ...]
+                          :orchestrator? false}
+                         ...]
+      :unaccounted-deps []}
+
+   :orchestrator? is true when the method's dep-set is a superset of at least
+   two other methods' dep-sets — it sequences sub-operations and is a poor
+   candidate for assignment to any single extracted service.
+
+   :unaccounted-deps lists injected beans not directly referenced by any method
+   — possible dead injections or deps used only in @PostConstruct / initializers.
+
+   The field→bean resolution walks the class hierarchy and checks bean type
+   compatibility via instanceof. Only fields whose type matches a registered
+   Spring bean are included.
+
+   Options:
+     :expand-private?  (default false) — when true, attributes field accesses
+       of private helper methods to the public methods that call them. This
+       surfaces the real dep footprint of each public method rather than
+       listing private methods as independent entries. Private methods that
+       are only called from within the class are suppressed from :methods.
+
+   Known limitations:
+   - Reflection and lambda captures are invisible to the scanner.
+   - @PostConstruct and field initialiser accesses go into :unaccounted-deps.
+   - Without :expand-private?, private helper methods appear as independent
+     entries; their field accesses are not attributed to their public callers.
+   - :expand-private? expands one level of private calls. Chains of private
+     helpers calling other private helpers are not recursed further.
+
+   Options:
+     :intra-calls?  (default false) — when true, adds an :intra-calls key to each
+       method entry listing the sibling methods on the same bean that it directly
+       calls. Synthetics ($default, $lambda), self-calls, and constructors are
+       excluded. Essential for refactoring splits: if method A calls method B
+       internally, moving A without B breaks the service.
+
+   :callers?  (default false) — when true, adds an :intra-callers key to each
+       method entry listing the sibling methods that call IT (the inverse of
+       :intra-calls?). Reveals which methods are only called internally, making
+       them visibility-leak candidates rather than true dead code.
+
+   Example:
+     (cg/method-dep-map \"adminService\")
+     (cg/method-dep-map \"bookService\" :expand-private? true)
+     (cg/method-dep-map \"bookService\" :intra-calls? true)"
+  [bean-name & {:keys [expand-private? intra-calls? callers?]
+                :or {expand-private? false intra-calls? false callers? false}}]
+  (let [b (core/bean bean-name)
+        real-cls (AopUtils/getTargetClass b)
+        accesses (extract-field-accesses b)
+        field->bn (->> accesses
+                       (map :field)
+                       distinct
+                       (keep (fn [f]
+                               (when-let [bn (field->bean-name real-cls f)]
+                                 [f bn])))
+                       (into {}))
+        ;; method -> #{field-names} for all methods (inc private)
+        method->fields (->> accesses
+                            (group-by :method)
+                            (map (fn [[m as]] [m (set (map :field as))]))
+                            (into {}))
+        public-methods (when (or expand-private? intra-calls? callers?)
+                         (set (map #(.getName %) (.getMethods real-cls))))
+        intra-calls (when (or expand-private? intra-calls? callers?)
+                      (extract-intra-class-calls b))
+        ;; intra-callees = all methods called from within the class
+        ;; internal-only = those that are not public (package-private/private helpers)
+        ;; These are suppressed from top-level :methods when expand-private? is true;
+        ;; their deps are folded into the public methods that call them.
+        intra-callees (when expand-private?
+                        (->> (vals intra-calls)
+                             (apply set/union #{})))
+        internal-only (when expand-private?
+                        (set/difference intra-callees public-methods))
+        ;; effective fields for a method: own fields + fields of called private helpers
+        effective-fields (fn [method-name]
+                           (if expand-private?
+                             (let [priv-callees (set/difference
+                                                 (get intra-calls method-name #{})
+                                                 public-methods)]
+                               (->> priv-callees
+                                    (map #(get method->fields % #{}))
+                                    (apply set/union (get method->fields method-name #{}))))
+                             (get method->fields method-name #{})))
+        methods (->> (keys method->fields)
+                     (remove (fn [m] (and expand-private? (contains? internal-only m))))
+                     (keep (fn [method]
+                             (let [deps (->> (effective-fields method)
+                                             (keep field->bn)
+                                             distinct
+                                             vec)]
+                               (when (seq deps)
+                                 {:method method :deps deps}))))
+                     (sort-by :method)
+                     vec
+                     add-orchestrator-flag)
+        methods (if intra-calls?
+                  (mapv (fn [{:keys [method] :as m}]
+                          (assoc m :intra-calls
+                                 (->> (get intra-calls method #{})
+                                      (remove #(= method %))
+                                      (remove #(str/includes? % "$"))
+                                      (remove #(= "<init>" %))
+                                      sort vec)))
+                        methods)
+                  methods)
+        ;; :callers? — invert the intra-calls map to show who calls each method
+        callers-of (when callers?
+                     (->> (or intra-calls (extract-intra-class-calls b))
+                          (reduce (fn [acc [caller callees]]
+                                    (reduce (fn [a callee]
+                                              (update a callee (fnil conj []) caller))
+                                            acc callees))
+                                  {})))
+        methods (if callers?
+                  (mapv (fn [{:keys [method] :as m}]
+                          (assoc m :intra-callers
+                                 (->> (get callers-of method [])
+                                      (remove #(= method %))
+                                      (remove #(str/includes? % "$"))
+                                      sort vec)))
+                        methods)
+                  methods)
+        all-bns (set (vals field->bn))
+        accounted (set (mapcat :deps methods))
+        dep-frequency (->> methods
+                           (mapcat (fn [{:keys [method deps]}]
+                                     (map #(vector % method) deps)))
+                           (group-by first)
+                           (map (fn [[dep ms]]
+                                  {:dep dep :used-by-count (count ms)
+                                   :methods (mapv second ms)}))
+                           (sort-by :used-by-count >)
+                           vec)]
+    {:bean bean-name
+     :class (.getName real-cls)
+     :methods methods
+     :dep-frequency dep-frequency
+     :unaccounted-deps (vec (remove accounted all-bns))}))
+
+(defn- blast-radius-single
+  "Core single-method blast-radius logic. Accepts pre-built indexes so that
+   the wildcard path can build them once and reuse across all methods."
+  [target-bean target-method all-deps cg http-index sched-index event-index]
+  (let [dep-set (disj (transitive-dependents target-bean all-deps) target-bean)
+        target-classes (bean->target-class-names target-bean)
+        warnings (atom [])
+        _ (when (seq (find-event-listener-methods target-bean (core/bean target-bean)))
+            (swap! warnings conj
+                   (str target-bean " has @EventListener methods — callers via ApplicationEventPublisher "
+                        "are not visible to static bytecode analysis; inspect manually")))
+        _ (when (> (->> target-classes
+                        (mapcat (fn [cls] (filter #(= % [cls target-method]) (keys cg))))
+                        distinct count)
+                   1)
+            (swap! warnings conj
+                   (str "Method name '" target-method
+                        "' matched multiple signatures — all overloads are included")))
+        annotate (fn [bean method]
+                   (or (get http-index [bean method])
+                       (get sched-index [bean method])
+                       (get event-index [bean method])))
+        ;; Kotlin default-parameter methods compile to a synthetic "method$default"
+        ;; at call sites. Look up both the canonical name and the $default variant
+        ;; so that callers using default args are not missed.
+        target-method-keys (cond-> [target-method]
+                             (not (str/ends-with? target-method "$default"))
+                             (conj (str target-method "$default")))
+        all-affected
+        (loop [frontier (->> target-classes
+                             (mapcat (fn [cls] (mapcat #(get cg [cls %] []) target-method-keys)))
+                             (filter #(contains? dep-set (:bean %)))
+                             distinct
+                             (mapv #(assoc % :depth 1)))
+               visited #{}
+               result []]
+          (if (or (empty? frontier) (> (:depth (first frontier) 0) 10))
+            result
+            (let [annotated (mapv (fn [{:keys [bean method depth]}]
+                                    {:bean bean
+                                     :method method
+                                     :depth depth
+                                     :entry-point (annotate bean method)})
+                                  frontier)
+                  new-visited (into visited (map #(select-keys % [:bean :method]) frontier))
+                  next-depth (inc (:depth (first frontier) 1))
+                  next-layer (->> frontier
+                                  (mapcat (fn [{:keys [bean method]}]
+                                            (->> (bean->target-class-names bean)
+                                                 (mapcat #(get cg [% method] []))
+                                                 (filter #(and (contains? dep-set (:bean %))
+                                                               (not (contains? new-visited
+                                                                               (select-keys % [:bean :method]))))))))
+                                  distinct
+                                  (mapv #(assoc % :depth next-depth)))]
+              (recur next-layer new-visited (into result annotated)))))]
+    {:target {:bean target-bean :method target-method}
+     :affected (sort-by (juxt :depth :bean) all-affected)
+     :warnings @warnings}))
 
 (defn blast-radius
   "Returns the set of bean methods that transitively invoke target-bean/target-method,
@@ -308,6 +645,10 @@
    :depth is the hop count from the target bean. Depth 1 = direct caller of target.
    :entry-point is present for HTTP endpoints, @Scheduled methods, and @EventListener methods.
 
+   Pass \"*\" as target-method to run blast-radius for every method on the bean
+   and return a unified, deduplicated result — useful for understanding the full
+   inbound call graph of a bean without running separate calls per method.
+
    Known limitations (also documented in SKILL.md):
    - ApplicationEventPublisher calls are invisible to static bytecode analysis.
    - @Async wrappers: the direct call site is found but async dispatch chains are not.
@@ -320,66 +661,183 @@
 
    Examples:
      (cg/blast-radius \"bookRepository\" \"findAll\")
-     (cg/blast-radius \"bookService\" \"archiveBook\")"
-  [target-bean target-method & {:keys [app-only] :or {app-only true}}]
-  (let [all-deps       (app-bean-deps)
-        dep-set        (disj (transitive-dependents target-bean all-deps) target-bean)
-        target-classes (bean->target-class-names target-bean)
-        cg             (call-graph-index)
-        http-index     (build-http-endpoint-index)
-        sched-index    (build-scheduled-index)
-        event-index    (build-event-listener-index)
-        warnings       (atom [])
+        (cg/blast-radius \"bookService\" \"archiveBook\")
+               (cg/blast-radius \"bookService\" \"*\")
+               (cg/blast-radius \"bookService\" \"*\" :per-method? true)"
+  [target-bean target-method & {:keys [app-only per-method?] :or {app-only true per-method? false}}]
+  (let [all-deps (app-bean-deps)
+        cg (call-graph-index)
+        http-index (build-http-endpoint-index)
+        sched-index (build-scheduled-index)
+        event-index (build-event-listener-index)]
+    (if (= target-method "*")
+      (let [method-names (->> (method-dep-map target-bean)
+                              :methods
+                              (map :method)
+                              distinct)
+            results (map (fn [m]
+                           [m (blast-radius-single target-bean m all-deps cg
+                                                   http-index sched-index event-index)])
+                         method-names)
+            warnings (vec (distinct (mapcat #(:warnings (second %)) results)))]
+        (if per-method?
+          {:target {:bean target-bean :method "*"}
+           :per-method (->> results
+                            (map (fn [[m r]] [m {:callers (:affected r)}]))
+                            (into {}))
+           :warnings warnings}
+          {:target {:bean target-bean :method "*"}
+           :affected (->> results
+                          (mapcat #(:affected (second %)))
+                          (group-by (juxt :bean :method))
+                          (map (fn [[_ entries]] (first entries)))
+                          (sort-by (juxt :depth :bean))
+                          vec)
+           :warnings warnings}))
+      (blast-radius-single target-bean target-method all-deps cg
+                           http-index sched-index event-index))))
 
-        ;; Warn if target bean has @EventListener methods (callers via events are invisible)
-        _ (when (seq (find-event-listener-methods target-bean (core/bean target-bean)))
-            (swap! warnings conj
-              (str target-bean " has @EventListener methods — callers via ApplicationEventPublisher "
-                   "are not visible to static bytecode analysis; inspect manually")))
+           ;;; ---------------------------------------------------------------------------
+           ;;; Internal: messaging annotation detection for dead-methods warnings
 
-        ;; Warn if the target method name matches multiple callee entries (overloads)
-        _ (when (> (->> target-classes
-                        (mapcat (fn [cls] (filter #(= % [cls target-method]) (keys cg))))
-                        distinct count)
-                   1)
-            (swap! warnings conj
-              (str "Method name '" target-method
-                   "' matched multiple signatures — all overloads are included")))
+(def ^:private messaging-ann-names
+  #{"EventListener" "TransactionalEventListener"
+    "KafkaListener" "RabbitListener" "JmsListener"
+    "SqsListener" "NatsListener" "StreamListener"
+    "ServiceActivator"})
 
-        annotate (fn [bean method]
-                   (or (get http-index [bean method])
-                       (get sched-index [bean method])
-                       (get event-index [bean method])))
+(defn- find-messaging-methods
+  "Returns a seq of {:bean :method :annotation} for every app-level bean method
+              annotated with a recognised messaging annotation (event listeners, message
+              consumers, etc.). Used to generate dead-code false-positive warnings."
+  []
+  (->> (app-bean-deps)
+       (mapcat (fn [{:keys [bean]}]
+                 (try
+                   (let [b (core/bean bean)
+                         cls (AopUtils/getTargetClass b)]
+                     (->> (seq (.getDeclaredMethods cls))
+                          (mapcat (fn [m]
+                                    (->> (.getDeclaredAnnotations m)
+                                         (keep (fn [ann]
+                                                 (let [sn (.getSimpleName (.annotationType ann))]
+                                                   (when (or (contains? messaging-ann-names sn)
+                                                             (str/includes? sn "Listener")
+                                                             (str/includes? sn "Consumer"))
+                                                     {:bean bean
+                                                      :method (.getName m)
+                                                      :annotation sn})))))))))
+                   (catch Exception _ []))))
+       distinct))
 
-        all-affected
-        (loop [frontier (->> target-classes
-                              (mapcat #(get cg [% target-method] []))
-                              (filter #(contains? dep-set (:bean %)))
-                              distinct
-                              (mapv #(assoc % :depth 1)))
-               visited  #{}
-               result   []]
-          (if (or (empty? frontier) (> (:depth (first frontier) 0) 10))
-            result
-            (let [annotated   (mapv (fn [{:keys [bean method depth]}]
-                                      {:bean        bean
-                                       :method      method
-                                       :depth       depth
-                                       :entry-point (annotate bean method)})
-                                    frontier)
-                  new-visited (into visited (map #(select-keys % [:bean :method]) frontier))
-                  next-depth  (inc (:depth (first frontier) 1))
-                  next-layer  (->> frontier
-                                   (mapcat (fn [{:keys [bean method]}]
-                                             (->> (bean->target-class-names bean)
-                                                  (mapcat #(get cg [% method] []))
-                                                  (filter #(and (contains? dep-set (:bean %))
-                                                                (not (contains? new-visited
-                                                                                (select-keys % [:bean :method]))))))))
-                                   distinct
-                                   (mapv #(assoc % :depth next-depth)))]
-              (recur next-layer new-visited (into result annotated)))))]
+           ;;; ---------------------------------------------------------------------------
+(defn- find-db-scheduler-tasks
+  "Returns a seq of {:bean :task-name} for all Spring beans that implement the
+   kagkarlsson db-scheduler Task interface. These tasks use lambda-based execution
+   handlers whose target methods are not traceable by static bytecode analysis —
+   they appear as blind spots in blast-radius and dead-methods."
+  []
+  (try
+    (let [task-cls (Class/forName "com.github.kagkarlsson.scheduler.task.Task")]
+      (->> (core/bean-names)
+           (keep (fn [bn]
+                   (try
+                     (let [b (core/bean bn)]
+                       (when (instance? task-cls b)
+                         {:bean bn :task-name (.getTaskName b)}))
+                     (catch Exception _ nil))))))
+    (catch ClassNotFoundException _ [])))
 
-    {:target   {:bean target-bean :method target-method}
-     :affected (sort-by (juxt :depth :bean) all-affected)
-     :warnings @warnings}))
+;;; Public API — dead-methods
+
+(defn dead-methods
+  "Returns the public methods on a bean that have no external callers — no HTTP
+   endpoint, scheduler, or event listener transitively invokes them.
+
+   Results are split into two distinct categories:
+
+   :dead — methods with no external callers AND no intra-class callers.
+     True dead code: nothing calls these, inside or outside the bean.
+     Primary candidates for deletion.
+
+   :internal-only — methods with no external callers but WITH at least one
+     intra-class caller. Public by accident (e.g. for testability or Kotlin
+     default visibility). These are refactoring candidates, not deletion
+     candidates — they reveal where a bean's internal orchestration exceeds
+     its public API surface.
+
+   Uses blast-radius per-method internally; all four indexes are built once.
+   Only public methods (JVM ACC_PUBLIC) are analysed.
+
+   Arguments:
+     bean-name — Spring bean name (string), same as accepted by lw/bean
+
+   Returns:
+     {:bean              \"bookService\"
+      :dead              []
+      :internal-only     [{:method \"archiveBook\" :intra-callers [\"someHelper\"]} ...]
+      :reachable-count   4
+      :dead-count        0
+      :internal-only-count 1
+      :warnings          [...]}
+
+   ⚠️ False-positive caveat: methods invoked only via ApplicationEventPublisher,
+   NATS, Kafka, or other messaging infrastructure will appear dead or internal-only
+   even though they are actively used. The :warnings key lists any detected
+   messaging beans so you can cross-reference the results manually.
+
+   Example:
+     (cg/dead-methods \"bookService\")
+     (cg/dead-methods \"adminService\")"
+  [bean-name]
+  (let [b (core/bean bean-name)
+        real-cls (AopUtils/getTargetClass b)
+        pub-names (set (map #(.getName %) (.getMethods real-cls)))
+        per-method (-> (blast-radius bean-name "*" :per-method? true)
+                       :per-method
+                       (select-keys pub-names))
+        ;; build callers-of from intra-class call map
+        intra (extract-intra-class-calls b)
+        callers-of (->> intra
+                        (reduce (fn [acc [caller callees]]
+                                  (reduce (fn [a callee]
+                                            (update a callee (fnil conj []) caller))
+                                          acc callees))
+                                {}))
+        clean-callers (fn [m]
+                        (->> (get callers-of m [])
+                             (remove #(= m %))
+                             (remove #(str/includes? % "$"))
+                             sort vec))
+        ;; split: no external callers → check intra-callers
+        no-ext (->> per-method
+                    (filter #(empty? (:callers (val %))))
+                    (map (fn [[m _]]
+                           {:method m :intra-callers (clean-callers m)}))
+                    (sort-by :method))
+        dead (filterv #(empty? (:intra-callers %)) no-ext)
+        internal (filterv #(seq (:intra-callers %)) no-ext)
+        reachable (->> per-method (filter #(seq (:callers (val %)))) count)
+        ;; warnings
+        msg-methods (find-messaging-methods)
+        db-tasks (find-db-scheduler-tasks)
+        warnings (cond-> []
+                   (seq msg-methods)
+                   (conj (let [by-ann (group-by :annotation msg-methods)
+                               summary (->> by-ann (map (fn [[a ms]] (str (count ms) " @" a))) (str/join ", "))
+                               examples (->> msg-methods (take 5) (map #(str (:bean %) "." (:method %))) (str/join ", "))]
+                           (str summary " bean methods detected — methods invoked only via events or "
+                                "messages may appear as dead code. Review: " examples
+                                (when (> (count msg-methods) 5) (str " … and " (- (count msg-methods) 5) " more")))))
+                   (seq db-tasks)
+                   (conj (let [names (->> db-tasks (map #(str (:bean %) " (\"" (:task-name %) "\")")) (str/join ", "))]
+                           (str (count db-tasks) " db-scheduler (kagkarlsson) recurring task(s) detected — "
+                                "their execution handlers use lambdas and are not visible to static analysis. "
+                                "Tasks: " names))))]
+    {:bean bean-name
+     :dead dead
+     :internal-only internal
+     :reachable-count reachable
+     :dead-count (count dead)
+     :internal-only-count (count internal)
+     :warnings warnings}))

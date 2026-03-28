@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: lw-blast-radius-all <beanName>
+#
+# Returns a {method → {:callers [...]}} map for every method on the bean.
+# Methods with empty :callers have no known inbound callers and are
+# candidates for dead-code investigation (see also lw-dead-methods).
+#
+# All four indexes (HTTP endpoints, @Scheduled, @EventListener, call-graph)
+# are built once — total time is roughly equivalent to a single blast-radius call.
+clj-nrepl-eval -p "${LW_PORT:-7888}" \
+  "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc] '[net.brdloush.livewire.callgraph :as cg])"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(cg/blast-radius \"$1\" \"*\" :per-method? true)"

@@ -339,9 +339,31 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Environment information
 
+(defn- datasource-info
+  "Returns a map of information about the primary DataSource —
+   database product/version, JDBC URL, user, driver, and (when HikariCP)
+   pool name and max size. Returns {:error msg} if the DataSource is not
+   available or the connection cannot be obtained."
+  []
+  (try
+    (let [ds     (bean javax.sql.DataSource)
+          md-map (with-open [conn (.getConnection ds)]
+                   (let [md (.getMetaData conn)]
+                     {:db-product (str (.getDatabaseProductName md) " " (.getDatabaseProductVersion md))
+                      :jdbc-url   (.getURL md)
+                      :db-user    (.getUserName md)
+                      :driver     (str (.getDriverName md) " " (.getDriverVersion md))}))
+          pool-map (when (instance? com.zaxxer.hikari.HikariDataSource ds)
+                     {:pool-name     (.getPoolName ds)
+                      :pool-size-max (.getMaximumPoolSize ds)})]
+      (merge md-map pool-map))
+    (catch Throwable t
+      {:error (.getMessage t)})))
+
 (defn info
   "Returns basic information about the running environment (Spring version,
-   Java version, active profiles, etc.)."
+   Java version, active profiles, etc.) plus details about the primary
+   DataSource (database product/version, JDBC URL, driver, pool config)."
   []
   (let [env (.getEnvironment (ctx))]
     {:application-name (.getProperty env "spring.application.name" "unknown")
@@ -353,7 +375,8 @@
      :spring-boot-version (try (org.springframework.boot.SpringBootVersion/getVersion)
                                (catch Throwable _ nil))
      :hibernate-version (try (org.hibernate.Version/getVersionString)
-                             (catch Throwable _ nil))}))
+                             (catch Throwable _ nil))
+     :datasource (datasource-info)}))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Property inspection

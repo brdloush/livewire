@@ -27,6 +27,13 @@ and removed from here.
   bloated-shelf. Git discipline applies only to the livewire repo. If changes to a companion
   app are needed as part of a feature, make them — but leave committing them to Tomas.
 
+- 2026-03-29: Always run `git status` and confirm a fully clean working tree before starting
+  the release process. A stale interactive rebase (from a timed-out `-i` session) left
+  `.git/rebase-merge` on disk, which caused chaos when the version bump commit was attempted
+  mid-release — diverged branches, lost commits, a hard reset needed. The release process
+  step 1 in AGENTS.md should be preceded by: verify `git status` shows "nothing to commit,
+  working tree clean" and "Your branch is up to date with 'origin/main'".
+
 ---
 
 <!-- Example entry format:

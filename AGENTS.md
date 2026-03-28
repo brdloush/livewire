@@ -230,6 +230,16 @@ These are the three meta-rules that all other rules in this document serve:
 
 Follow these steps in order. **Never skip ahead** — each step depends on the previous one.
 
+### 0. Verify git state is clean before starting
+
+Before touching any files, confirm:
+
+```bash
+git status
+```
+
+The output must show **"nothing to commit, working tree clean"** and **"Your branch is up to date with 'origin/main'"**. If there are uncommitted changes, a stale rebase in progress (`.git/rebase-merge` or `.git/rebase-apply`), or a diverged branch — **stop and resolve those first**. Starting the release with a dirty or inconsistent git state causes commits to land in the wrong place, branches to diverge, and hard resets to be needed.
+
 ### 1. Bump version + update CHANGELOG
 
 In `project.clj`, change `X.Y.Z-SNAPSHOT` → `X.Y.Z`.

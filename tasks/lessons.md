@@ -18,21 +18,12 @@ and removed from here.
 
 ---
 
-- 2026-03-20: Tomas (he/him) is the pair partner, not just a prompt source. It is perfectly fine
-  to ask him to perform something on the agent's behalf (e.g. a manual step, a GPG signing,
-  a Maven Central upload) or to make a product decision when he has clearer vision of the
-  project's direction. Don't work around things silently when asking would be more efficient.
-
-- 2026-03-25: Never run git commands (commit, add, push, etc.) in other projects such as
-  bloated-shelf. Git discipline applies only to the livewire repo. If changes to a companion
-  app are needed as part of a feature, make them — but leave committing them to Tomas.
-
-- 2026-03-29: Always run `git status` and confirm a fully clean working tree before starting
-  the release process. A stale interactive rebase (from a timed-out `-i` session) left
-  `.git/rebase-merge` on disk, which caused chaos when the version bump commit was attempted
-  mid-release — diverged branches, lost commits, a hard reset needed. The release process
-  step 1 in AGENTS.md should be preceded by: verify `git status` shows "nothing to commit,
-  working tree clean" and "Your branch is up to date with 'origin/main'".
+<!-- All lessons from 2026-03-20 to 2026-03-29 promoted to AGENTS.md:
+  - Tomas as pair partner / ask don't work around → already in collaborative tone of AGENTS.md
+  - Git discipline is livewire-only (bloated-shelf) → new "Git discipline is livewire-only" section
+  - "Yes" to task ≠ "yes" to push → strengthened Git discipline section
+  - git status before release → Release process Step 0
+-->
 
 ---
 

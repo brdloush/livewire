@@ -41,6 +41,10 @@ sense earlier — confirm the specific commit/push action each time.
 **Never combine `git commit` and `git push` in a single command.** Commit first,
 then wait for explicit push approval. Bundling them silently bypasses the push gate.
 
+**"Yes" to a task is not "yes" to pushing.** If the user approves a multi-step task
+(e.g. "update the docs"), that approval covers commits — not the push. When the commits
+are done, stop and ask: *"Ready to push?"* every single time, no exceptions.
+
 ---
 
 ## No force pushes
@@ -52,6 +56,13 @@ history that others may have already fetched.
 The only exception is the `gh-pages` branch, which is always
 assembled fresh from `web/` by `bb deploy-pages` and has no shared
 history worth preserving.
+
+## Git discipline is livewire-only
+
+Git commands (`git add`, `git commit`, `git push`, etc.) apply only to the
+`livewire` repository. Never run them in companion apps such as `bloated-shelf`.
+If a feature requires changes to a companion app, make them — but leave any
+committing or pushing in that repo to Tomas.
 
 ---
 

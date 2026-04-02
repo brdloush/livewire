@@ -337,6 +337,56 @@
          (filterv #(seq (:methods %))))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Repository → entity bridge
+
+(defn repo-entity
+  "Returns the entity class managed by the given Spring Data repository bean.
+
+     {:bean        \"bookRepository\"
+      :entity      \"Book\"
+      :entity-fqn  \"com.example.domain.Book\"
+      :id-type     \"Long\"}
+
+   Throws ex-info with a clear message if the bean is not a Spring Data repository.
+
+   Example:
+     (lw/repo-entity \"bookRepository\")
+     ;; => {:bean \"bookRepository\" :entity \"Book\"
+     ;;     :entity-fqn \"com.example.domain.Book\" :id-type \"Long\"}"
+  [bean-name]
+  (let [c (ctx)]
+    (try
+      (let [fb (.getBean c (str "&" bean-name))
+            ei (.getEntityInformation fb)
+            jt (.getJavaType ei)]
+        {:bean       bean-name
+         :entity     (.getSimpleName jt)
+         :entity-fqn (.getName jt)
+         :id-type    (.getSimpleName (.getIdType ei))})
+      (catch org.springframework.beans.factory.NoSuchBeanDefinitionException _
+        (throw (ex-info (str "Bean '" bean-name "' is not a Spring Data repository "
+                             "(no factory bean '&" bean-name "' found in context)")
+                        {:bean bean-name}))))))
+
+(defn all-repo-entities
+  "Returns a seq of entity maps (see repo-entity) for every Spring Data repository
+   bean registered in the application context, sorted by bean name.
+
+   Use this to discover the full repository → entity mapping in one call — no
+   name-convention guessing needed.
+
+   Example:
+     (lw/all-repo-entities)
+     ;; => [{:bean \"authorRepository\"       :entity \"Author\"        :entity-fqn \"...\" :id-type \"Long\"}
+     ;;     {:bean \"bookRepository\"         :entity \"Book\"          :entity-fqn \"...\" :id-type \"Long\"}
+     ;;     {:bean \"libraryMemberRepository\" :entity \"LibraryMember\" :entity-fqn \"...\" :id-type \"Long\"}
+     ;;     ...]"
+  []
+  (->> (.getBeanNamesForType (ctx) org.springframework.data.repository.Repository)
+       sort
+       (mapv repo-entity)))
+
+;;; ---------------------------------------------------------------------------
 ;;; Environment information
 
 (defn- datasource-info

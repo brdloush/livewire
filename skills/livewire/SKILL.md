@@ -42,26 +42,50 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
 ### REPL workflow for test data prototyping
 
-1. **Check faker is available:**
+1. **Inspect the entity structure via Livewire — never read Java source files for this.**
+   Use `lw-inspect-entity` (or `lw-inspect-all-entities` for the full domain) to get table names, column names, types, nullability, and constraints in one call. The REPL is already running and gives you everything you need faster than reading source.
+
+   ```bash
+   lw-inspect-entity Review
+   lw-inspect-entity Book    # repeat for every entity you'll need to set up
+   ```
+
+   Only fall back to reading source files if you need something the metamodel cannot answer (e.g. custom business logic in a constructor or factory method).
+
+   **Before writing any REPL expression that instantiates entity classes, always call `lw-list-entities` first** to get the exact fully-qualified class names. Never guess the package — `model`, `domain`, `entity`, etc. are all plausible and guessing causes `ClassNotFoundException`. `lw-list-entities` gives you the authoritative FQN in one call:
+
+   ```bash
+   lw-list-entities
+   # => [{:name "Review", :class "com.example.bloatedshelf.domain.Review", :table-name "review"} ...]
+   ```
+
+   To find the repository bean that manages a given entity (or vice versa), use `lw-all-repo-entities` — it gives the authoritative repo → entity mapping with no convention guessing:
+   ```bash
+   lw-all-repo-entities
+   # => [{:bean "reviewRepository" :entity "Review" :entity-fqn "..." :id-type "Long"} ...]
+   ```
+
+2. **Check faker is available:**
    ```bash
    clj-nrepl-eval -p 7888 "(faker/available?)"
    ```
 
-2. **Prototype entity creation in the REPL** — use `:auto-deps? true :persist? true :rollback? true` to resolve the full dependency chain without leaving data behind:
+3. **Prototype entity creation in the REPL** — use `:auto-deps? true :persist? true :rollback? true` to resolve the full dependency chain without leaving data behind:
    ```bash
    lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true}'
    ```
 
-3. **Inspect the result** — note which fields were generated, what IDs were assigned, and which associations were resolved. This tells you exactly what setup code the test will need.
+4. **Inspect the result** — note which fields were generated, what IDs were assigned, and which associations were resolved. This tells you exactly what setup code the test will need.
 
    The recipe includes the Java type of every field (`:type` key). Use it to apply the correct cast when calling setters — `(short 5)` not `5` for a `short` field, etc.
 
-4. **Adjust with overrides** if specific field values matter for your test assertions:
+5. **Adjust with overrides** if specific field values matter for your test assertions:
    ```bash
    lw-build-entity Review '{:auto-deps? true :persist? true :rollback? true :overrides {:rating 5 :comment "Outstanding"}}'
    ```
 
-5. **Prototype the full test logic in Clojure before writing Java** — after the entity graph is validated, prototype the entire test scenario (setup + service call + assertions) as a Clojure expression in the REPL. Use `clojure.test/is` for assertions. This catches issues with the service logic, lazy loading, and field mappings before a single line of Java is written.
+6. **Prototype the full test logic in Clojure before writing Java — this step is mandatory, not optional.**
+   Translate the validated entity graph from the previous steps into a full Clojure REPL expression covering the entire test scenario: setup, the operation under test, and assertions (`clojure.test/is`). This catches real issues — wrong bean names, L1 cache surprises, lazy loading failures, unexpected exceptions — against the live JVM before a single line of Java is written.
 
    ```clojure
    ;; Example: prototype getReviewsForBook test in Clojure
@@ -84,14 +108,14 @@ The rules below are **fallback guidance** for when no existing pattern covers th
        (is (= "John Doe" (.reviewerName (first result))))))
    ```
 
-6. **If the nREPL is unavailable, ask the user to start the app — never skip prototyping**
+7. **If the nREPL is unavailable, ask the user to start the app — never skip prototyping**
 
    The REPL-first rule is not optional. If `lw-start` finds no server, stop and ask:
    > "The app doesn't seem to be running. Could you start it so I can prototype in the REPL before writing the test?"
 
    Do not fall back to reasoning theoretically about what the test *should* do. A theoretical prototype defeats the entire purpose — the value is catching real issues (wrong bean names, L1 cache surprises, unexpected exceptions) against a live JVM before a single line of Java is written.
 
-7. **`@BeforeEach` entity setup — store IDs, not entity references**
+8. **`@BeforeEach` entity setup — store IDs, not entity references**
 
    When `@BeforeEach` ends with `entityManager.flush() + entityManager.clear()`, any entity references stored as instance fields become **detached**. Using them as `@ManyToOne` targets in test bodies relies on lenient Hibernate behaviour and is fragile.
 
@@ -120,7 +144,7 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
    `getReferenceById()` returns a Hibernate proxy with the ID set — no SELECT is fired, and Hibernate resolves the FK correctly on flush. This pattern is explicit, safe across inheritance hierarchies, and stays correct as the test class grows.
 
-8. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
+9. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
 
 ---
 
@@ -151,6 +175,8 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-all-bean-deps` | Wiring maps for all app-level beans (auto-filtered to own package) |
 | `lw-bean-tx <beanName>` | `@Transactional` surface for one bean |
 | `lw-all-bean-tx` | `@Transactional` surface for all app-level beans (auto-filtered) |
+| `lw-repo-entity <beanName>` | Entity class managed by one repository bean |
+| `lw-all-repo-entities` | Entity class for every repository bean — the full repo → entity map |
 | `lw-props <regex>` | Filter environment properties by regex |
 | `lw-sql <query>` | Run a read-only SQL query |
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
@@ -384,6 +410,39 @@ Pass `:app-only false` to include all Spring infrastructure beans.
 (->> (lw/all-bean-deps)
      (filter #(some #{"bookRepository"} (:dependencies %)))
      (mapv :bean))
+```
+
+---
+
+### `repo-entity` / `all-repo-entities` — repository → entity mapping
+
+Spring Data repository bean names follow a convention (`bookRepository` → `Book`), but
+convention breaks down with custom names, multi-module projects, or unfamiliar codebases.
+These functions give the authoritative answer at runtime — no guessing required.
+
+```clojure
+(lw/repo-entity "bookRepository")
+;; => {:bean "bookRepository" :entity "Book"
+;;     :entity-fqn "com.example.domain.Book" :id-type "Long"}
+
+(lw/all-repo-entities)
+;; => [{:bean "authorRepository"        :entity "Author"        :entity-fqn "..." :id-type "Long"}
+;;     {:bean "bookRepository"          :entity "Book"          :entity-fqn "..." :id-type "Long"}
+;;     {:bean "libraryMemberRepository" :entity "LibraryMember" :entity-fqn "..." :id-type "Long"}
+;;     ...]
+```
+
+Cross-referencing with entity inspection:
+```clojure
+;; Full schema for the entity managed by each repository
+(->> (lw/all-repo-entities)
+     (map #(assoc % :schema (intro/inspect-entity (:entity %)))))
+```
+
+CLI:
+```bash
+lw-repo-entity bookRepository
+lw-all-repo-entities
 ```
 
 ---

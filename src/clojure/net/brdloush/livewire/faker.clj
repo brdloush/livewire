@@ -605,7 +605,8 @@
 ;;; Test recipe extraction
 
 (defn- extract-scalars
-  "Extracts scalar field values from entity-name/instance into a map of keyword → value.
+  "Extracts scalar field values from entity-name/instance into a map of
+   keyword → {:type <java-type-string> :value <val>}.
    Excludes the @Id field and all association properties."
   [entity-name instance]
   (let [entity-meta (intro/inspect-entity entity-name)
@@ -614,7 +615,10 @@
                           (remove #(= (:name %) id-prop))
                           (remove :is-association))
         b (core/bean->map instance)]
-    (into {} (map (fn [p] [(keyword (:name p)) (get b (keyword (:name p)))])
+    (into {} (map (fn [p]
+                    [(keyword (:name p))
+                     {:type  (:type p)
+                      :value (get b (keyword (:name p)))}])
                   scalar-props))))
 
 (defn- collect-recipe
@@ -661,10 +665,16 @@
 
      ;; Full recipe for a Review with its entire dependency graph
      (faker/build-test-recipe \"Review\")
-     ;; => {:Review  {:rating 5, :comment \"A remarkable journey...\", :reviewedAt ...}
-     ;;     :Book    {:title \"The Midnight Crisis\", :isbn \"978-...\", ...}
-     ;;     :Author  {:firstName \"Kip\", :lastName \"O'Reilly\", ...}
-     ;;     :LibraryMember {:username \"kelsey.schaden\", :fullName \"Kelsey Schaden\", ...}}
+     ;; => {:Review  {:rating     {:type \"short\",         :value 5}
+     ;;               :comment    {:type \"string\",        :value \"A remarkable journey...\"}
+     ;;               :reviewedAt {:type \"LocalDateTime\", :value #object[LocalDateTime ...]}}
+     ;;     :Book    {:title  {:type \"string\", :value \"The Midnight Crisis\"}
+     ;;               :isbn   {:type \"string\", :value \"978-3-16-148410-0\"}
+     ;;               ...}
+     ;;     :Author  {:firstName {:type \"string\", :value \"Kip\"}
+     ;;               :birthYear {:type \"int\",    :value 1951}
+     ;;               ...}
+     ;;     :LibraryMember {:username {:type \"string\", :value \"kelsey.schaden\"} ...}}
 
      ;; With overrides — overridden values appear in the recipe as supplied
      (faker/build-test-recipe \"Review\" {:overrides {:rating 1 :comment \"Terrible\"}})

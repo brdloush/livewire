@@ -54,20 +54,7 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
 3. **Inspect the result** — note which fields were generated, what IDs were assigned, and which associations were resolved. This tells you exactly what setup code the test will need.
 
-   > ⚠️ **Check for narrow numeric types before prototyping.**
-   > `lw-build-test-recipe` returns values but not their Java types. Before writing the Clojure
-   > prototype, run `lw-inspect-entity` on each entity in the recipe and note any properties
-   > with `:type "short"`, `:type "byte"`, or `:type "float"`. Clojure integer literals are
-   > `Long` by default — passing them to a setter that expects `Short` throws
-   > `ClassCastException` at runtime. Cast explicitly: `(short 1924)`, `(short 5)`, etc.
-   >
-   > ```bash
-   > # Quick: grep for narrow types across all entities involved in the recipe
-   > clj-nrepl-eval -p 7888 "(->> (map intro/inspect-entity [\"Review\" \"Book\" \"Author\" \"LibraryMember\"])
-   >                               (mapcat :properties)
-   >                               (filter #(#{\"short\" \"byte\" \"float\"} (:type %)))
-   >                               (mapv #(select-keys % [:name :type])))"
-   > ```
+   The recipe includes the Java type of every field (`:type` key). Use it to apply the correct cast when calling setters — `(short 5)` not `5` for a `short` field, etc.
 
 4. **Adjust with overrides** if specific field values matter for your test assertions:
    ```bash
@@ -172,7 +159,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
-| `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map — use as seed for test setup code and assertions |
+| `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map of `{:type … :value …}` entries — use as seed for test setup code and assertions |
 | `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method. Pass `'*'` as method for the full inbound call graph (flat, deduplicated). |
 | `lw-blast-radius-all <beanName>` | Per-method inbound call graph for every method on a bean: `{method → {:callers [...]}}`. Methods with empty `:callers` are dead-code candidates. All indexes built once — same speed as a single call. |
 | `lw-method-dep-map <beanName>` | For each method on a bean, the subset of its injected dependencies that method actually uses in bytecode. Includes `:dep-frequency` ranking. Options: `:expand-private?` folds private helper deps into their public callers; `:intra-calls?` adds which siblings this method calls; `:callers?` adds which siblings call this method (inverse of `:intra-calls?`). |
@@ -1395,27 +1382,36 @@ The entity graph is always built with `:auto-deps? true :persist? true :rollback
 nothing is left in the database.
 
 **Output format:** ordered map keyed by entity class name (root entity first, `@ManyToOne`
-deps after in resolution order). Each value is a map of scalar fields only — strings, numbers,
-booleans, dates. `@Id` and collection properties are excluded. `null` values are included.
+deps after in resolution order). Each value is a map of scalar fields only — `@Id` and
+collection properties are excluded. Every field entry is `{:type "<java-type>" :value <val>}`.
+`null` values are included (`:value nil`). Use `:type` to apply the correct Java cast when
+writing setter calls.
 
 ```clojure
 (faker/build-test-recipe "Review")
-;; => {:Review  {:rating 5
-;;               :comment "A remarkable journey through the highs and lows of modern life."
-;;               :reviewedAt #object[LocalDateTime "2024-07-14T11:23:05"]}
-;;     :Book    {:title "The Midnight Crisis" :isbn "978-3-16-148410-0"
-;;               :publishedYear 1998 :availableCopies 3 :archived false}
-;;     :Author  {:firstName "Kip" :lastName "O'Reilly" :birthYear 1951 :nationality "American"}
-;;     :LibraryMember {:username "kelsey.schaden" :fullName "Kelsey Schaden"
-;;                     :email "kelsey.schaden@example.com"
-;;                     :memberSince #object[LocalDate "2019-03-22"]}}
+;; => {:Review  {:rating     {:type "short",         :value 5}
+;;               :comment    {:type "string",        :value "A remarkable journey..."}
+;;               :reviewedAt {:type "LocalDateTime", :value #object[LocalDateTime "2024-07-14T11:23:05"]}}
+;;     :Book    {:title         {:type "string", :value "The Midnight Crisis"}
+;;               :isbn          {:type "string", :value "978-3-16-148410-0"}
+;;               :publishedYear {:type "short",  :value 1998}
+;;               :availableCopies {:type "short",   :value 3}
+;;               :archived      {:type "boolean", :value false}}
+;;     :Author  {:firstName {:type "string", :value "Kip"}
+;;               :lastName  {:type "string", :value "O'Reilly"}
+;;               :birthYear {:type "short",  :value 1951}
+;;               :nationality {:type "string", :value "American"}}
+;;     :LibraryMember {:username    {:type "string",    :value "kelsey.schaden"}
+;;                     :fullName    {:type "string",    :value "Kelsey Schaden"}
+;;                     :email       {:type "string",    :value "kelsey.schaden@example.com"}
+;;                     :memberSince {:type "LocalDate", :value #object[LocalDate "2019-03-22"]}}}
 ```
 
 **Workflow:**
 
-1. Run `lw-build-test-recipe Review` — note all the values.
-2. Write `@BeforeEach` using those exact values:
-   `member.setFullName("Kelsey Schaden")`, `review.setRating((short) 5)`, etc.
+1. Run `lw-build-test-recipe Review` — note all the values and types.
+2. Write `@BeforeEach` using those exact values, applying the cast from `:type` where needed:
+   `member.setFullName("Kelsey Schaden")`, `review.setRating((short) 5)`, `author.setBirthYear((short) 1951)`, etc.
 3. Write assertions using the same values:
    `assertThat(dto.reviewerName()).isEqualTo("Kelsey Schaden")`
 4. Run the Clojure service prototype (`lw-build-entity` + REPL call) to validate the happy path.
@@ -1426,7 +1422,9 @@ booleans, dates. `@Id` and collection properties are excluded. `null` values are
 ```clojure
 ;; Specific values for assertions — they appear in the output as supplied
 (faker/build-test-recipe "Review" {:overrides {:rating 1 :comment "Terrible."}})
-;; => {:Review {:rating 1, :comment "Terrible.", ...} ...}
+;; => {:Review {:rating  {:type "short",  :value 1}
+;;              :comment {:type "string", :value "Terrible."}
+;;              ...} ...}
 ```
 
 **CLI:**

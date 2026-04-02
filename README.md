@@ -1,5 +1,9 @@
 <div align="center">
-  <img src="web/images/logo-transparent.png" alt="Livewire" width="160" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/images/logo-transparent.png">
+    <source media="(prefers-color-scheme: light)" srcset="web/images/logo-transparent-light.png">
+    <img src="web/images/logo-transparent-light.png" alt="Livewire" width="160" />
+  </picture>
 </div>
 
 # ⚡ Livewire

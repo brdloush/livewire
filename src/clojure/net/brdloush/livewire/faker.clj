@@ -99,23 +99,109 @@
   "Vector of [name-pattern type-pattern generator-key] used to select a faker provider.
    Evaluated top-to-bottom; first match wins. Name patterns are matched
    case-insensitively against the camelCase property name."
-  [;; Exact name matches
+  [;; --- Person ---
    ["^firstName$" "string" :first-name]
    ["^lastName$" "string" :last-name]
    ["^fullName$" "string" :full-name]
+   ["^name$" "string" :full-name]
+   ["^prefix$" "string" :name-prefix]
+   ["^suffix$" "string" :name-suffix]
+   ["^gender$" "string" :gender]
+   ["^sex$" "string" :gender]
+   ["^age$" nil :age]
+   ["birth(Day|Date|Ts|At)?$" nil :birthdate]
+   ["nationality" "string" :nationality]
+
+   ;; --- Contact ---
    ["email" "string" :email]
    ["username" "string" :username]
-   ["^title$" "string" :book-title]
+   ["^login$" "string" :username]
+   ["phone|telephone|mobile|cell|fax" "string" :phone]
+
+   ;; --- Address ---
+   ["^streetAddress$" "string" :street-address]
+   ["^street$" "string" :street-name]
+   ["^address$" "string" :full-address]
+   ["^city$" "string" :city]
+   ["^town$" "string" :city]
+   ["^state$" "string" :state]
+   ["^county$" "string" :state]
+   ["^country$" "string" :country]
+   ["^countryCode$" "string" :country-code]
+   ["zipCode|postCode|postalCode" "string" :zip-code]
+   ["^zip$" "string" :zip-code]
+   ["^postal$" "string" :zip-code]
+   ["^latitude$" "string" :latitude]
+   ["^longitude$" "string" :longitude]
+   ["^timeZone$" "string" :timezone]
+
+   ;; --- Internet / Web ---
+   ["^url$" "string" :url]
+   ["^website$" "string" :url]
+   ["^domainName$" "string" :domain-name]
+   ["^slug$" "string" :slug]
+   ["^token$" "string" :token]
+   ["^image$" "string" :image-url]
+   ["^avatar$" "string" :image-url]
+   ["^imageUrl$" "string" :image-url]
+
+   ;; --- Identifiers / Codes ---
    ["^isbn$" "string" :isbn]
-   ["nationality" "string" :nationality]
+   ["^isbn10$" "string" :isbn10]
+   ["^isbn13$" "string" :isbn]
+   ["uuid" nil :uuid]
+   ["^reference$" "string" :lorem-word]
+   ["^code$" "string" :lorem-word]
+
+   ;; --- Company / Organisation ---
+   ["^company$" "string" :company]
+   ["^companyName$" "string" :company]
+   ["^organization$" "string" :company]
+   ["^employer$" "string" :company]
+   ["^department$" "string" :department]
+   ["^jobTitle$" "string" :job-title]
+   ["^position$" "string" :job-position]
+   ["^occupation$" "string" :job-title]
+
+   ;; --- Financial ---
+   ["^price$" nil :price]
+   ["^amount$" nil :decimal]
+   ["^salary$" nil :decimal]
+   ["^currency$" "string" :currency-code]
+   ["^currencyCode$" "string" :currency-code]
+   ["^iban$" "string" :iban]
+   ["^creditCard$" "string" :credit-card]
+
+   ;; --- Content / Text ---
+   ["^title$" "string" :book-title]
+   ["^subject$" "string" :lorem-sentence]
+   ["^body$" "string" :lorem-para]
+   ["^description$" "string" :lorem-para]
+   ["^summary$" "string" :lorem-sentence]
+   ["^content$" "string" :lorem-para]
+   ["^note$" "string" :lorem-sentence]
+   ["^bio$" "string" :lorem-sentence]
    ["comment" "string" :lorem-para]
+
+   ;; --- Locale / Language ---
+   ["^locale$" "string" :locale]
+   ["^language$" "string" :locale]
+
+   ;; --- Appearance ---
+   ["^color$" "string" :color-name]
+   ["^colour$" "string" :color-name]
+   ["^colorHex$" "string" :color-hex]
+   ["^colourHex$" "string" :color-hex]
+
+   ;; --- Ratings / counts ---
    ["^rating$" nil :rating]
-   ;; Suffix / substring patterns
+
+   ;; --- Suffix / substring patterns ---
    ["[Yy]ear$" nil :year]
    ["[Cc]opies$" nil :copies]
    ["(At|Since|Date|Time)$" nil :past-date]
-   ["uuid" nil :uuid]
-   ;; Type-only fallbacks (nil name pattern = match any name)
+
+   ;; --- Type-only fallbacks (nil name pattern = match any name) ---
    [nil "string" :lorem-word]
    [nil "int|long|short|.*[Ii]nteger|.*[Ll]ong|.*[Ss]hort" :number]
    [nil ".*[Dd]ouble|.*[Ff]loat|.*[Bb]ig[Dd]ecimal" :decimal]
@@ -134,24 +220,72 @@
                           (re-find (re-pattern (str "(?i)" type-pat)) prop-type-name))))
         [_ _ gen-key] (first (filter match? heuristic-table))]
     (case gen-key
-      :first-name (.firstName (.name faker))
-      :last-name (.lastName (.name faker))
-      :full-name (str (.firstName (.name faker)) " " (.lastName (.name faker)))
-      :email (.emailAddress (.internet faker))
-      :username (.username (.internet faker))
-      :book-title (.title (.book faker))
-      :isbn (.isbn13 (.code faker) true)
-      :nationality (.nationality (.nation faker))
-      :lorem-para (.paragraph (.lorem faker))
-      :rating (number-fn 1 6)
-      :year (number-fn 1850 2024)
-      :copies (number-fn 1 10)
-      :past-date (past-fn)
-      :lorem-word (.word (.lorem faker))
-      :number (number-fn 1 1000)
-      :decimal (.randomDouble (.number faker) (int 2) (long 1) (long 10000))
-      :uuid (java.util.UUID/randomUUID)
-      :bool false
+      ;; Person
+      :first-name     (.firstName (.name faker))
+      :last-name      (.lastName (.name faker))
+      :full-name      (str (.firstName (.name faker)) " " (.lastName (.name faker)))
+      :name-prefix    (.prefix (.name faker))
+      :name-suffix    (.suffix (.name faker))
+      :gender         (.types (.gender faker))
+      :age            (number-fn 18 90)
+      :birthdate      (.birthday (.date faker))
+      :nationality    (.nationality (.nation faker))
+      ;; Contact
+      :email          (.emailAddress (.internet faker))
+      :username       (.username (.internet faker))
+      :phone          (.phoneNumber (.phoneNumber faker))
+      ;; Address
+      :street-address (.streetAddress (.address faker))
+      :street-name    (.streetName (.address faker))
+      :full-address   (.fullAddress (.address faker))
+      :city           (.city (.address faker))
+      :state          (.state (.address faker))
+      :country        (.country (.address faker))
+      :country-code   (.countryCode (.address faker))
+      :zip-code       (.zipCode (.address faker))
+      :latitude       (.latitude (.address faker))
+      :longitude      (.longitude (.address faker))
+      :timezone       (.timeZone (.address faker))
+      ;; Internet / Web
+      :url            (.url (.internet faker))
+      :domain-name    (.domainName (.internet faker))
+      :slug           (.slug (.internet faker))
+      :token          (str (java.util.UUID/randomUUID))
+      :image-url      (.image (.internet faker))
+      ;; Identifiers / Codes
+      :isbn           (.isbn13 (.code faker) true)
+      :isbn10         (.isbn10 (.code faker) true)
+      ;; Company / Organisation
+      :company        (.name (.company faker))
+      :department     (.department (.commerce faker))
+      :job-title      (.title (.job faker))
+      :job-position   (.position (.job faker))
+      ;; Financial
+      :price          (Double/parseDouble (.price (.commerce faker)))
+      :currency-code  (.currencyCode (.money faker))
+      :iban           (.iban (.finance faker))
+      :credit-card    (.creditCard (.finance faker))
+      ;; Content / Text
+      :book-title     (.title (.book faker))
+      :lorem-sentence (.sentence (.lorem faker))
+      :lorem-para     (.paragraph (.lorem faker))
+      :lorem-word     (.word (.lorem faker))
+      ;; Locale / Language
+      :locale         (.isoLanguage (.nation faker))
+      ;; Appearance
+      :color-name     (.name (.color faker))
+      :color-hex      (.hex (.color faker))
+      ;; Ratings / counts
+      :rating         (number-fn 1 6)
+      :year           (number-fn 1850 2024)
+      :copies         (number-fn 1 10)
+      ;; Time
+      :past-date      (past-fn)
+      ;; Type-only fallbacks
+      :number         (number-fn 1 1000)
+      :decimal        (.randomDouble (.number faker) (int 2) (long 1) (long 10000))
+      :uuid           (java.util.UUID/randomUUID)
+      :bool           false
       nil)))
 
 ;;; ---------------------------------------------------------------------------

@@ -64,6 +64,7 @@ The rules below are **fallback guidance** for when no existing pattern covers th
    lw-all-repo-entities
    # => [{:bean "reviewRepository" :entity "Review" :entity-fqn "..." :id-type "Long"} ...]
    ```
+   Note: when using `lw-build-test-recipe`, the repo bean name is already included in each entity's `:repo` key — no separate call needed.
 
 2. **Check faker is available:**
    ```bash
@@ -1448,29 +1449,34 @@ writing setter calls.
 
 ```clojure
 (faker/build-test-recipe "Review")
-;; => {:Review  {:rating     {:type "short",         :value 5}
-;;               :comment    {:type "string",        :value "A remarkable journey..."}
-;;               :reviewedAt {:type "LocalDateTime", :value #object[LocalDateTime "2024-07-14T11:23:05"]}}
-;;     :Book    {:title         {:type "string", :value "The Midnight Crisis"}
-;;               :isbn          {:type "string", :value "978-3-16-148410-0"}
-;;               :publishedYear {:type "short",  :value 1998}
-;;               :availableCopies {:type "short",   :value 3}
-;;               :archived      {:type "boolean", :value false}}
-;;     :Author  {:firstName {:type "string", :value "Kip"}
-;;               :lastName  {:type "string", :value "O'Reilly"}
-;;               :birthYear {:type "short",  :value 1951}
-;;               :nationality {:type "string", :value "American"}}
-;;     :LibraryMember {:username    {:type "string",    :value "kelsey.schaden"}
-;;                     :fullName    {:type "string",    :value "Kelsey Schaden"}
-;;                     :email       {:type "string",    :value "kelsey.schaden@example.com"}
-;;                     :memberSince {:type "LocalDate", :value #object[LocalDate "2019-03-22"]}}}
+;; => {:Review {:repo "reviewRepository"
+;;              :fields {:rating     {:type "short",         :value 5}
+;;                       :comment    {:type "string",        :value "A remarkable journey..."}
+;;                       :reviewedAt {:type "LocalDateTime", :value #object[LocalDateTime "2024-07-14T11:23:05"]}}}
+;;     :Book   {:repo "bookRepository"
+;;              :fields {:title           {:type "string",  :value "The Midnight Crisis"}
+;;                       :isbn            {:type "string",  :value "978-3-16-148410-0"}
+;;                       :publishedYear   {:type "short",   :value 1998}
+;;                       :availableCopies {:type "short",   :value 3}
+;;                       :archived        {:type "boolean", :value false}}}
+;;     :Author {:repo "authorRepository"
+;;              :fields {:firstName   {:type "string", :value "Kip"}
+;;                       :lastName    {:type "string", :value "O'Reilly"}
+;;                       :birthYear   {:type "short",  :value 1951}
+;;                       :nationality {:type "string", :value "American"}}}
+;;     :LibraryMember {:repo "libraryMemberRepository"
+;;                     :fields {:username    {:type "string",    :value "kelsey.schaden"}
+;;                              :fullName    {:type "string",    :value "Kelsey Schaden"}
+;;                              :email       {:type "string",    :value "kelsey.schaden@example.com"}
+;;                              :memberSince {:type "LocalDate", :value #object[LocalDate "2019-03-22"]}}}}
 ```
 
 **Workflow:**
 
-1. Run `lw-build-test-recipe Review` — note all the values and types.
+1. Run `lw-build-test-recipe Review` — note all the values, types, and repo bean names.
 2. Write `@BeforeEach` using those exact values, applying the cast from `:type` where needed:
    `member.setFullName("Kelsey Schaden")`, `review.setRating((short) 5)`, `author.setBirthYear((short) 1951)`, etc.
+   Use the `:repo` name directly in any REPL prototype calls: `(lw/bean "reviewRepository")`.
 3. Write assertions using the same values:
    `assertThat(dto.reviewerName()).isEqualTo("Kelsey Schaden")`
 4. Run the Clojure service prototype (`lw-build-entity` + REPL call) to validate the happy path.
@@ -1481,9 +1487,10 @@ writing setter calls.
 ```clojure
 ;; Specific values for assertions — they appear in the output as supplied
 (faker/build-test-recipe "Review" {:overrides {:rating 1 :comment "Terrible."}})
-;; => {:Review {:rating  {:type "short",  :value 1}
-;;              :comment {:type "string", :value "Terrible."}
-;;              ...} ...}
+;; => {:Review {:repo "reviewRepository"
+;;              :fields {:rating  {:type "short",  :value 1}
+;;                       :comment {:type "string", :value "Terrible."}
+;;                       ...}} ...}
 ```
 
 **CLI:**

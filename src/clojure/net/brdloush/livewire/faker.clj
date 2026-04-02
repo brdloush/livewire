@@ -623,10 +623,11 @@
 
 (defn- collect-recipe
   "Recursively walks the entity instance graph, collecting scalar fields per entity.
-   Returns an ordered vector of [keyword-entity-name scalars-map] pairs.
+   Returns an ordered vector of [keyword-entity-name entry] pairs where each entry is
+   {:repo <repo-bean-name-or-nil> :fields {field {:type … :value …}}}.
    Root entity is first; @ManyToOne dependencies follow in resolution order.
    Each entity is visited at most once (seen guards cycles)."
-  [entity-name instance seen acc]
+  [entity-name instance seen acc repo-index]
   (if (contains? seen entity-name)
     acc
     (let [entity-meta (intro/inspect-entity entity-name)
@@ -634,13 +635,15 @@
                          (filter #(and (:is-association %)
                                        (not (:collection %)))))
           b (core/bean->map instance)
-          acc (conj acc [(keyword entity-name) (extract-scalars entity-name instance)])]
+          entry {:repo   (get repo-index entity-name)
+                 :fields (extract-scalars entity-name instance)}
+          acc (conj acc [(keyword entity-name) entry])]
       (reduce (fn [acc p]
                 (let [dep-val (get b (keyword (:name p)))
                       dep-name (when-let [t (:target-entity p)]
                                  (last (str/split t #"\.")))]
                   (if (and dep-val dep-name)
-                    (collect-recipe dep-name dep-val (conj seen entity-name) acc)
+                    (collect-recipe dep-name dep-val (conj seen entity-name) acc repo-index)
                     acc)))
               acc
               m2o-props))))
@@ -665,16 +668,20 @@
 
      ;; Full recipe for a Review with its entire dependency graph
      (faker/build-test-recipe \"Review\")
-     ;; => {:Review  {:rating     {:type \"short\",         :value 5}
-     ;;               :comment    {:type \"string\",        :value \"A remarkable journey...\"}
-     ;;               :reviewedAt {:type \"LocalDateTime\", :value #object[LocalDateTime ...]}}
-     ;;     :Book    {:title  {:type \"string\", :value \"The Midnight Crisis\"}
-     ;;               :isbn   {:type \"string\", :value \"978-3-16-148410-0\"}
-     ;;               ...}
-     ;;     :Author  {:firstName {:type \"string\", :value \"Kip\"}
-     ;;               :birthYear {:type \"int\",    :value 1951}
-     ;;               ...}
-     ;;     :LibraryMember {:username {:type \"string\", :value \"kelsey.schaden\"} ...}}
+     ;; => {:Review {:repo \"reviewRepository\"
+     ;;              :fields {:rating     {:type \"short\",         :value 5}
+     ;;                       :comment    {:type \"string\",        :value \"A remarkable journey...\"}
+     ;;                       :reviewedAt {:type \"LocalDateTime\", :value #object[LocalDateTime ...]}}}
+     ;;     :Book   {:repo \"bookRepository\"
+     ;;              :fields {:title {:type \"string\", :value \"The Midnight Crisis\"}
+     ;;                       :isbn  {:type \"string\", :value \"978-3-16-148410-0\"}
+     ;;                       ...}}
+     ;;     :Author {:repo \"authorRepository\"
+     ;;              :fields {:firstName {:type \"string\", :value \"Kip\"}
+     ;;                       :birthYear {:type \"short\",  :value 1951}
+     ;;                       ...}}
+     ;;     :LibraryMember {:repo \"libraryMemberRepository\"
+     ;;                     :fields {:username {:type \"string\", :value \"kelsey.schaden\"} ...}}}
 
      ;; With overrides — overridden values appear in the recipe as supplied
      (faker/build-test-recipe \"Review\" {:overrides {:rating 1 :comment \"Terrible\"}})
@@ -684,7 +691,9 @@
   ([entity-name]
    (build-test-recipe entity-name {}))
   ([entity-name opts]
-   (let [opts (merge {:auto-deps? true :persist? true :rollback? true} opts)
-         instance (build-entity entity-name opts)
-         pairs (collect-recipe entity-name instance #{} [])]
+   (let [opts       (merge {:auto-deps? true :persist? true :rollback? true} opts)
+         instance   (build-entity entity-name opts)
+         repo-index (->> (core/all-repo-entities)
+                         (into {} (map (fn [{:keys [entity bean]}] [entity bean]))))
+         pairs      (collect-recipe entity-name instance #{} [] repo-index)]
      (into (array-map) pairs))))

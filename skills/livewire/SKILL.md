@@ -66,6 +66,18 @@ The rules below are **fallback guidance** for when no existing pattern covers th
    ```
    Note: when using `lw-build-test-recipe`, the repo bean name is already included in each entity's `:repo` key — no separate call needed.
 
+   **When using `lw-build-test-recipe`, fire it in parallel with `lw-list-entities` and all `lw-inspect-entity` calls** — they are independent and there is no reason to do them sequentially:
+
+   ```bash
+   # Fire all of these in a single parallel message
+   lw-build-test-recipe Review        # field values + types + repo names
+   lw-list-entities                   # FQNs for the REPL prototype
+   lw-inspect-entity Review           # constraints, nullability
+   lw-inspect-entity Book             # repeat for every entity in the graph
+   ```
+
+   **The recipe does not replace `lw-inspect-entity`.** The recipe gives field values and Java types; it does not tell you which fields are `@NotNull`, what `@Size` limits apply, or which associations are truly required. `lw-inspect-entity` gives you the constraints column — you need it before writing the REPL prototype, to know which fields you can safely omit and which will cause a constraint violation if missing.
+
 2. **Check faker is available:**
    ```bash
    clj-nrepl-eval -p 7888 "(faker/available?)"
@@ -1432,6 +1444,7 @@ prototype and the written test. `build-test-recipe` captures them for you.
 
 **Always run `lw-build-test-recipe` before writing any integration test setup code.**
 Read the output and use those exact values in `@BeforeEach` and assertions.
+The recipe already includes `:repo` (the Spring bean name) for every entity in the graph — **do not call `lw-all-repo-entities` afterwards**, it is redundant.
 
 ```clojure
 (faker/build-test-recipe entity-name)
@@ -1473,7 +1486,18 @@ writing setter calls.
 
 **Workflow:**
 
-1. Run `lw-build-test-recipe Review` — note all the values, types, and repo bean names.
+1. Run `lw-build-test-recipe Review` **in parallel with `lw-list-entities` and `lw-inspect-entity` for every entity in the graph** — all calls are independent:
+
+   ```bash
+   # Single parallel message — not sequential
+   lw-build-test-recipe Review
+   lw-list-entities
+   lw-inspect-entity Review
+   lw-inspect-entity Book    # repeat for each dep entity
+   ```
+
+   The recipe gives values, types, and repo names. `lw-list-entities` gives FQNs for the REPL prototype. `lw-inspect-entity` gives constraints (`@NotNull`, `@Size`, nullability) — needed to know which fields can be omitted vs which will blow up. All three are mandatory before writing the REPL prototype.
+
 2. Write `@BeforeEach` using those exact values, applying the cast from `:type` where needed:
    `member.setFullName("Kelsey Schaden")`, `review.setRating((short) 5)`, `author.setBirthYear((short) 1951)`, etc.
    Use the `:repo` name directly in any REPL prototype calls: `(lw/bean "reviewRepository")`.

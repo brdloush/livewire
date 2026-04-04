@@ -7,6 +7,37 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.11.0] — 2026-04-04
+
+### Added
+
+- **`lw/repo-entity`** — returns the entity class managed by a given Spring Data repository
+  bean: `{:bean "bookRepository" :entity "Book" :entity-fqn "..." :id-type "Long"}`. No
+  convention guessing — authoritative at runtime. `lw-repo-entity` CLI wrapper.
+- **`lw/all-repo-entities`** — returns the full repository → entity mapping for every Spring
+  Data repository bean in the application context, sorted by bean name. `lw-all-repo-entities`
+  CLI wrapper.
+- **`faker/build-test-recipe` — `:type` field** — every scalar field entry now carries its
+  Java type string (e.g. `"short"`, `"LocalDateTime"`, `"string"`). Use it to apply the
+  correct cast when writing setter calls — `(short 5)` not `5`.
+- **`faker/build-test-recipe` — `:repo` + `:fields` structure** — output is now
+  `{:EntityName {:repo "repoBean" :fields {field {:type … :value …}}}}`. The `:repo` key
+  gives the Spring bean name for each entity in the graph directly — no separate
+  `lw-all-repo-entities` call needed.
+- **Faker heuristic table expanded** — 54 new field-name patterns covering person
+  (prefix, suffix, gender, age, birthdate), contact (phone), address (street, city, state,
+  country, zip, lat/lon, timezone), internet (URL, domain, slug, token, image), identifiers
+  (ISBN-10, UUID, reference, code), company (name, department, job title/position),
+  financial (price, amount, salary, currency, IBAN, credit card), content (subject, body,
+  description, summary, note, bio), locale, and appearance (color name/hex).
+
+### Breaking changes
+
+- **`faker/build-test-recipe` output format changed** — fields are now nested under `:fields`
+  and wrapped in `{:type … :value …}` maps. Code that previously accessed
+  `(get-in recipe [:Review :rating])` must be updated to
+  `(get-in recipe [:Review :fields :rating :value])`.
+
 ## [0.10.0] — 2026-03-29
 
 ### Added

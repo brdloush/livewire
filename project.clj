@@ -1,4 +1,4 @@
-(defproject net.brdloush/livewire "0.11.0"
+(defproject net.brdloush/livewire "0.12.0-SNAPSHOT"
   :description "Live nREPL wire into your Spring Boot app. Dev only. You've been warned."
   :url "https://github.com/brdloush/livewire"
   :license {:name "MIT License"

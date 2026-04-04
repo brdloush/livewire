@@ -111,7 +111,7 @@ Scope it to your local/dev profile — Livewire should **never ship to productio
 <dependency>
   <groupId>net.brdloush</groupId>
   <artifactId>livewire</artifactId>
-  <version>0.10.0</version>
+  <version>0.11.0</version>
   <!-- scope to dev — never ship this to production -->
 </dependency>
 ```
@@ -119,7 +119,7 @@ Scope it to your local/dev profile — Livewire should **never ship to productio
 **Gradle**
 ```groovy
 // developmentOnly or a dev-profile configuration
-developmentOnly 'net.brdloush:livewire:0.10.0'
+developmentOnly 'net.brdloush:livewire:0.11.0'
 ```
 
 ---

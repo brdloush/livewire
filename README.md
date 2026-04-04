@@ -520,14 +520,52 @@ so you can call services against a real, DB-assigned id without leaving any data
   (.computeAverageRating (lw/bean "ratingService") (.getId review)))
 ```
 
-Property values are selected by a heuristic table matched against name and type — `firstName`,
-`email`, `isbn`, `*Year` suffix, `*At`/`*Since` suffix for timestamps, etc. `jakarta.validation.constraints`
-annotations are respected at generation time: `@Min`/`@Max` clamp numeric ranges, `@Size` clamps
-string length (taking the most restrictive of `@Size(max=…)` and `@Column(length=…)`), `@Email`
-ensures a valid email address, and `@Positive`/`@PositiveOrZero` force non-negative values. If you
-pass an override that violates `@NotNull`, `@NotBlank`, `@Min`, or `@Max`, `build-entity` throws
-immediately with a clear message — before any transaction is opened. Lookup tables (e.g. `Genre`)
-are fetched from the DB rather than created new to avoid unique-constraint violations.
+Property values are selected by a heuristic table matched against name and type — 54+ patterns
+covering person (`firstName`, `email`, `phone`), address (`city`, `zipCode`, `latitude`), internet
+(`url`, `token`, `imageUrl`), company (`department`, `jobTitle`), financial (`iban`, `currency`),
+content (`description`, `bio`), appearance (`colorHex`), and suffix rules (`*Year`, `*At`/`*Since`
+for timestamps). `jakarta.validation.constraints` annotations are respected at generation time:
+`@Min`/`@Max` clamp numeric ranges, `@Size` clamps string length, `@Email` ensures a valid email
+address, and `@Positive`/`@PositiveOrZero` force non-negative values. If you pass an override that
+violates `@NotNull`, `@NotBlank`, `@Min`, or `@Max`, `build-entity` throws immediately with a clear
+message — before any transaction is opened. Lookup tables (e.g. `Genre`) are fetched from the DB
+rather than created new to avoid unique-constraint violations.
+
+Use `build-test-recipe` to capture the full entity graph into a recipe map of typed values — ideal
+for seeding `@BeforeEach` setup and assertions in integration tests:
+
+```clojure
+;; Returns every scalar field with its Java type and generated value, plus the repo bean name
+(faker/build-test-recipe "Review")
+;; => {:Review {:repo "reviewRepository"
+;;              :fields {:rating     {:type "short"         :value 5}
+;;                       :comment    {:type "string"        :value "A remarkable journey..."}
+;;                       :reviewedAt {:type "LocalDateTime" :value #object[LocalDateTime ...]}}}
+;;     :Book   {:repo "bookRepository"
+;;              :fields {:title {:type "string" :value "The Midnight Crisis"} ...}}
+;;     ...}
+
+;; CLI
+;; lw-build-test-recipe Review
+```
+
+Use `:type` to apply the correct Java cast in setter calls — `(short 5)` not `5` for a `short`
+field. The `:repo` key gives the Spring bean name directly — no separate lookup needed.
+
+To find which repository manages a given entity (or vice versa), use `repo-entity` /
+`all-repo-entities` — no convention guessing, authoritative at runtime:
+
+```clojure
+(lw/repo-entity "bookRepository")
+;; => {:bean "bookRepository" :entity "Book" :entity-fqn "com.example.domain.Book" :id-type "Long"}
+
+(lw/all-repo-entities)
+;; => [{:bean "authorRepository" :entity "Author" :entity-fqn "..." :id-type "Long"} ...]
+
+;; CLI
+;; lw-repo-entity bookRepository
+;; lw-all-repo-entities
+```
 
 Requires `net.datafaker:datafaker` on the target application's classpath. Call
 `(faker/available?)` first to confirm:
@@ -769,7 +807,7 @@ Quick namespace cheatsheet:
 
 | Namespace | Require as | What it does |
 |---|---|---|
-| `net.brdloush.livewire.core` | `lw` | Beans, transactions, run-as, properties |
+| `net.brdloush.livewire.core` | `lw` | Beans, transactions, run-as, properties, repo→entity mapping |
 | `net.brdloush.livewire.query` | `q` | Raw SQL, `diff-entity` |
 | `net.brdloush.livewire.trace` | `trace` | SQL tracing, N+1 detection |
 | `net.brdloush.livewire.hot-queries` | `hq` | Live `@Query` swap + restore |
@@ -777,12 +815,14 @@ Quick namespace cheatsheet:
 | `net.brdloush.livewire.introspect` | `intro` | Endpoints, entities, schema |
 | `net.brdloush.livewire.jpa-query` | `jpa` | JPQL via live `EntityManager`, smart entity serialization |
 | `net.brdloush.livewire.mvc` | `mvc` | Response serialization via Spring MVC's Jackson `ObjectMapper` |
+| `net.brdloush.livewire.faker` | `faker` | Realistic test entity generation, `build-test-recipe` |
+| `net.brdloush.livewire.callgraph` | `cg` | Blast radius, dead methods, method dependency fingerprinting |
 
 ---
 
 ## What's next
 
-- 📖 Read the full [SKILL.md](skills/livewire/SKILL.md) — every function, pitfall, and worked example across all eight namespaces
+- 📖 Read the full [SKILL.md](skills/livewire/SKILL.md) — every function, pitfall, and worked example across all ten namespaces
 - 🚀 Try the [bloated-shelf](https://github.com/brdloush/bloated-shelf) demo app — a realistic N+1 scenario ready to investigate
 - 🐛 Found a bug or have an idea? [Open an issue](https://github.com/brdloush/livewire/issues)
 

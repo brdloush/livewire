@@ -585,7 +585,44 @@ Use `lw/run-as` with one of these usernames (or an appropriate role vector) when
 
 ## Specs
 
-The `specs` folder contains various context, architectural designs, and feature specifications about what we want to achieve in this project. When starting a new task or component, always consult the relevant files in the `specs` directory for guidance.
+The `specs` folder contains context, architectural designs, and feature specifications for this project. When starting a new task or component, always consult the relevant files in the `specs` directory for guidance.
+
+### Reading specs
+
+Specs are numbered sequentially (`01-`, `02-`, …). Read the ones relevant to the area you are working in. They are the authoritative record of *why* a feature was designed the way it was — consult them before making architectural decisions, not after.
+
+### Writing a new spec
+
+Name the file `NN-short-description.md` where `NN` is the next available number. Do **not** read existing spec files to derive the style — use the structure below directly.
+
+Every spec must contain, in order:
+
+1. **Motivation** — what problem or friction prompted this? One or two concrete paragraphs. Ground it in a real scenario, not abstract principles. Name the pain point explicitly.
+
+2. **Relationship to existing features** *(omit if this is the first feature in its area)* — a short table or paragraph showing how this fits alongside what already exists. Prevents duplication and clarifies the scope boundary.
+
+3. **Goal** — one crisp sentence or short bullet list: what does this feature do? Not how — just what.
+
+4. **Proposed solution** — the meat of the spec:
+   - API shape (function signatures, option keys, return value structure with a realistic example)
+   - Algorithm or implementation outline (enough detail that the implementer does not need to invent the approach, but not so much that it pre-empts REPL-driven discovery)
+   - CLI wrapper shape if one is planned (command name, arguments, sample output)
+
+5. **Usage examples** *(omit only if the API is trivially obvious)* — a short worked scenario showing the human question that triggers the feature, the call, and the response interpreted into a concrete decision or action.
+
+6. **Limitations** — be honest. What does this feature *not* see? Where can it give a wrong answer? Under what conditions should the user not trust it? This section exists so the SKILL.md entry can carry the same warnings.
+
+7. **Out of scope** *(omit if nothing is being deliberately excluded)* — things that might seem like natural extensions but are explicitly not part of this spec. Prevents scope creep during implementation.
+
+8. **Implementation notes** *(omit if implementation is straightforward)* — gotchas, reuse opportunities, ordering constraints, known tricky cases. Not a full implementation plan — just the things that are non-obvious and worth flagging before the first line of code is written.
+
+9. **Deliverables** — a small table listing what must exist when this feature is "done": Clojure function(s), wrapper script(s), SKILL.md update, README update, web/ update. Each row is a checkbox for the implementer.
+
+**Style rules:**
+- Write in plain prose, not bullet soup. Use bullets only for lists of genuinely parallel items.
+- Use the bloated-shelf domain for all examples (books, authors, loans, members, reviews — never accounts, investments, or other app-specific domains).
+- Keep the spec self-contained. A reader should understand the full design without reading any other file.
+- Avoid hedging language ("might", "could potentially", "possibly"). Either specify it or put it in Out of scope.
 
 ---
 

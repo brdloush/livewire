@@ -27,6 +27,13 @@ _(Future sections may add explicit hints for other popular tools — Cursor, Win
 
 ## Git discipline — always ask before committing or pushing
 
+**At the start of every session, run `git status` before doing anything else.**
+Uncommitted changes from a previous session may already be present — code that was
+written, validated in the REPL, and then never staged. Discovering this early prevents
+that work from being silently overwritten or omitted from a commit. If unexpected
+changes are present, show them to the user and agree on how to handle them before
+proceeding.
+
 **Investigating a bug and implementing a fix should be done autonomously** — no
 need to check in at every step. Use the REPL, read files, write code, validate
 against the live app. The gate is at *persisting* the result, not at doing the

@@ -375,17 +375,27 @@
               (core/bean-names))))))
 
 (defn- add-orchestrator-flag
-  "Marks a method as :orchestrator? true when its dep-set is a proper superset
-   of at least two other methods' dep-sets — i.e. it sequences sub-operations
-   rather than performing a single concern."
-  [methods]
+  "Marks a method as :orchestrator? true when either:
+   - its dep-set is a proper superset of at least two other methods' dep-sets
+     (wide dep footprint orchestrator), or
+   - it makes 3 or more intra-class calls to sibling methods (deep delegation
+     orchestrator — sequences sub-operations without accumulating own deps).
+   Synthetics ($-suffixed), self-calls, and constructors are excluded from the
+   intra-call count, matching the filtering applied by :intra-calls?."
+  [methods intra-calls]
   (let [dep-sets (mapv #(set (:deps %)) methods)]
-    (mapv (fn [{:keys [deps] :as m} own-set]
+    (mapv (fn [{:keys [deps method] :as m} own-set]
             (let [subsumed (->> dep-sets
                                 (remove #(= % own-set))
                                 (filter #(set/subset? % own-set))
-                                count)]
-              (assoc m :orchestrator? (>= subsumed 2))))
+                                count)
+                  intra-count (->> (get intra-calls method #{})
+                                   (remove #(= method %))
+                                   (remove #(str/includes? % "$"))
+                                   (remove #(= "<init>" %))
+                                   count)]
+              (assoc m :orchestrator? (or (>= subsumed 2)
+                                          (>= intra-count 3)))))
           methods dep-sets)))
 
 ;;; ---------------------------------------------------------------------------
@@ -471,10 +481,9 @@
                             (group-by :method)
                             (map (fn [[m as]] [m (set (map :field as))]))
                             (into {}))
-        public-methods (when (or expand-private? intra-calls? callers?)
+        public-methods (when (or expand-private? callers?)
                          (set (map #(.getName %) (.getMethods real-cls))))
-        intra-calls (when (or expand-private? intra-calls? callers?)
-                      (extract-intra-class-calls b))
+        intra-calls (extract-intra-class-calls b)
         ;; intra-callees = all methods called from within the class
         ;; internal-only = those that are not public (package-private/private helpers)
         ;; These are suppressed from top-level :methods when expand-private? is true;
@@ -505,7 +514,7 @@
                                  {:method method :deps deps}))))
                      (sort-by :method)
                      vec
-                     add-orchestrator-flag)
+                     (#(add-orchestrator-flag % intra-calls)))
         methods (if intra-calls?
                   (mapv (fn [{:keys [method] :as m}]
                           (assoc m :intra-calls
@@ -518,7 +527,7 @@
                   methods)
         ;; :callers? — invert the intra-calls map to show who calls each method
         callers-of (when callers?
-                     (->> (or intra-calls (extract-intra-class-calls b))
+                     (->> intra-calls
                           (reduce (fn [acc [caller callees]]
                                     (reduce (fn [a callee]
                                               (update a callee (fnil conj []) caller))

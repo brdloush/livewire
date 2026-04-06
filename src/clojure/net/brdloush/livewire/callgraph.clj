@@ -559,6 +559,172 @@
      :dep-frequency dep-frequency
      :unaccounted-deps (vec (remove accounted all-bns))}))
 
+;;; ---------------------------------------------------------------------------
+;;; Internal: dep-set group merging for method-dep-clusters
+
+(defn- merge-compatible-groups
+  "Merges groups whose dep-set is a proper subset of another group's dep-set.
+   Iterates until no more merges are possible. A group whose dep-set is a
+   subset of another's is absorbed into the larger group — its methods and
+   intra-calls-map are folded in."
+  [groups]
+  (loop [groups (vec groups)]
+    (let [merge-pair (first
+                      (for [g groups
+                            absorber groups
+                            :when (and (not= (:dep-set g) (:dep-set absorber))
+                                       (clojure.set/subset? (:dep-set g) (:dep-set absorber)))]
+                        {:subset g :absorber absorber}))]
+      (if-not merge-pair
+        groups
+        (let [{:keys [subset absorber]} merge-pair
+              merged-absorber (-> absorber
+                                  (update :methods into (:methods subset))
+                                  (update :intra-calls-map merge (:intra-calls-map subset)))
+              new-groups (->> groups
+                              (remove #(= (:dep-set %) (:dep-set subset)))
+                              (mapv #(if (= (:dep-set %) (:dep-set absorber))
+                                       merged-absorber
+                                       %)))]
+          (recur new-groups))))))
+
+(defn method-dep-clusters
+  "For a bean, partitions its non-orchestrator methods into natural extraction
+   clusters based on shared dep footprint. Answers 'where would you draw the
+   split boundaries?' in a single call, without reading the source file.
+
+   Groups methods by dep-set equality, then merges groups whose dep-set is a
+   proper subset of another group's dep-set (set-containment — deterministic,
+   no threshold parameter). Orchestrators are excluded from clustering and
+   reported separately in :orchestrators; methods with no dep access are
+   set aside in :dep-free.
+
+   For each cluster, deps are classified as :exclusive-deps (used only by this
+   cluster — can move cleanly with the extracted service) or :shared-deps (also
+   used by at least one other cluster — must stay or be duplicated). Cross-cluster
+   intra-calls are flagged as :intra-call-violations: they indicate the split as
+   drawn would break an internal method call and require visibility promotion
+   or co-location before the extraction is safe.
+
+   Arguments:
+     bean-name — Spring bean name (string), same as accepted by lw/bean
+
+   Options:
+     :expand-private?   (default false) — fold private helper deps into public
+       callers before clustering; same semantics as method-dep-map option.
+     :min-cluster-size  (default 1) — suppress clusters with fewer methods than
+       this threshold. Use 2 to hide single-method islands from the output.
+
+   Returns:
+     {:bean              \"bookService\"
+      :class             \"com.example.BookService\"
+      :orchestrators     [{:method :deps :intra-calls} ...]
+      :dep-free          [{:method ...} ...]
+      :clusters          [{:id :methods :exclusive-deps :shared-deps
+                           :intra-call-violations} ...]
+      :shared-deps-summary [{:dep :used-by-clusters :used-by-orchestrators} ...]
+      :unaccounted-deps  [...]}
+
+   Example:
+     (cg/method-dep-clusters \"adminService\")
+     (cg/method-dep-clusters \"bookService\" :expand-private? true)
+     (cg/method-dep-clusters \"adminService\" :min-cluster-size 2)"
+  [bean-name & {:keys [expand-private? min-cluster-size]
+                :or   {expand-private? false min-cluster-size 1}}]
+  (let [mdm          (method-dep-map bean-name
+                                     :expand-private? expand-private?
+                                     :intra-calls? true)
+        {:keys [bean class methods unaccounted-deps]} mdm
+        noise?       #{"equals" "hashCode" "toString"
+                       "wait" "notify" "notifyAll" "getClass" "finalize"}
+
+        ;; separate orchestrators, dep-free, and clustering candidates
+        orchestrators     (filterv :orchestrator? methods)
+        non-orchestrators (remove :orchestrator? methods)
+        dep-free          (filterv #(empty? (:deps %)) non-orchestrators)
+        candidates        (->> non-orchestrators
+                               (remove #(empty? (:deps %)))
+                               (remove #(contains? noise? (:method %))))
+
+        ;; group by exact dep-set equality
+        grouped (->> candidates
+                     (group-by #(set (:deps %)))
+                     (mapv (fn [[dep-set ms]]
+                             {:dep-set         dep-set
+                              :methods         (mapv :method ms)
+                              :intra-calls-map (into {}
+                                                     (map (fn [m]
+                                                            [(:method m)
+                                                             (get m :intra-calls [])])
+                                                          ms))})))
+
+        ;; merge groups whose dep-set is a subset of another group's dep-set
+        merged  (merge-compatible-groups grouped)
+
+        ;; apply min-cluster-size
+        merged  (filterv #(>= (count (:methods %)) min-cluster-size) merged)
+
+        ;; assign sequential IDs
+        indexed (vec (map-indexed (fn [i c] (assoc c :id i)) merged))
+
+        ;; method → cluster-id index for violation detection
+        method->cluster (->> indexed
+                             (mapcat (fn [{:keys [id methods]}]
+                                       (map #(vector % id) methods)))
+                             (into {}))
+
+        ;; orchestrator deps for :used-by-orchestrators annotation
+        orchestrator-deps (set (mapcat :deps orchestrators))
+
+        ;; finalize each cluster: classify deps, detect violations
+        clusters
+        (mapv (fn [{:keys [id dep-set methods intra-calls-map]}]
+                (let [other-deps (->> indexed
+                                      (remove #(= (:id %) id))
+                                      (mapcat #(seq (:dep-set %)))
+                                      set)
+                      exclusive  (vec (sort (clojure.set/difference dep-set other-deps)))
+                      shared     (vec (sort (clojure.set/intersection dep-set other-deps)))
+                      violations (->> methods
+                                      (mapcat
+                                       (fn [m]
+                                         (->> (get intra-calls-map m [])
+                                              (keep (fn [callee]
+                                                      (when-let [cid (get method->cluster callee)]
+                                                        (when (not= cid id)
+                                                          {:caller         m
+                                                           :callee         callee
+                                                           :callee-cluster cid})))))))
+                                      vec)]
+                  {:id                    id
+                   :methods               (vec (sort methods))
+                   :exclusive-deps        exclusive
+                   :shared-deps           shared
+                   :intra-call-violations violations}))
+              indexed)
+
+        ;; shared-deps-summary: one entry per dep appearing in any cluster's :shared-deps
+        shared-dep-names    (distinct (mapcat :shared-deps clusters))
+        shared-deps-summary (->> shared-dep-names
+                                 (map (fn [dep]
+                                        {:dep                   dep
+                                         :used-by-clusters      (->> clusters
+                                                                      (filter #(some #{dep} (:shared-deps %)))
+                                                                      (mapv :id)
+                                                                      sort
+                                                                      vec)
+                                         :used-by-orchestrators (contains? orchestrator-deps dep)}))
+                                 (sort-by :dep)
+                                 vec)]
+
+    {:bean                bean
+     :class               class
+     :orchestrators       (mapv #(select-keys % [:method :deps :intra-calls]) orchestrators)
+     :dep-free            (mapv #(hash-map :method (:method %)) dep-free)
+     :clusters            clusters
+     :shared-deps-summary shared-deps-summary
+     :unaccounted-deps    unaccounted-deps}))
+
 (defn- blast-radius-single
   "Core single-method blast-radius logic. Accepts pre-built indexes so that
    the wildcard path can build them once and reuse across all methods."

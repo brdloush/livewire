@@ -202,6 +202,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method. Pass `'*'` as method for the full inbound call graph (flat, deduplicated). |
 | `lw-blast-radius-all <beanName>` | Per-method inbound call graph for every method on a bean: `{method → {:callers [...]}}`. Methods with empty `:callers` are dead-code candidates. All indexes built once — same speed as a single call. |
 | `lw-method-dep-map <beanName>` | For each method on a bean, the subset of its injected dependencies that method actually uses in bytecode. Includes `:dep-frequency` ranking. Options: `:expand-private?` folds private helper deps into their public callers; `:intra-calls?` adds which siblings this method calls; `:callers?` adds which siblings call this method (inverse of `:intra-calls?`). |
+| `lw-method-dep-clusters <beanName>` | Cluster methods by shared dep footprint — split-planning in one call. Groups methods into natural extraction candidates, flags shared deps and intra-call violations. Options: `--expand-private`, `--min-cluster-size N`. |
 | `lw-dead-methods <beanName>` | Analyses public methods on a bean. Splits into `:dead` (no callers anywhere — delete candidates) and `:internal-only` (called only from sibling methods — visibility leaks, refactoring candidates). Warns when messaging beans or db-scheduler tasks are detected. |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
 
@@ -2203,6 +2204,100 @@ entries.
 ```bash
 lw-method-dep-map adminService
 lw-method-dep-map bookService
+```
+
+---
+
+### `cg/method-dep-clusters` — method clustering for service split planning
+
+`method-dep-map` tells you which deps each method uses. `method-dep-clusters` takes that
+one step further: it partitions the methods into natural extraction groups and tells you
+exactly where to draw the split boundaries — which methods go together, which deps move
+cleanly, and which splits are unsafe.
+
+Call it when `lw/all-bean-deps` shows a bean with many injected dependencies and you want
+a concrete extraction plan without reading the source file.
+
+```clojure
+(cg/method-dep-clusters bean-name)
+(cg/method-dep-clusters bean-name :expand-private? true)
+(cg/method-dep-clusters bean-name :min-cluster-size 2)   ; hide single-method islands
+```
+
+**Returns:**
+
+```clojure
+;; Example: memberService — two distinct dep clusters, clean split
+(cg/method-dep-clusters "memberService")
+;; => {:bean    "memberService"
+;;     :class   "com.example.bloatedshelf.service.MemberService"
+;;
+;;     ;; Orchestrator methods (wide dep footprint — keep in facade):
+;;     :orchestrators []
+;;
+;;     ;; Methods with no dep access — pure/utility, can move anywhere:
+;;     :dep-free []
+;;
+;;     ;; Natural extraction candidates:
+;;     :clusters
+;;     [{:id 0
+;;       :methods        ["getActiveLoansForMember"]
+;;       :exclusive-deps ["loanRecordRepository"]   ; moves cleanly — no shared deps
+;;       :shared-deps    []
+;;       :intra-call-violations []}                 ; safe to split
+;;
+;;      {:id 1
+;;       :methods        ["getAllMembers" "getMemberById"]
+;;       :exclusive-deps ["libraryMemberRepository"]
+;;       :shared-deps    []
+;;       :intra-call-violations []}]
+;;
+;;     ;; Deps used by more than one cluster (decide: duplicate or facade):
+;;     :shared-deps-summary []
+;;
+;;     ;; Injected deps not accessed by any method:
+;;     :unaccounted-deps []}
+```
+
+**Key fields:**
+
+- **`:orchestrators`** — methods excluded from clustering because their dep-set spans many
+  others. Keep in a thin coordinating facade that delegates to extracted services.
+- **`:dep-free`** — methods with no injected dep access; utility methods that can move
+  anywhere.
+- **`:exclusive-deps`** — deps used only by this cluster. These move cleanly to the
+  extracted service's constructor with no cross-cluster conflict.
+- **`:shared-deps`** — deps also used by at least one other cluster. Must appear in
+  multiple extracted services' constructors, or be wrapped in a shared facade.
+- **`:intra-call-violations`** — methods in this cluster that call a method assigned to a
+  different cluster. The split as drawn is unsafe until those calls are resolved (visibility
+  promotion or co-location).
+- **`:shared-deps-summary`** — cross-cluster view: for each shared dep, which clusters use
+  it and whether orchestrators also use it. High-cardinality entries are facade candidates.
+
+**When to use it:**
+
+- You have spotted a bean with many deps via `lw/all-bean-deps` and want to know where to
+  cut it before opening the source file.
+- You have already read `method-dep-map` output and want the partitioning done for you.
+- Before writing a refactoring plan: run this, confirm there are no `:intra-call-violations`,
+  then write the plan from the cluster output.
+
+**Limitations:**
+
+- Inherits all limitations of `method-dep-map`: reflection, lambdas, and `@PostConstruct`
+  accesses are invisible. The dep footprint per method may be understated.
+- Clusters are structural, not semantic. Two methods may share a dep for unrelated reasons
+  and land in the same cluster. Human review is always the final step.
+- With `:expand-private? false` (default), public methods that delegate entirely to private
+  helpers appear dep-free. Use `:expand-private? true` on beans with heavy private delegation.
+
+### CLI: `lw-method-dep-clusters`
+
+```bash
+lw-method-dep-clusters adminService
+lw-method-dep-clusters bookService --expand-private
+lw-method-dep-clusters adminService --min-cluster-size 2
 ```
 
 ---

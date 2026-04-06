@@ -665,6 +665,24 @@ missing link between "this bean has 6 deps" and "where to cut":
 ;; lw-method-dep-map adminService
 ```
 
+When you want the split boundaries suggested automatically rather than reading the dep map
+yourself, use `method-dep-clusters`. It groups methods by shared dep footprint, flags
+which deps move cleanly with each group, and highlights any intra-call violations that
+would make a proposed split unsafe — all in one call:
+
+```clojure
+(cg/method-dep-clusters "memberService")
+;; => {:clusters [{:id 0 :methods ["getActiveLoansForMember"]
+;;                 :exclusive-deps ["loanRecordRepository"] :shared-deps [] :intra-call-violations []}
+;;                {:id 1 :methods ["getAllMembers" "getMemberById"]
+;;                 :exclusive-deps ["libraryMemberRepository"] :shared-deps [] :intra-call-violations []}]
+;;     :orchestrators [] :dep-free [] :shared-deps-summary [] :unaccounted-deps []}
+
+;; CLI
+;; lw-method-dep-clusters memberService
+;; lw-method-dep-clusters adminService --expand-private
+```
+
 ---
 
 ## ⚠️ Security and data — read this

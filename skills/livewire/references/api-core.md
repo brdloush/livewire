@@ -253,8 +253,23 @@ The method body always reveals the actual lookup.
 **Mandatory sequence:**
 1. List method signatures (learn parameter types and names)
 2. **Read the source** — find what lookup the method performs for each parameter
-3. Only then write a JPQL query targeting the correct field/entity
-4. Call the method with valid IDs
+3. **Inspect the entity** — run `lw-inspect-entity` (or `lw-list-entities` first if the entity
+   name is unknown) to confirm the exact entity name, field names, and table structure before
+   writing any JPQL. Never guess entity or field names — `Genre` might be `BookGenre`,
+   `id` might be `genreCode`. One inspect call prevents multiple failed query attempts.
+4. Only then write a JPQL query targeting the confirmed entity and field names
+5. Call the method with valid IDs
+
+```bash
+# ❌ guessing entity/field names directly
+lw-jpa-query 'SELECT g.id, g.name FROM Genre g'
+
+# ✅ inspect first — confirm entity name, id field, and any relevant columns
+lw-inspect-entity Genre
+# => {:table-name "genre", :identifier {:name "id"}, :properties [{:name "name"} ...]}
+# Now write the query with confirmed names:
+lw-jpa-query 'SELECT g.id, g.name FROM Genre g'
+```
 
 #### ⚠️ Never invoke mutating endpoints without explicit user instruction
 

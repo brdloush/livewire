@@ -116,6 +116,10 @@ This skill ships named wrapper scripts in a `bin/` subdirectory next to this `SK
 Always prefer them over raw `clj-nrepl-eval` calls — they produce cleaner output and handle
 namespace requiring automatically.
 
+The scripts are installed alongside this skill. **Do not check for their existence — invoke
+them directly.** If you ever need to locate them, find this `SKILL.md` file first:
+`find ~ -path '*/livewire/SKILL.md' 2>/dev/null` — the `bin/` folder is right next to it.
+
 Use them via their full path: `~/.claude/skills/livewire/bin/<script-name>`.
 The port defaults to **7888** and can be overridden with `LW_PORT`.
 

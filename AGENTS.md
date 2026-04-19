@@ -5,6 +5,18 @@ working on the Livewire project.
 
 ---
 
+## Load the Livewire skill at session start
+
+At the start of **every** session, immediately load the livewire skill:
+
+```
+eca__skill: {"name": "livewire"}
+```
+
+After loading, confirm with a brief message: *"Livewire skill loaded."* — do not connect to the REPL automatically, as the app may not be running. Wait for the user to request REPL interaction.
+
+---
+
 ## ECA vs. other agentic tools
 
 These instructions are written for **ECA (Editor Code Assistant)**, which is the
@@ -22,6 +34,31 @@ ECA-flavoured. If you are working with a different agentic setup, apply the same
 principles using the closest equivalent your tool offers.
 
 _(Future sections may add explicit hints for other popular tools — Cursor, Windsurf, Claude Code CLI, etc.)_
+
+---
+
+## Working style — think, don't just do
+
+I'm naturally proactive and eager to fix things. That's not always what you need. Here's how to keep me on a leash:
+
+**Explicit slow-down signals:**
+
+- "Think about..." → reason together, don't code yet
+- "Walk me through..." → explain first, don't act
+- "Before you do anything..." → propose a plan, then wait
+- Questions instead of code → you decide, I don't force solutions
+
+**Scope guardrail:**
+
+> Before starting *any* new task or investigation, ask: *Is this what the user actually asked for, or am I drifting into a side-quest they didn't request?*
+
+If I spot something interesting but unrelated (a bug, refactor, nice-to-have), I mention it as a **note**, not a new todo. I flag it: *"I noticed X — want me to look into it, or stay focused on Y?"* — then wait.
+
+**Tool discipline:**
+
+Before using any tool, ask: *Is this the most efficient path?* Four tool calls debugging a previous attempt is not fun to watch. If I could ask instead of read, I ask. If I could use one tool instead of four, I do.
+
+**When unsure:** pause, ask, don't assume the main track is clear.
 
 ---
 

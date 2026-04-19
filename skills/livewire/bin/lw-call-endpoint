@@ -52,4 +52,4 @@ EXPR=$(cat <<CLOJURE
 CLOJURE
 )
 
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" "$EXPR"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "$EXPR"

@@ -157,7 +157,28 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
    `getReferenceById()` returns a Hibernate proxy with the ID set — no SELECT is fired, and Hibernate resolves the FK correctly on flush. This pattern is explicit, safe across inheritance hierarchies, and stays correct as the test class grows.
 
-9. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
+9. **`@NotNull` + `insertable=false` — set the field anyway**
+
+   Fields annotated both `@NotNull` and `insertable=false` (DB-defaulted columns like `created_at`,
+   `updated_at`) will fail **bean validation** in the REPL even though Hibernate would never actually
+   insert the value — validation fires before the DB default can apply. Always set these fields
+   explicitly when building entities in `lw/in-tx`, or the persist throws `ConstraintViolationException`
+   before reaching the DB.
+
+   ```clojure
+   ;; ❌ ConstraintViolationException — @NotNull fires before the DB default applies
+   (let [i (MyEntity.)]
+     (.setName i "Test"))    ; created_at is insertable=false but @NotNull — must still be set
+
+   ;; ✅ set explicitly
+   (let [i (MyEntity.)
+         now (java.time.Instant/now)]
+     (.setName i "Test")
+     (.setCreatedAt i now)   ; will not be inserted (DB default takes over), but satisfies @NotNull
+     (.setUpdatedAt i now))
+   ```
+
+10. **Only then write the test** — translate the validated REPL recipe into the setup style already used by the project.
 
 ---
 
@@ -201,7 +222,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map of `{:type … :value …}` entries — use as seed for test setup code and assertions |
 | `lw-blast-radius <beanName> <methodName>` | Call-graph impact analysis — which HTTP endpoints, schedulers, and event listeners transitively call this method. Pass `'*'` as method for the full inbound call graph (flat, deduplicated). |
 | `lw-blast-radius-all <beanName>` | Per-method inbound call graph for every method on a bean: `{method → {:callers [...]}}`. Methods with empty `:callers` are dead-code candidates. All indexes built once — same speed as a single call. |
-| `lw-method-dep-map <beanName>` | For each method on a bean, the subset of its injected dependencies that method actually uses in bytecode. Includes `:dep-frequency` ranking. Options: `:expand-private?` folds private helper deps into their public callers; `:intra-calls?` adds which siblings this method calls; `:callers?` adds which siblings call this method (inverse of `:intra-calls?`). |
+| `lw-method-dep-map <beanName>` | For each method on a bean, the subset of its injected dependencies that method actually uses in bytecode, including which methods it calls on each dep (`:calls`). Includes `:dep-frequency` ranking. Options: `:expand-private?` folds private helper deps into their public callers; `:intra-calls?` adds which siblings this method calls; `:callers?` adds which siblings call this method (inverse of `:intra-calls?`). |
 | `lw-method-dep-clusters <beanName>` | Cluster methods by shared dep footprint — split-planning in one call. Groups methods into natural extraction candidates, flags shared deps and intra-call violations. Options: `--expand-private`, `--min-cluster-size N`. |
 | `lw-dead-methods <beanName>` | Analyses public methods on a bean. Splits into `:dead` (no callers anywhere — delete candidates) and `:internal-only` (called only from sibling methods — visibility leaks, refactoring candidates). Warns when messaging beans or db-scheduler tasks are detected. |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
@@ -255,33 +276,41 @@ clj-nrepl-eval --discover-ports
    be overridden with `LW_PORT`. If nothing is found, the app may not be running or
    `livewire.enabled=true` may not be set.
 
-2. **Namespaces are pre-aliased** — the boot sequence wires these into the `user` ns
+2. **Verify the connection is live** — always require the namespace in the same eval as the call:
+   ```bash
+   clj-nrepl-eval -p 7888 "(require '[net.brdloush.livewire.core :as lw]) (lw/info)"
+   ```
+   This verifies the REPL is responsive and returns useful runtime info (Spring version, Java version,
+   active profiles, database details). **Never use `spring/bean-names` for connection checks** — it
+   emits hundreds of bean names and gives no useful runtime information about the app's state.
+
+3. **Namespaces are pre-aliased** — the boot sequence wires these into the `user` ns
    automatically, so no manual `require` is needed:
    `lw`, `q`, `intro`, `trace`, `qw`, `hq`, `jpa`, `mvc`, `faker`
 
-3. **Evaluate** snippets iteratively — the session persists between calls:
+4. **Evaluate** snippets iteratively — the session persists between calls:
    ```bash
    clj-nrepl-eval -p <port> "<clojure-code>"
    # with an explicit timeout (milliseconds)
    clj-nrepl-eval -p <port> --timeout 5000 "<clojure-code>"
    ```
 
-4. **Run independent read queries in parallel** — when multiple `clj-nrepl-eval` calls have
+5. **Run independent read queries in parallel** — when multiple `clj-nrepl-eval` calls have
    no dependencies on each other (e.g. inspecting several entities, fetching unrelated
    properties), fire them all in a single message as parallel Bash tool calls. This
    significantly reduces wall-clock time. Only serialize calls when one result feeds
    into the next.
 
-5. **Present results readably:**
+6. **Present results readably:**
    - Collections of maps → markdown table
    - Single map → inline key/value list
    - Scalars → inline code in prose
 
-6. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it
+7. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it
    re-reads the same old class already on the classpath. Instead, evaluate the
    new `ns` form and function bodies directly into the live REPL.
 
-7. **After writing a source-code fix:** Once a hypothesis has been validated in
+8. **After writing a source-code fix:** Once a hypothesis has been validated in
    the REPL and the fix has been written to source, remind the user that a
    restart may be required before the new code takes effect — unless the change
    is limited to `@Query` JPQL strings that the query-watcher can pick up
@@ -1140,6 +1169,43 @@ before concluding there is no N+1.
           {:id id :total-queries (:count res) :suspicious (count (:suspicious-queries (trace/detect-n+1 res)))}))
       [1 2 3 4 5])
 ;; => look for outliers — the problematic ID will stand out with a much higher :total-queries count
+```
+
+### Shared associations in synthetic REPL test data mask N+1
+
+When creating multiple rows inside `lw/in-tx` to reproduce an N+1, if all rows point to
+the **same** associated entity (e.g. the same `createdBy` employee for every row), the L1
+cache serves hits 2..N from memory — only 1 extra query fires instead of N, and
+`detect-n+1` reports nothing suspicious.
+
+**Rule:** every row must have a **distinct** instance of each suspect association. Reusing
+the same entity across rows is the most common reason a synthetic REPL reproduction fails
+to trigger the N+1 you already know exists in production.
+
+```clojure
+;; ❌ all 3 interventions share the same createdBy — L1 cache hides the N+1
+(dotimes [n 3]
+  (.setCreatedBy intervention same-employee))   ; only 1 SELECT fires, not 3
+
+;; ✅ distinct entity per row — L1 cache can't help, N+1 fires as expected
+(dotimes [n 3]
+  (.setCreatedBy intervention (nth distinct-employees n)))  ; 3 SELECTs fire
+```
+
+### `detect-n+1` has a count threshold — low-count N+1s may not be flagged
+
+`detect-n+1` only marks a query pattern as `:suspicious-queries` when it fires above an
+internal minimum count. In practice a pattern that fires 3× may not be flagged even though
+it is a genuine N+1 — while a pattern that fires 4× is. **Always inspect `:query-count`
+and the raw `:queries` list directly**, not just `:suspicious-queries`, especially when
+working with small synthetic datasets.
+
+```clojure
+(let [res (trace/trace-sql (my-service-call))]
+  ;; ✅ check both — suspicious may be empty even when count > 1
+  {:total    (:count res)
+   :queries  (frequencies (map :sql (:queries res)))   ; spot repeats manually
+   :flagged  (:suspicious-queries (trace/detect-n+1 res))})
 ```
 
 ### `FetchType.LAZY` on a non-PK `@ManyToOne` is silently ignored by Hibernate
@@ -2099,12 +2165,14 @@ in a bloated bean.
 {:bean             "adminService"
  :class            "com.example.AdminService"
  :methods          [{:method        "getSystemStats"
-                     :deps          ["authorRepository" "bookRepository"
-                                     "libraryMemberRepository" "reviewRepository"
-                                     "loanRecordRepository"]
+                     :deps          [{:bean "authorRepository"       :calls ["count"]}
+                                     {:bean "bookRepository"         :calls ["count"]}
+                                     {:bean "libraryMemberRepository" :calls ["count"]}
+                                     {:bean "loanRecordRepository"   :calls ["count"]}
+                                     {:bean "reviewRepository"       :calls ["count"]}]
                      :orchestrator? false}
                     {:method        "getTop10MostLoanedBooks"
-                     :deps          ["bookRepository"]
+                     :deps          [{:bean "bookRepository" :calls ["findTop10MostLoaned"]}]
                      :orchestrator? false}]
  :dep-frequency    [{:dep "bookRepository" :used-by-count 2 :methods ["getSystemStats" "getTop10MostLoanedBooks"]}
                     {:dep "authorRepository" :used-by-count 1 :methods ["getSystemStats"]}
@@ -2113,10 +2181,20 @@ in a bloated bean.
 ```
 
 - **`:deps`** — the bean's injected dependencies that this method directly touches in bytecode,
-  resolved by field type → `ApplicationContext` lookup.
-- **`:orchestrator?`** — `true` when the method's dep-set is a superset of ≥ 2 other methods'
-  dep-sets. These methods sequence sub-operations rather than performing a single concern; they
-  are poor candidates for assignment to any one extracted service.
+  resolved by field type → `ApplicationContext` lookup. Each entry is a map:
+  - **`:bean`** — the Spring bean name of the injected dependency.
+  - **`:calls`** — distinct method names called on that bean within this method, sorted
+    alphabetically. Empty when the call site is not resolvable (e.g. via reflection or a lambda).
+- **`:orchestrator?`** — `true` when any of the following hold:
+  - The method's dep-set is a proper superset of ≥ 2 other methods' dep-sets — it touches more
+    beans than any single cohesive sub-operation needs, sequencing work across many collaborators.
+  - The method makes 3+ intra-class calls to sibling methods — deep delegation without
+    accumulating its own dep breadth.
+  - The method calls 3+ distinct methods on the same injected bean — it is driving multiple
+    operations through a single dep rather than performing one cohesive action. A method that
+    calls `findById`, `save`, and `deleteById` all on `bookRepository` is a coordinator, not a
+    leaf operation.
+  Orchestrators are poor candidates for assignment to any one extracted service.
 - **`:dep-frequency`** — all injected dependencies ranked by how many distinct methods use them,
   descending. High-count deps are load-bearing (every extracted service will need them, or they
   belong in a shared facade). Count-1 deps are prime extraction candidates — they can move with
@@ -2147,14 +2225,16 @@ method B internally, moving A without B will break the service.
 (cg/method-dep-map "bookService" :intra-calls? true)
 ;; :methods contains entries like:
 ;; {:method "getAllBooks"
-;;  :deps   ["bookRepository"]
+;;  :deps   [{:bean "bookRepository" :calls ["findAll"]}]
 ;;  :intra-calls []
 ;;  :orchestrator? false}
 ;;
 ;; A larger service would show e.g.:
-;; {:method "createBook"
-;;  :intra-calls ["validateIsbn" "notifySubscribers" "updateIndex"]
-;;  :orchestrator? true}
+;; {:method "processOverdueLoans"
+;;  :deps   [{:bean "loanRecordRepository"
+;;             :calls ["findOverdue" "markNotified" "archiveLoan"]}]
+;;  :intra-calls ["sendOverdueNotice" "updateMemberStatus"]
+;;  :orchestrator? true}   ; 3+ calls on same dep triggers orchestrator flag
 ```
 
 Use `:intra-calls?` alongside `:dep-frequency` when planning a split: methods with

@@ -307,7 +307,7 @@
        (into {})))
 
 ;;; ---------------------------------------------------------------------------
-;;; Internal: field-access extraction and bean resolution for method-dep-map
+;;; Internal: field-access + invoke-call extraction and bean resolution for method-dep-map
 
 (defn- extract-intra-class-calls
   "Walks the bytecode of bean-instance's real class and returns a map of
@@ -334,15 +334,19 @@
          (map (fn [[caller cs]] [caller (set (map :callee cs))]))
          (into {}))))
 
-(defn- extract-field-accesses
-  "Walks the bytecode of bean-instance's real class and returns a seq of
-   {:method method-name :field field-name} for every GETFIELD instruction found."
+(defn- extract-field-and-invoke-accesses
+  "Single-pass bytecode walk over bean-instance's real class. Collects:
+   - GETFIELD instructions  → :field-accesses [{:method :field}]
+   - INVOKEVIRTUAL / INVOKEINTERFACE instructions → :invoke-calls [{:method :owner :callee}]
+
+   Combining both in one pass avoids reading the .class bytes twice."
   [bean-instance]
   (let [real-cls (AopUtils/getTargetClass bean-instance)
         resource-path (str (.replace (.getName real-cls) "." "/") ".class")
         cl (or (.getClassLoader real-cls) (ClassLoader/getSystemClassLoader))
         stream (.getResourceAsStream cl resource-path)
-        accesses (atom [])]
+        field-acc (atom [])
+        invoke-calls (atom [])]
     (when stream
       (.accept (ClassReader. stream)
                (proxy [ClassVisitor] [Opcodes/ASM9]
@@ -350,53 +354,79 @@
                    (proxy [MethodVisitor] [Opcodes/ASM9]
                      (visitFieldInsn [opcode _owner field-name _desc]
                        (when (= opcode Opcodes/GETFIELD)
-                         (swap! accesses conj {:method method-name :field field-name}))))))
+                         (swap! field-acc conj {:method method-name :field field-name})))
+                     (visitMethodInsn [opcode owner callee _desc _itf]
+                       (when (#{Opcodes/INVOKEVIRTUAL Opcodes/INVOKEINTERFACE} opcode)
+                         (swap! invoke-calls conj {:method method-name
+                                                   :owner (str/replace owner "/" ".")
+                                                   :callee callee}))))))
                0))
-    @accesses))
+    {:field-accesses @field-acc
+     :invoke-calls @invoke-calls}))
+
+(defn- find-field
+  "Returns the java.lang.reflect.Field for field-name declared on cls or any
+   of its superclasses. Returns nil if not found."
+  [cls field-name]
+  (or (try (.getDeclaredField cls field-name)
+           (catch NoSuchFieldException _ nil))
+      (loop [c (.getSuperclass cls)]
+        (when c
+          (or (try (.getDeclaredField c field-name)
+                   (catch NoSuchFieldException _ nil))
+              (recur (.getSuperclass c)))))))
 
 (defn- field->bean-name
   "Given the real (unwrapped) class and a field name, returns the Spring bean
    name whose type matches the field's declared type — or nil if the field is
    not a Spring bean. Walks the superclass chain to find inherited fields."
   [real-cls field-name]
-  (let [field (or (try (.getDeclaredField real-cls field-name)
-                       (catch NoSuchFieldException _ nil))
-                  (loop [c (.getSuperclass real-cls)]
-                    (when c
-                      (or (try (.getDeclaredField c field-name)
-                               (catch NoSuchFieldException _ nil))
-                          (recur (.getSuperclass c))))))]
-    (when field
-      (let [field-type (.getType field)]
-        (some (fn [bn]
-                (try
-                  (when (instance? field-type (core/bean bn)) bn)
-                  (catch Exception _ nil)))
-              (core/bean-names))))))
+  (when-let [field (find-field real-cls field-name)]
+    (let [field-type (.getType field)]
+      (some (fn [bn]
+              (try
+                (when (instance? field-type (core/bean bn)) bn)
+                (catch Exception _ nil)))
+            (core/bean-names)))))
 
 (defn- add-orchestrator-flag
-  "Marks a method as :orchestrator? true when either:
-   - its dep-set is a proper superset of at least two other methods' dep-sets
-     (wide dep footprint orchestrator), or
-   - it makes 3 or more intra-class calls to sibling methods (deep delegation
-     orchestrator — sequences sub-operations without accumulating own deps).
-   Synthetics ($-suffixed), self-calls, and constructors are excluded from the
-   intra-call count, matching the filtering applied by :intra-calls?."
+  "Marks a method as :orchestrator? true when any of these is true:
+
+   1. Wide dep footprint — its dep-set is a proper superset of at least two
+      other methods' dep-sets. The method touches more beans than any single
+      cohesive sub-operation needs; it is sequencing work on behalf of others.
+      Example: a method on a loan-processing service that uses bookRepository,
+      loanRecordRepository, and memberRepository, while no other single method
+      needs all three.
+
+   2. Deep delegation — it makes 3+ intra-class calls to sibling methods.
+      Sequences sub-operations internally without accumulating its own dep breadth.
+      Synthetics ($-suffixed), self-calls, and constructors are excluded.
+
+   3. Multi-operation dep use — it calls 3+ distinct methods on the same
+      injected bean. A method that calls findOverdueLoans, markLoansAsNotified,
+      and archiveLoan all on loanRecordRepository is orchestrating multiple
+      operations through a single dep rather than performing one cohesive action.
+      Threshold matches criteria 2 to avoid flagging simple read-then-write pairs
+      (e.g. findById + save on a repository)."
   [methods intra-calls]
-  (let [dep-sets (mapv #(set (:deps %)) methods)]
+  (let [dep-sets (mapv #(set (map :bean (:deps %))) methods)]
     (mapv (fn [{:keys [deps method] :as m} own-set]
-            (let [subsumed (->> dep-sets
-                                (remove #(= % own-set))
-                                (filter #(set/subset? % own-set))
-                                count)
+            (let [subsumed    (->> dep-sets
+                                   (remove #(= % own-set))
+                                   (filter #(set/subset? % own-set))
+                                   count)
                   intra-count (->> (get intra-calls method #{})
                                    (remove #(= method %))
                                    (remove #(str/includes? % "$"))
                                    (remove #(= "<init>" %))
-                                   count)]
-              (assoc m :orchestrator? (or (>= subsumed 2)
-                                          (>= intra-count 3)))))
-          methods dep-sets)))
+                                   count)
+                  multi-call? (boolean (some #(>= (count (:calls %)) 3) deps))]
+              (assoc m :orchestrator? (boolean (or (>= subsumed 2)
+                                                   (>= intra-count 3)
+                                                   multi-call?)))))
+          methods
+          dep-sets)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Public API
@@ -416,15 +446,28 @@
    Returns:
      {:bean             \"adminService\"
       :class            \"com.example.AdminService\"
-      :methods          [{:method \"getSystemStats\"
-                          :deps   [\"bookRepository\" \"authorRepository\" ...]
+      :methods          [{:method \"archiveBook\"
+                          :deps   [{:bean \"bookRepository\"
+                                    :calls [\"findById\" \"save\"]}]
                           :orchestrator? false}
                          ...]
       :unaccounted-deps []}
 
-   :orchestrator? is true when the method's dep-set is a superset of at least
-   two other methods' dep-sets — it sequences sub-operations and is a poor
-   candidate for assignment to any single extracted service.
+   Each entry in :deps is a map:
+     :bean  — the Spring bean name of the injected dependency
+     :calls — distinct method names called on that bean within this method,
+              sorted alphabetically. Empty when the call site is not resolvable
+              (e.g. via reflection or a lambda).
+
+   :orchestrator? is true when any of these hold:
+   - The method's dep-set is a proper superset of at least two other methods'
+     dep-sets — wide footprint, sequences work across many collaborators.
+   - The method makes 3+ intra-class calls to sibling methods — deep delegation
+     without accumulating its own dep breadth.
+   - The method calls 3+ distinct methods on the same injected bean — it is
+     driving multiple operations through a single dep rather than doing one
+     cohesive thing. A method that calls findById, save, and deleteById all on
+     bookRepository is a coordinator, not a leaf operation.
 
    :unaccounted-deps lists injected beans not directly referenced by any method
    — possible dead injections or deps used only in @PostConstruct / initializers.
@@ -468,22 +511,45 @@
                 :or {expand-private? false intra-calls? false callers? false}}]
   (let [b (core/bean bean-name)
         real-cls (AopUtils/getTargetClass b)
-        accesses (extract-field-accesses b)
-        field->bn (->> accesses
+        {:keys [field-accesses invoke-calls]} (extract-field-and-invoke-accesses b)
+
+        ;; field-name → bean-name (existing logic, unchanged)
+        field->bn (->> field-accesses
                        (map :field)
                        distinct
                        (keep (fn [f]
                                (when-let [bn (field->bean-name real-cls f)]
                                  [f bn])))
                        (into {}))
-        ;; method -> #{field-names} for all methods (inc private)
-        method->fields (->> accesses
+
+        ;; dotted-type-name → bean-name, built from field types of known dep fields.
+        ;; Used to match INVOKEVIRTUAL/INVOKEINTERFACE owner names back to a bean.
+        type->bn (->> field->bn
+                      (keep (fn [[fname bn]]
+                              (when-let [f (find-field real-cls fname)]
+                                [(.getName (.getType f)) bn])))
+                      (into {}))
+
+        ;; method → #{field-names} for all methods (inc private)
+        method->fields (->> field-accesses
                             (group-by :method)
                             (map (fn [[m as]] [m (set (map :field as))]))
                             (into {}))
+
+        ;; method → [{:owner :callee}] filtered to calls on known dep types only,
+        ;; excluding constructors and synthetic methods
+        method->dep-calls (->> invoke-calls
+                               (filter #(get type->bn (:owner %)))
+                               (remove #(= "<init>" (:callee %)))
+                               (remove #(str/includes? (:callee %) "$"))
+                               (group-by :method)
+                               (map (fn [[m cs]] [m cs]))
+                               (into {}))
+
         public-methods (when (or expand-private? callers?)
                          (set (map #(.getName %) (.getMethods real-cls))))
         intra-calls (extract-intra-class-calls b)
+
         ;; intra-callees = all methods called from within the class
         ;; internal-only = those that are not public (package-private/private helpers)
         ;; These are suppressed from top-level :methods when expand-private? is true;
@@ -493,7 +559,9 @@
                              (apply set/union #{})))
         internal-only (when expand-private?
                         (set/difference intra-callees public-methods))
-        ;; effective fields for a method: own fields + fields of called private helpers
+
+        ;; Effective fields for a method: own fields + fields of called private helpers.
+        ;; When expand-private? is false, only the method's own fields are used.
         effective-fields (fn [method-name]
                            (if expand-private?
                              (let [priv-callees (set/difference
@@ -503,18 +571,44 @@
                                     (map #(get method->fields % #{}))
                                     (apply set/union (get method->fields method-name #{}))))
                              (get method->fields method-name #{})))
+
+        ;; Effective dep-call sites for a method: own invoke calls + calls from called
+        ;; private helpers (when expand-private? is true).
+        effective-dep-calls (fn [method-name]
+                              (if expand-private?
+                                (let [priv-callees (set/difference
+                                                    (get intra-calls method-name #{})
+                                                    public-methods)]
+                                  (concat (get method->dep-calls method-name [])
+                                          (mapcat #(get method->dep-calls % []) priv-callees)))
+                                (get method->dep-calls method-name [])))
+
+        ;; Build enriched deps: [{:bean "bookRepository" :calls ["findById" "save"]}]
+        ;; :calls lists the distinct method names called on that dep within this method.
+        build-deps (fn [method-name]
+                     (let [calls-for-method (effective-dep-calls method-name)]
+                       (->> (effective-fields method-name)
+                            (keep field->bn)
+                            distinct
+                            (mapv (fn [bn]
+                                    {:bean bn
+                                     :calls (->> calls-for-method
+                                                 (filter #(= (get type->bn (:owner %)) bn))
+                                                 (map :callee)
+                                                 distinct
+                                                 sort
+                                                 vec)})))))
+
         methods (->> (keys method->fields)
                      (remove (fn [m] (and expand-private? (contains? internal-only m))))
                      (keep (fn [method]
-                             (let [deps (->> (effective-fields method)
-                                             (keep field->bn)
-                                             distinct
-                                             vec)]
+                             (let [deps (build-deps method)]
                                (when (seq deps)
                                  {:method method :deps deps}))))
                      (sort-by :method)
                      vec
                      (#(add-orchestrator-flag % intra-calls)))
+
         methods (if intra-calls?
                   (mapv (fn [{:keys [method] :as m}]
                           (assoc m :intra-calls
@@ -525,6 +619,7 @@
                                       sort vec)))
                         methods)
                   methods)
+
         ;; :callers? — invert the intra-calls map to show who calls each method
         callers-of (when callers?
                      (->> intra-calls
@@ -533,6 +628,7 @@
                                               (update a callee (fnil conj []) caller))
                                             acc callees))
                                   {})))
+
         methods (if callers?
                   (mapv (fn [{:keys [method] :as m}]
                           (assoc m :intra-callers
@@ -542,11 +638,12 @@
                                       sort vec)))
                         methods)
                   methods)
+
         all-bns (set (vals field->bn))
-        accounted (set (mapcat :deps methods))
+        accounted (set (mapcat #(map :bean (:deps %)) methods))
         dep-frequency (->> methods
                            (mapcat (fn [{:keys [method deps]}]
-                                     (map #(vector % method) deps)))
+                                     (map #(vector (:bean %) method) deps)))
                            (group-by first)
                            (map (fn [[dep ms]]
                                   {:dep dep :used-by-count (count ms)
@@ -630,28 +727,28 @@
      (cg/method-dep-clusters \"bookService\" :expand-private? true)
      (cg/method-dep-clusters \"adminService\" :min-cluster-size 2)"
   [bean-name & {:keys [expand-private? min-cluster-size]
-                :or   {expand-private? false min-cluster-size 1}}]
-  (let [mdm          (method-dep-map bean-name
-                                     :expand-private? expand-private?
-                                     :intra-calls? true)
+                :or {expand-private? false min-cluster-size 1}}]
+  (let [mdm (method-dep-map bean-name
+                            :expand-private? expand-private?
+                            :intra-calls? true)
         {:keys [bean class methods unaccounted-deps]} mdm
-        noise?       #{"equals" "hashCode" "toString"
-                       "wait" "notify" "notifyAll" "getClass" "finalize"}
+        noise? #{"equals" "hashCode" "toString"
+                 "wait" "notify" "notifyAll" "getClass" "finalize"}
 
         ;; separate orchestrators, dep-free, and clustering candidates
-        orchestrators     (filterv :orchestrator? methods)
+        orchestrators (filterv :orchestrator? methods)
         non-orchestrators (remove :orchestrator? methods)
-        dep-free          (filterv #(empty? (:deps %)) non-orchestrators)
-        candidates        (->> non-orchestrators
-                               (remove #(empty? (:deps %)))
-                               (remove #(contains? noise? (:method %))))
+        dep-free (filterv #(empty? (:deps %)) non-orchestrators)
+        candidates (->> non-orchestrators
+                        (remove #(empty? (:deps %)))
+                        (remove #(contains? noise? (:method %))))
 
-        ;; group by exact dep-set equality
+        ;; group by exact dep-set equality (dep-set is the set of bean names only)
         grouped (->> candidates
-                     (group-by #(set (:deps %)))
+                     (group-by #(set (map :bean (:deps %))))
                      (mapv (fn [[dep-set ms]]
-                             {:dep-set         dep-set
-                              :methods         (mapv :method ms)
+                             {:dep-set dep-set
+                              :methods (mapv :method ms)
                               :intra-calls-map (into {}
                                                      (map (fn [m]
                                                             [(:method m)
@@ -659,10 +756,10 @@
                                                           ms))})))
 
         ;; merge groups whose dep-set is a subset of another group's dep-set
-        merged  (merge-compatible-groups grouped)
+        merged (merge-compatible-groups grouped)
 
         ;; apply min-cluster-size
-        merged  (filterv #(>= (count (:methods %)) min-cluster-size) merged)
+        merged (filterv #(>= (count (:methods %)) min-cluster-size) merged)
 
         ;; assign sequential IDs
         indexed (vec (map-indexed (fn [i c] (assoc c :id i)) merged))
@@ -674,7 +771,7 @@
                              (into {}))
 
         ;; orchestrator deps for :used-by-orchestrators annotation
-        orchestrator-deps (set (mapcat :deps orchestrators))
+        orchestrator-deps (set (mapcat #(map :bean (:deps %)) orchestrators))
 
         ;; finalize each cluster: classify deps, detect violations
         clusters
@@ -683,8 +780,8 @@
                                       (remove #(= (:id %) id))
                                       (mapcat #(seq (:dep-set %)))
                                       set)
-                      exclusive  (vec (sort (clojure.set/difference dep-set other-deps)))
-                      shared     (vec (sort (clojure.set/intersection dep-set other-deps)))
+                      exclusive (vec (sort (clojure.set/difference dep-set other-deps)))
+                      shared (vec (sort (clojure.set/intersection dep-set other-deps)))
                       violations (->> methods
                                       (mapcat
                                        (fn [m]
@@ -692,38 +789,38 @@
                                               (keep (fn [callee]
                                                       (when-let [cid (get method->cluster callee)]
                                                         (when (not= cid id)
-                                                          {:caller         m
-                                                           :callee         callee
+                                                          {:caller m
+                                                           :callee callee
                                                            :callee-cluster cid})))))))
                                       vec)]
-                  {:id                    id
-                   :methods               (vec (sort methods))
-                   :exclusive-deps        exclusive
-                   :shared-deps           shared
+                  {:id id
+                   :methods (vec (sort methods))
+                   :exclusive-deps exclusive
+                   :shared-deps shared
                    :intra-call-violations violations}))
               indexed)
 
         ;; shared-deps-summary: one entry per dep appearing in any cluster's :shared-deps
-        shared-dep-names    (distinct (mapcat :shared-deps clusters))
+        shared-dep-names (distinct (mapcat :shared-deps clusters))
         shared-deps-summary (->> shared-dep-names
                                  (map (fn [dep]
-                                        {:dep                   dep
-                                         :used-by-clusters      (->> clusters
-                                                                      (filter #(some #{dep} (:shared-deps %)))
-                                                                      (mapv :id)
-                                                                      sort
-                                                                      vec)
+                                        {:dep dep
+                                         :used-by-clusters (->> clusters
+                                                                (filter #(some #{dep} (:shared-deps %)))
+                                                                (mapv :id)
+                                                                sort
+                                                                vec)
                                          :used-by-orchestrators (contains? orchestrator-deps dep)}))
                                  (sort-by :dep)
                                  vec)]
 
-    {:bean                bean
-     :class               class
-     :orchestrators       (mapv #(select-keys % [:method :deps :intra-calls]) orchestrators)
-     :dep-free            (mapv #(hash-map :method (:method %)) dep-free)
-     :clusters            clusters
+    {:bean bean
+     :class class
+     :orchestrators (mapv #(select-keys % [:method :deps :intra-calls]) orchestrators)
+     :dep-free (mapv #(hash-map :method (:method %)) dep-free)
+     :clusters clusters
      :shared-deps-summary shared-deps-summary
-     :unaccounted-deps    unaccounted-deps}))
+     :unaccounted-deps unaccounted-deps}))
 
 (defn- blast-radius-single
   "Core single-method blast-radius logic. Accepts pre-built indexes so that

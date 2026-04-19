@@ -297,7 +297,15 @@ controller class, handler method name, `:pre-authorize` (or "none"), `:required-
 
 #### CLI shortcut: `lw-call-endpoint`
 
+> ⚠️ **The `:controller` field from `lw-list-endpoints` is a fully-qualified class name —
+> never pass it directly.** Derive the bean name: take the simple class name and lowercase
+> the first letter. `com.example.web.BookController` → `bookController`.
+
 ```bash
+# ❌ NoSuchBeanDefinitionException — FQN is not a bean name
+lw-call-endpoint com.example.bloatedshelf.web.BookController getBooks ROLE_MEMBER
+
+# ✅ correct — simple class name, first letter lowercased
 lw-call-endpoint bookController getBooks ROLE_MEMBER
 lw-call-endpoint --limit 5 bookController getBooks ROLE_MEMBER
 lw-call-endpoint bookController getBookById ROLE_MEMBER 25

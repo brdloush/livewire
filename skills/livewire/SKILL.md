@@ -236,7 +236,7 @@ transaction boundary.**
 - **Always use `lw/bean->map` not `clojure.core/bean`** — records return `{}` silently with `clojure.core/bean`.
 - **`lw/bean SomeClass` only resolves Spring beans, not JPA entities** — use `lw/find-beans-matching` to find the repository.
 - **`EntityManager` is not a named bean** — use `(lw/bean jakarta.persistence.EntityManager)` (type-based lookup).
-- **Bean name ≠ class name** — `AdminController` → bean name `adminController` (lowercase first letter).
+- **Bean name ≠ class name, and `:controller` from `lw-list-endpoints` is ALWAYS a FQN — never pass it directly to `lw-call-endpoint` or `lw/bean`.** Derive the bean name by taking the simple class name and lowercasing the first letter: `com.example.web.BookController` → `bookController`. When in doubt, verify with `lw-find-beans`.
 - **Always use JPQL (`lw-jpa-query`) for data queries** — raw SQL only for metadata, DDL, or unmapped tables. `lw-jpa-query` and `lw-call-endpoint` default to **10 rows**; raw SQL has no limit so add one explicitly.
 - **Always inspect entities before writing any query** — never guess table/column names.
 - **`lw-eval` mangles `!`, `?`, `->` in zsh** — use `clj-nrepl-eval -p 7888` directly for expressions with these characters.

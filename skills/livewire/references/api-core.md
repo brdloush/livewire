@@ -450,9 +450,34 @@ Swap a Spring Data JPA `@Query` live without restarting the app.
 
 ### When to use hot-queries
 
-- Iterating on a JPQL fix without a restart
-- Testing a `JOIN FETCH` or `@EntityGraph` addition before writing it to source
-- Works best combined with `trace/trace-sql`
+- **Iterating on a known fix** — you have a specific JPQL change in mind and want to
+  verify it works through the full Spring Data stack (correct return type coercion,
+  pagination, etc.) before writing it to source.
+- **N+1 hot-fix confirmation** — swap the fix, verify with `lw-trace-nplus1`, swap back
+  to broken to confirm the N+1 returns, then restore and write to source.
+- Works best combined with `lw-trace-nplus1` / `trace/trace-sql`.
+
+### ⚠️ Do NOT use hot-swap for speculative REPL verification
+
+When the user asks you to *"try this in the REPL first"* or *"verify before writing"*,
+**reach for `jpa/jpa-query` + `lw-trace-nplus1`, not `hq/hot-swap-query!`**.
+
+Hot-swapping is a mutating, session-persistent operation — the swapped query stays live
+in the JVM and affects all callers until explicitly reset. It is the wrong tool when the
+goal is just to prove that a candidate JPQL reduces query count.
+
+| Goal | Right tool | Why |
+|---|---|---|
+| Prove a candidate JPQL works and reduces N+1 | `lw-jpa-query` + `lw-trace-nplus1` | Zero side effects, no cleanup needed |
+| Verify the fix through the real repo method | `hq/hot-swap-query!` | Exercises the full Spring Data stack; requires `reset-all!` after |
+
+```bash
+# ✅ speculative verification — no side effects
+lw-trace-nplus1 '(jpa/jpa-query "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres WHERE b.id IN (SELECT bb.id FROM Book bb JOIN bb.genres g WHERE g.id = :genreId)" :page 0 :page-size 5)'
+
+# Only reach for hot-swap when you need the result to go through .findByGenre() itself
+clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "bookRepository" "findByGenre" "SELECT DISTINCT b FROM Book b ...")'
+```
 
 ### Last-one-wins swap policy
 

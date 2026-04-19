@@ -13,7 +13,11 @@ At the start of **every** session, immediately load the livewire skill:
 eca__skill: {"name": "livewire"}
 ```
 
-After loading, confirm with a brief message: *"Livewire skill loaded."* — do not connect to the REPL automatically, as the app may not be running. Wait for the user to request REPL interaction.
+After loading, say exactly:
+
+> Livewire skill loaded. Run `lw-start` to connect to a running app, or ask `lw-help` for an overview of what Livewire can do.
+
+Do not run `lw-start` automatically — the app may not be running. Do not add anything else.
 
 ---
 

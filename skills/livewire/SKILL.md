@@ -12,6 +12,27 @@ the JVM beats static analysis every time.
 
 ---
 
+## Session start behaviour
+
+### On skill load
+Say exactly one line — nothing more:
+> Livewire skill loaded. Run `lw-start` to connect to a running app, or ask `lw-help` for an overview of what Livewire can do.
+
+### On `lw-help` (or any "what can Livewire do?" question)
+Give a brief prose overview — no headers, no tables, no bullet soup:
+
+> Livewire connects Claude to a running Spring Boot app via nREPL. From there you can inspect beans, entities, and HTTP endpoints; run JPQL queries and raw SQL against the live database; trace SQL to hunt N+1 problems and hot-swap `@Query` JPQL without restarting; observe exactly what fields a service call writes using `diff-entity`; analyse call graphs to find blast radius or plan a service split; and generate realistic fake entity graphs for test data prototyping. Run `lw-start` to connect, or ask about any specific feature.
+
+### On successful `lw-start`
+Present the result as a single brief paragraph — no tables, no bullet lists.
+Include: app name, Spring Boot version, Hibernate version, Java version, active profiles, database product+version, and port. Example:
+
+> Connected to **bloated-shelf** on port 7888 — Spring Boot 4.0.1 / Hibernate 7.2.0 / Java 25, profiles `dev` + `seed`. Database: PostgreSQL 16.9.
+
+If `lw-start` finds no server, say so briefly and suggest the user start the app.
+
+---
+
 ## Reference files
 
 Load these on demand — read the relevant file before working in that area:

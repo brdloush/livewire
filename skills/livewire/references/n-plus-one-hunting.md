@@ -5,6 +5,11 @@ that a JPQL / `JOIN FETCH` fix actually eliminates excess queries.
 
 ---
 
+> ⚠️ **`cg/blast-radius` is NOT an N+1 detection tool.** It performs static call-graph
+> analysis and fires zero SQL. Passing it to `lw-trace-nplus1` will always return
+> `{:total-queries 0}` — a meaningless result. For N+1 detection, the expression must
+> directly invoke a service or repository method against the live database.
+
 ## Which tool to use
 
 | Goal | Use |
@@ -16,6 +21,39 @@ that a JPQL / `JOIN FETCH` fix actually eliminates excess queries.
 **Default to `lw-trace-nplus1` when hunting N+1.** It is purpose-built for this: it captures
 SQL, runs `detect-n+1` on the result, and surfaces `:suspicious-queries` in one call.
 Only drop to `lw-trace-sql` when you need the raw SQL list or want to compare exact query counts.
+
+---
+
+## Tracing an endpoint you have already called
+
+When you have just called an endpoint (e.g. via `lw-call-endpoint`) and are then asked
+to check it for N+1, **reuse what you already know** — do not re-discover method signatures
+or guess at repository calls. The pattern is always:
+
+```bash
+lw-trace-nplus1 '(lw/run-as ["user" "ROLE_X"] (.serviceMethod (lw/bean "serviceBean") arg))'
+```
+
+Where `serviceMethod` and `serviceBean` come from reading the controller source — a step
+you should already have done. One `grep` is enough:
+
+```bash
+grep -n "getBooksByGenre" /path/to/BookController.java
+# => calls bookService.getBooksByGenreId(genreId)
+```
+
+Then trace it directly:
+
+```bash
+lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGenreId (lw/bean "bookService") 1))'
+```
+
+**Common mistakes to avoid:**
+
+- ❌ Passing a call-graph expression like `(cg/blast-radius ...)` — this fires no SQL; `:total-queries 0` always means the wrong expression was traced, not that there is no N+1
+- ❌ Using HTTP client or `lw-call-endpoint` inside the trace expression — these don't run on the REPL thread Livewire intercepts
+- ❌ Using Java literal `1L` — not valid EDN; pass `1` (auto-coerced to Long) or `(long 1)` explicitly
+- ❌ Nested `#()` anonymous functions — not allowed in Clojure; use `(fn [] ...)` instead
 
 ---
 
@@ -135,11 +173,21 @@ reimplements the **core flow** of the service method with your candidate fix, wr
 
 ---
 
-## Use hot-swap to confirm a JPQL fix before touching source code
+## Use hot-swap only as a final end-to-end check — never for hypothesis testing
 
-Rather than edit → restart → retest, hot-swap the candidate fix, then use `lw-trace-nplus1`
-to verify the N+1 is gone. Swap back to the original to confirm the N+1 returns. Only then
-write the fix to source. This round-trip gives high confidence with zero restarts.
+**Phase 1 — prove the JPQL fix (no side effects):**
+Run the candidate query directly via `jpa/jpa-query` wrapped in `trace/trace-sql` or
+`lw-trace-nplus1`. This mutates nothing and needs no cleanup. Only move to phase 2 once
+the fix is validated here.
+
+**Phase 2 — end-to-end confirmation (optional, mutating):**
+Once the JPQL is proven, hot-swap it into the real repository method to exercise the full
+Spring Data stack (caching, pagination, projections). Swap back and verify the N+1 returns.
+Always call `(hq/reset-all!)` when done.
+
+> ⚠️ **Never reach for hot-swap first.** It persists across the session and affects all
+> callers until reset. Using it to explore or test a hypothesis is the wrong tool — use
+> `jpa/jpa-query` + `trace/trace-sql` for that.
 
 ```bash
 # 1. swap in the fix

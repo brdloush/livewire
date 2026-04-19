@@ -16,6 +16,10 @@ observable surface (HTTP endpoints, schedulers, event listeners).
 
 **Use this before modifying any repository, service method, or query.**
 
+> ℹ️ `blast-radius` is **static call-graph analysis** — it reads bytecode and Spring
+> metadata, fires no SQL, and has nothing to do with N+1 query detection. To detect N+1s,
+> read `references/n-plus-one-hunting.md`.
+
 ```clojure
 (cg/blast-radius bean-name method-name)
 (cg/blast-radius bean-name method-name :app-only true)   ; default

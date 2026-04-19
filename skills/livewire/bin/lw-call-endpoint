@@ -26,7 +26,7 @@
 #   lw-call-endpoint adminController getStats ROLE_ADMIN
 #   lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
 
-LIMIT=":limit 20"
+LIMIT=":limit 10"
 if [[ "$1" == "--limit" ]]; then
   LIMIT=":limit $2"
   shift 2

@@ -118,7 +118,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
-| `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default |
+| `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default. **Role must include `ROLE_` prefix** (e.g. `ROLE_MEMBER`, not `MEMBER`) — `lw-list-endpoints` shows `required-roles` without this prefix |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
 | `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map of `{:type … :value …}` entries — use as seed for test setup code and assertions |
@@ -211,11 +211,12 @@ transaction boundary.**
 ## ⚠️ Critical pitfalls (inline — full list in `references/pitfalls.md`)
 
 - **Never call `.findAll` without a `Pageable`** — may return millions of rows and hang the REPL.
+- **`lw/run-as` requires `["username" "ROLE_X"]`, not a bare string** — `"admin"` only grants `ROLE_USER`+`ROLE_ADMIN`; any other role needs the vector form. Same `ROLE_` prefix required for `lw-call-endpoint`.
 - **Always use `lw/bean->map` not `clojure.core/bean`** — records return `{}` silently with `clojure.core/bean`.
 - **`lw/bean SomeClass` only resolves Spring beans, not JPA entities** — use `lw/find-beans-matching` to find the repository.
 - **`EntityManager` is not a named bean** — use `(lw/bean jakarta.persistence.EntityManager)` (type-based lookup).
 - **Bean name ≠ class name** — `AdminController` → bean name `adminController` (lowercase first letter).
-- **Always use JPQL (`lw-jpa-query`) for data queries** — raw SQL only for metadata, DDL, or unmapped tables.
+- **Always use JPQL (`lw-jpa-query`) for data queries** — raw SQL only for metadata, DDL, or unmapped tables. `lw-jpa-query` and `lw-call-endpoint` default to **10 rows**; raw SQL has no limit so add one explicitly.
 - **Always inspect entities before writing any query** — never guess table/column names.
 - **`lw-eval` mangles `!`, `?`, `->` in zsh** — use `clj-nrepl-eval -p 7888` directly for expressions with these characters.
 

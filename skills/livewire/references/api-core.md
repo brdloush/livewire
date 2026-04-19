@@ -270,8 +270,8 @@ When an endpoint has a `:pre-authorize` value, **always wrap the call in `lw/run
      (filter #(re-find #"books" (str (:paths %))))
      (mapv #(select-keys % [:paths :handler-method :pre-authorize :required-roles :required-authorities])))
 
-;; Call it using :required-roles directly
-(lw/run-as ["ROLE_MEMBER"]
+;; Call it using :required-roles directly — always include a username as the first element
+(lw/run-as ["user" "ROLE_MEMBER"]
   (.getBooks (lw/bean "bookController")))
 ```
 
@@ -288,6 +288,10 @@ lw-call-endpoint --limit 5 bookController getBooks ROLE_MEMBER
 lw-call-endpoint bookController getBookById ROLE_MEMBER 25
 lw-call-endpoint bookController searchBooks ROLE_MEMBER '"spring"'
 ```
+
+> ⚠️ **The role argument must include the `ROLE_` prefix.** `lw-list-endpoints` reports
+> `:required-roles` as bare names (e.g. `"MEMBER"`), but Spring stores authorities with the
+> prefix — passing `MEMBER` instead of `ROLE_MEMBER` causes `AuthorizationDeniedException`.
 
 **Always report** `:returned` / `:total`, `:content-size`, and `:content-size-gzip` to the
 user when a limited list is returned. Always render the returned items as a markdown table.
@@ -321,7 +325,7 @@ than triggering surprise queries; ancestor-chain cycles become `"<circular>"`.
 
 | Expression | What it does |
 |---|---|
-| `(jpa/jpa-query jpql)` | Run JPQL, return first 20 results as entity maps |
+| `(jpa/jpa-query jpql)` | Run JPQL, return first 10 results as entity maps |
 | `(jpa/jpa-query jpql :page 1 :page-size 5)` | Paginate — offset = `page × page-size` |
 
 ### Serialization behaviour
@@ -459,7 +463,7 @@ REPL-initiated swaps.
 
 ;; Verify the fix
 (trace/trace-sql
-  (lw/run-as "admin"
+  (lw/run-as ["admin" "ROLE_ADMIN"]
     (lw/in-readonly-tx
       (.findByIdWithDetails (lw/bean "bookRepository") 25))))
 

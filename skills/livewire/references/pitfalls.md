@@ -48,11 +48,11 @@ lw-jpa-query 'SELECT lr.id FROM LoanRecord lr' 0 5
 
 ### Always limit queries when fetching sample data or IDs
 
-Tables in a live app can contain millions of rows. **Always cap results.** The default cap is **20 rows**.
+Tables in a live app can contain millions of rows. **Always cap results.** The default cap is **10 rows**.
 
 ```bash
-# ✅ JPQL — page 0, 5 results, no risk of runaway fetch
-lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 5
+# ✅ JPQL — page 0, 10 results max by default, no risk of runaway fetch
+lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 10
 ```
 
 ```clojure
@@ -216,6 +216,41 @@ clj-nrepl-eval -p 7888 "(lw/run-as [\"admin\" \"ROLE_ADMIN\"] (.myMethod (lw/bea
 
 ---
 
+### `lw-call-endpoint` role argument must include the `ROLE_` prefix
+
+Spring stores granted authorities with the `ROLE_` prefix (e.g. `ROLE_MEMBER`, not `MEMBER`).
+Passing a bare role name causes `AuthorizationDeniedException` even though the endpoint's
+`@PreAuthorize` expression shows just `hasRole('MEMBER')`.
+
+```bash
+# ❌ Access Denied — Spring expects "ROLE_MEMBER", not "MEMBER"
+lw-call-endpoint bookController getBooksByGenre MEMBER 1
+
+# ✅ correct
+lw-call-endpoint bookController getBooksByGenre ROLE_MEMBER 1
+```
+
+If you're unsure which roles or usernames the app has, reflect into the `InMemoryUserDetailsManager`:
+
+```clojure
+;; List all in-memory usernames
+(let [svc   (lw/bean "userDetailsService")
+      field (doto (.getDeclaredField
+                    org.springframework.security.provisioning.InMemoryUserDetailsManager
+                    "users")
+              (.setAccessible true))]
+  (keys (.get field svc)))
+;; => ("readonly" "admin" "librarian" "member1")
+
+;; Then check their granted authorities
+(let [svc (lw/bean "userDetailsService")]
+  (map #(hash-map :user % :roles (map str (.getAuthorities (.loadUserByUsername svc %))))
+       ["member1" "librarian" "admin"]))
+;; => ({:user "member1", :roles ("ROLE_MEMBER" "ROLE_VIEWER")} ...)
+```
+
+---
+
 ### `lw-call-endpoint` cannot handle optional (nullable) parameters
 
 If the Java/Kotlin method has optional parameters, passing fewer args than the method arity
@@ -256,12 +291,18 @@ code to discover what methods to call on a bean.
 
 ### `@PreAuthorize` on controllers blocks direct REPL invocation
 
+`lw/run-as` requires a vector of `["username" "ROLE_X"]` — passing a bare string username
+causes `AuthorizationDeniedException` because no authorities are set on the authentication.
+
 ```clojure
 ;; ❌ AuthenticationCredentialsNotFoundException
 (.myEndpoint (lw/bean "myController") someArg)
 
-;; ✅ use run-as to exercise the real secured code path
+;; ❌ AuthorizationDeniedException — bare string sets no authorities
 (lw/run-as "admin" (.myEndpoint (lw/bean "myController") someArg))
+
+;; ✅ correct — vector with username + ROLE_-prefixed authority
+(lw/run-as ["admin" "ROLE_ADMIN"] (.myEndpoint (lw/bean "myController") someArg))
 
 ;; ✅ alternative: call the service directly (skips security entirely)
 (.myServiceMethod (lw/bean "myService") someArg)

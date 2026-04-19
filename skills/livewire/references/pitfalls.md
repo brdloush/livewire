@@ -60,7 +60,7 @@ lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 10
 (lw/in-readonly-tx (q/sql "SELECT id FROM book"))
 
 ;; ✅ cap explicitly
-(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 20"))
+(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 10"))
 ```
 
 ---
@@ -280,6 +280,21 @@ sees `getX()` methods, so it returns an empty map with no error.
 ```
 
 ---
+
+### Never use Java reflection to discover service method signatures — read the source
+
+Spring beans are CGLIB proxies. Trying to discover method signatures via
+`(.getMethods (class (lw/bean "myService")))` or similar reflection gymnastics on the proxy
+returns synthetic proxy methods alongside the real ones, and namespace/symbol resolution
+errors are common. It is always faster and more reliable to read the source file directly.
+
+```bash
+# ❌ reflection on proxy — noisy, error-prone
+clj-nrepl-eval -p 7888 '(->> (.getMethods (class (lw/bean "bookService"))) (map #(.getName %)) sort)'
+
+# ✅ just grep the source — one call, exact answer
+grep -n "public.*getBooks" /path/to/BookService.java
+```
 
 ### `clojure.core/bean` on a Spring proxy exposes proxy internals, not domain properties
 

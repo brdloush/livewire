@@ -336,6 +336,33 @@ clj-nrepl-eval -p 7888 '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.ge
 | `(trace/trace-sql-global & body)` | Same, but captures across *all* threads (useful for `@Async`) |
 | `(trace/detect-n+1 trace-res)` | Analyzes a trace result and flags repeated queries |
 
+### Gotchas
+
+**Pass expressions, not thunks.** `trace-sql` and `trace-sql-global` are macros that take
+inline expressions — not zero-argument functions. Wrapping the body in `(fn [] ...)` means
+the macro captures the *creation* of the function object, not its execution. SQL count will
+be 0 and `:result` will be a function object.
+
+```clojure
+;; ❌ passes a thunk — trace sees fn creation, fires no SQL, :result is #object[fn]
+(trace/trace-sql (fn [] (.getBooksByGenreId (lw/bean "bookService") 1)))
+
+;; ✅ inline expression — trace wraps the actual execution
+(trace/trace-sql (.getBooksByGenreId (lw/bean "bookService") 1))
+```
+
+**Force lazy seqs inside the trace boundary.** If a service method returns a lazy sequence,
+the SQL only fires when the seq is materialised. If that happens *outside* the trace call,
+the trace captures nothing. Wrap with `doall` to force evaluation inside the boundary.
+
+```clojure
+;; ❌ lazy seq — SQL may fire outside trace boundary, :count 0 or incomplete
+(trace/trace-sql (.getAllBooks (lw/bean "bookService")))
+
+;; ✅ force materialisation inside the trace
+(trace/trace-sql (doall (.getAllBooks (lw/bean "bookService"))))
+```
+
 ---
 
 ## JPA Query API — `net.brdloush.livewire.jpa-query`

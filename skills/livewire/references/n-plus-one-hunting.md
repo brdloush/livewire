@@ -5,14 +5,37 @@ that a JPQL / `JOIN FETCH` fix actually eliminates excess queries.
 
 ---
 
+## Which tool to use
+
+| Goal | Use |
+|---|---|
+| Detect N+1 in a service or endpoint call | **`lw-trace-nplus1`** — runs `detect-n+1(trace-sql(...))` in one shot |
+| Measure raw query count or inspect SQL shape | `lw-trace-sql` — returns `:count`, `:duration-ms`, `:queries` |
+| Prototype a service fix and measure improvement | `lw-trace-sql` inline in Clojure — you need the raw count, not pattern detection |
+
+**Default to `lw-trace-nplus1` when hunting N+1.** It is purpose-built for this: it captures
+SQL, runs `detect-n+1` on the result, and surfaces `:suspicious-queries` in one call.
+Only drop to `lw-trace-sql` when you need the raw SQL list or want to compare exact query counts.
+
+---
+
 ## N+1 presence is data-dependent — always test multiple IDs
 
 An N+1 only fires when the problematic association actually has rows. A query that looks
 fine on one record may blow up on another. **Always test several representative IDs**
 before concluding there is no N+1.
 
+```bash
+# ✅ preferred — lw-trace-nplus1 detects the pattern in one shot
+lw-trace-nplus1 '(lw/run-as "admin" (.myEndpoint (lw/bean "myController") 1))'
+lw-trace-nplus1 '(lw/run-as "admin" (.myEndpoint (lw/bean "myController") 2))'
+```
+
+When you need to compare counts across many IDs at once, use `clj-nrepl-eval` with `trace-sql`
+(not `lw-trace-nplus1`, which is a shell script and doesn't compose in a `mapv`):
+
 ```clojure
-;; Test multiple IDs in one shot and compare query counts
+;; Compare query counts across multiple IDs — use trace-sql for the mapv
 (mapv (fn [id]
         (let [res (trace/trace-sql
                     (lw/run-as "admin"
@@ -56,8 +79,8 @@ and the raw `:queries` list directly**, not just `:suspicious-queries`, especial
 working with small synthetic datasets.
 
 ```clojure
+;; ✅ check both — suspicious may be empty even when count > 1
 (let [res (trace/trace-sql (my-service-call))]
-  ;; ✅ check both — suspicious may be empty even when count > 1
   {:total    (:count res)
    :queries  (frequencies (map :sql (:queries res)))   ; spot repeats manually
    :flagged  (:suspicious-queries (trace/detect-n+1 res))})
@@ -87,13 +110,12 @@ loads the full entity (including its PK) in the main query instead of per-row se
 ## Quick-test a service fix by re-implementing the core flow in Clojure
 
 When a fix involves service-layer logic (not just a JPQL change), you can prototype it
-directly in the REPL without restarting. The nREPL runs inside the same JVM, so it can
-call any Spring bean — repositories, services, anything. Write a temporary Clojure
-expression that reimplements the **core flow** of the service method with your candidate
-fix, wrap it in `trace/trace-sql`, and measure query count live against real data.
+directly in the REPL without restarting. Write a temporary Clojure expression that
+reimplements the **core flow** of the service method with your candidate fix, wrap it in
+`trace/trace-sql`, and measure raw query count against real data.
 
 ```clojure
-;; Example: service currently does bookRepo.findAll() then lazy-loads genres/reviews/members
+;; Example: service currently does bookRepo.findAll() then lazy-loads everything
 ;; (481 queries for 200 books). Candidate fix: two eager queries + manual grouping.
 
 (defn get-all-books-fixed []
@@ -115,18 +137,21 @@ fix, wrap it in `trace/trace-sql`, and measure query count live against real dat
 
 ## Use hot-swap to confirm a JPQL fix before touching source code
 
-Rather than edit → restart → retest, hot-swap the candidate fix, verify with `trace-sql`,
-then swap back to the original to confirm the N+1 returns. Only then write the fix to
-source. This round-trip gives high confidence with zero restarts.
+Rather than edit → restart → retest, hot-swap the candidate fix, then use `lw-trace-nplus1`
+to verify the N+1 is gone. Swap back to the original to confirm the N+1 returns. Only then
+write the fix to source. This round-trip gives high confidence with zero restarts.
 
-```clojure
-;; 1. swap in the fix
-(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")
-;; 2. confirm N+1 is gone
-(trace/detect-n+1 (trace/trace-sql (lw/run-as "admin" (.myMethod ...))))
-;; 3. swap back to broken — confirm N+1 returns
-(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original without fetch")
-(trace/detect-n+1 (trace/trace-sql (lw/run-as "admin" (.myMethod ...))))
-;; 4. restore and write the fix to source
-(hq/reset-query! "myRepo" "myMethod")
+```bash
+# 1. swap in the fix
+clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")'
+
+# 2. confirm N+1 is gone
+lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
+
+# 3. swap back to broken — confirm N+1 returns
+clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original")'
+lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
+
+# 4. restore and write the fix to source
+clj-nrepl-eval -p 7888 '(hq/reset-query! "myRepo" "myMethod")'
 ```

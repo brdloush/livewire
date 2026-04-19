@@ -113,8 +113,11 @@ Verify: `clj-nrepl-eval --discover-ports`
 ## Wrapper scripts
 
 This skill ships named wrapper scripts in a `bin/` subdirectory next to this `SKILL.md`.
-Always prefer them over raw `clj-nrepl-eval` calls — they produce cleaner output and handle
-namespace requiring automatically.
+
+**Always use wrapper scripts for named operations** (SQL, JPQL, trace, N+1, endpoints,
+beans, call graphs). They handle namespace requiring automatically and avoid shell escaping
+issues. Fall back to raw `clj-nrepl-eval` only for ad-hoc expressions that have no wrapper
+equivalent — for example, multi-step `mapv` calls or thunks for `diff-entity`.
 
 The scripts are installed alongside this skill. **Do not check for their existence — invoke
 them directly.** If you ever need to locate them, find this `SKILL.md` file first:
@@ -143,7 +146,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
-| `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 20 by default. **Role must include `ROLE_` prefix** (e.g. `ROLE_MEMBER`, not `MEMBER`) — `lw-list-endpoints` shows `required-roles` without this prefix |
+| `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 10 by default. **Role must include `ROLE_` prefix** (e.g. `ROLE_MEMBER`, not `MEMBER`) — `lw-list-endpoints` shows `required-roles` without this prefix |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
 | `lw-build-test-recipe <EntityName> [edn-opts]` | Build a faker entity graph and extract all scalar field values into a nested map of `{:type … :value …}` entries — use as seed for test setup code and assertions |
@@ -209,6 +212,12 @@ Read `references/api-core.md` for full details, patterns, and examples for any o
 ;; => {:table-name "book", :identifier {:name "id"}, :properties [...], :relations [...]}
 ```
 
+```bash
+# N+1 detection — always use the wrapper script, not raw trace/detect-n+1 calls
+lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGenreId (lw/bean "bookService") 1))'
+# => {:suspicious-queries [{:sql "select ... from author ...", :count 20} ...], :total-queries 98, ...}
+```
+
 ---
 
 ## ⚠️ Hibernate lazy loading — always convert inside the transaction
@@ -244,5 +253,7 @@ transaction boundary.**
 - **Always use JPQL (`lw-jpa-query`) for data queries** — raw SQL only for metadata, DDL, or unmapped tables. `lw-jpa-query` and `lw-call-endpoint` default to **10 rows**; raw SQL has no limit so add one explicitly.
 - **Always inspect entities before writing any query** — never guess table/column names.
 - **`lw-eval` mangles `!`, `?`, `->` in zsh** — use `clj-nrepl-eval -p 7888` directly for expressions with these characters.
+- **Never use `hq/hot-swap-query!` to test a hypothesis** — it mutates JVM state for all callers until explicitly reset. To prove a candidate JPQL reduces N+1, use `jpa/jpa-query` wrapped in `trace/trace-sql` or `lw-trace-nplus1` — zero side effects, no cleanup needed. Hot-swap is only for final end-to-end confirmation once the fix is already validated.
+- **`jpa/jpa-query` takes keyword args, not positional** — correct form: `(jpa/jpa-query jpql :page 0 :page-size 20)`. It does **not** support named query parameters (`:genreId` etc.); for parameterized JPQL use `(lw/bean jakarta.persistence.EntityManager)` directly.
 
 For all other pitfalls (UUID args, optional params, `@PreAuthorize`, `javax` vs `jakarta`, timing warm-up, etc.), read `references/pitfalls.md`.

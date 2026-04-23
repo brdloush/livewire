@@ -5,9 +5,13 @@
 (def version "0.12.0-SNAPSHOT")
 (def lib     'net.brdloush/livewire-attach)
 
-(def class-dir "target/classes")
-(def basis     (b/create-basis {:project "deps.edn"}))
-(def jar-file  (format "target/livewire-attach-%s.jar" version))
+(def class-dir   "target/classes")
+(def out-dir     "target/provided")
+(def basis       (b/create-basis {:project "deps.edn"}))
+(def jar-file    (format "%s/livewire-attach-%s.jar"    out-dir version))
+(def src-jar     (format "%s/livewire-attach-%s-sources.jar" out-dir version))
+(def javadoc-jar-file (format "%s/livewire-attach-%s-javadoc.jar" out-dir version))
+(def pom-file    (format "%s/livewire-attach-%s.pom"    out-dir version))
 
 (defn clean [_]
   (b/delete {:path "target"}))
@@ -19,6 +23,7 @@
             :class-dir  class-dir
             :basis      basis
             :javac-opts ["--release" "17" "-Xlint:unchecked"]})
+  (clojure.java.io/make-parents jar-file)
   (println (str "[livewire-attach] assembling " jar-file " ..."))
   (b/jar {:class-dir class-dir
           :jar-file  jar-file
@@ -26,3 +31,55 @@
                       "Can-Retransform-Classes"  "true"
                       "Can-Redefine-Classes"     "true"}})
   (println (str "✅ " jar-file)))
+
+(defn pom [_]
+  (clojure.java.io/make-parents pom-file)
+  (b/write-pom {:class-dir class-dir
+                :lib       lib
+                :version   version
+                :basis     basis
+                :src-dirs  ["src"]
+                :pom-data
+                [[:description "Livewire jshell attach bundle — dynamic agent for zero-install Spring Boot inspection"]
+                 [:url "https://github.com/brdloush/livewire"]
+                 [:licenses
+                  [:license
+                   [:name "MIT License"]
+                   [:url "https://opensource.org/licenses/MIT"]]]
+                 [:developers
+                  [:developer
+                   [:name "Tomas Brdlik"]
+                   [:email "brdloush@gmail.com"]]]
+                 [:scm
+                  [:url "https://github.com/brdloush/livewire"]
+                  [:connection "scm:git:git://github.com/brdloush/livewire.git"]
+                  [:developerConnection "scm:git:ssh://git@github.com/brdloush/livewire.git"]]]})
+  ;; Copy from Maven-standard location to flat out-dir for release bundling.
+  (let [generated (format "%s/META-INF/maven/net.brdloush/livewire-attach/pom.xml" class-dir)]
+    (b/copy-file {:src generated :target pom-file}))
+  (println (str "✅ " pom-file)))
+
+(defn source-jar [_]
+  (clojure.java.io/make-parents src-jar)
+  (b/jar {:class-dir "src"   ; pack sources directly
+          :jar-file  src-jar})
+  (println (str "✅ " src-jar)))
+
+(defn javadoc-jar [_]
+  (clojure.java.io/make-parents javadoc-jar-file)
+  (let [doc-dir "target/javadoc"]
+    (.mkdirs (java.io.File. doc-dir))
+    (spit (str doc-dir "/README.md")
+          "Livewire-attach API documentation: https://github.com/brdloush/livewire\n")
+    (b/jar {:class-dir doc-dir :jar-file javadoc-jar-file}))
+  (println (str "✅ " javadoc-jar-file)))
+
+(defn release-jars [_]
+  (clean nil)
+  (jar nil)
+  (pom nil)
+  (source-jar nil)
+  (javadoc-jar nil)
+  (println (str "\nRelease artifacts for livewire-attach " version ":"))
+  (doseq [f [jar-file src-jar javadoc-jar-file pom-file]]
+    (println (str "  " f " — " (if (.exists (java.io.File. f)) "✅" "❌")))))

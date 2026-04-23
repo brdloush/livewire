@@ -82,6 +82,14 @@ String _lw_resolveBundle() throws Exception {
     return tmpPath;
 }
 
+/** Write a Throwable's stack trace to /tmp/livewire-attach.log (never to the terminal). */
+void _lw_logError(Throwable t) {
+    try (var pw = new java.io.PrintWriter(new java.io.FileWriter("/tmp/livewire-attach.log", true))) {
+        pw.println("--- " + new java.util.Date() + " ---");
+        t.printStackTrace(pw);
+    } catch (Exception ignored) {}
+}
+
 /** Compute SHA-256 hex digest of a file. */
 String _lw_sha256(String path) throws Exception {
     java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -187,12 +195,37 @@ void attach(int index, int port) {
         // 2. Load agent into the target JVM.
         _lw_print("loading agent into pid " + pid + " ...");
         Class<?> vmClass = Class.forName("com.sun.tools.attach.VirtualMachine");
-        Object   vm      = vmClass.getMethod("attach", String.class).invoke(null, pid);
+        Object   vm;
+        try {
+            vm = vmClass.getMethod("attach", String.class).invoke(null, pid);
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+            String cn = cause.getClass().getSimpleName();
+            if (cn.contains("AttachNotSupportedException")) {
+                _lw_print("can't attach to pid " + pid + " — it may be running as a different user. Try: sudo jshell");
+            } else {
+                _lw_print("can't attach to pid " + pid + ": " + cause.getMessage());
+            }
+            _lw_logError(cause);
+            return;
+        }
         try {
             vmClass.getMethod("loadAgent", String.class, String.class)
                    .invoke(vm, _lw_bundle_path[0], String.valueOf(port));
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+            String cn  = cause.getClass().getSimpleName();
+            String msg = cause.getMessage() != null ? cause.getMessage() : "";
+            if (cn.contains("AgentLoadException") || msg.contains("EnableDynamicAgentLoading")) {
+                _lw_print("agent load blocked. Java 21+ requires -XX:+EnableDynamicAgentLoading on the target JVM.");
+                _lw_print("Restart the target with that flag and retry.");
+            } else {
+                _lw_print("agent load failed: " + msg);
+            }
+            _lw_logError(cause);
+            return;
         } finally {
-            vmClass.getMethod("detach").invoke(vm);
+            try { vmClass.getMethod("detach").invoke(vm); } catch (Exception ignored) {}
         }
         _lw_print("✓ agent loaded");
 
@@ -207,15 +240,27 @@ void attach(int index, int port) {
             Thread.sleep(100);
         }
         if (actualPort < 0) {
-            _lw_print("ERROR: agent loaded but no port file appeared at " + portFile);
-            _lw_print("       check the target JVM's stdout or /tmp/livewire-attach.log");
+            _lw_print("agent loaded but nREPL isn't answering on 127.0.0.1:" + port + ". Check the target JVM's logs.");
+            _lw_print("Hint: check /tmp/livewire-attach.log for details from inside the target JVM.");
             return;
         }
 
         // 4. Connect the nREPL client.
         Class<?> clientClass = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
         Object   client      = clientClass.getDeclaredConstructor(int.class).newInstance(actualPort);
-        clientClass.getMethod("connect").invoke(client);
+        try {
+            clientClass.getMethod("connect").invoke(client);
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+            String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+            if (msg.contains("already in use") || msg.contains("bind")) {
+                _lw_print("port " + actualPort + " is in use. Try: attach(" + index + ", 7999)");
+            } else {
+                _lw_print("agent loaded but nREPL isn't answering on 127.0.0.1:" + actualPort + ". Check the target JVM's logs.");
+            }
+            _lw_logError(cause);
+            return;
+        }
         String sessionId = (String) clientClass.getMethod("getSession").invoke(client);
 
         _lw_pid[0]    = pid;
@@ -231,12 +276,10 @@ void attach(int index, int port) {
         _lw_print("ready. try:  info()  or  eval(\"(+ 1 2)\")");
 
     } catch (Exception e) {
-        _lw_print("attach failed: " + e.getMessage());
-        // Full stack trace to log file
-        try (var pw = new java.io.PrintWriter(new java.io.FileWriter("/tmp/livewire-attach.log", true))) {
-            pw.println("--- attach(" + index + ") " + new java.util.Date() + " ---");
-            e.printStackTrace(pw);
-        } catch (Exception ignored) {}
+        Throwable cause = (e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null)
+                ? e.getCause() : e;
+        _lw_print("attach failed: " + cause.getMessage());
+        _lw_logError(cause);
     }
 }
 

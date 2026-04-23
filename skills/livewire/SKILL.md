@@ -101,6 +101,46 @@ Verify: `clj-nrepl-eval --discover-ports`
 
 ---
 
+## Zero-install attach via jshell
+
+Livewire can also be injected into a running Spring Boot app **without any build changes**
+using the `attach.jsh` bootstrap script. This is useful for quick exploration of an app
+you didn't write, or for onboarding teammates who haven't added the dependency yet.
+
+```bash
+echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell
+```
+
+Or, for a local development build:
+```bash
+LIVEWIRE_BUNDLE_PATH=/path/to/livewire-attach-X.Y.Z.jar \
+  jshell /path/to/attach.jsh
+```
+
+**Requirements:** the target JVM must be started with `-XX:+EnableDynamicAgentLoading` (Java 21+).
+
+**Available commands at the jshell prompt** (all require a prior `attach(N)` call):
+
+| Command | What it does |
+|---|---|
+| `attach(N)` | Inject the agent into JVM #N from the list; connects nREPL client |
+| `attach(N, port)` | Same, using a custom nREPL port (default: 7888) |
+| `info()` | App name, Spring Boot / Hibernate / Java versions, DataSource details |
+| `beans(pattern)` | Sorted list of Spring beans matching the regex pattern |
+| `eval(code)` | Evaluate arbitrary Clojure against the live nREPL session |
+| `sql(query)` | Run a read-only SQL query through the live DataSource |
+| `demo()` | Trace-SQL demo: counts books and reports query count + duration |
+| `detach()` | Close the nREPL session; keep jshell running |
+| `help()` | Print all available commands |
+
+**Tip:** once attached, `eval()` gives full access to the Livewire API —
+`eval("(trace/trace-sql (.getBooks (lw/bean \"bookController\")))")` works exactly as it does
+in a full nREPL session.
+
+⚠️ Dev/staging only — never attach to a JVM with real user data.
+
+---
+
 ## Workflow
 
 1. **Start the session** — always run `lw-start` first:

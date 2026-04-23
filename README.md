@@ -90,6 +90,24 @@ No REPL call needed — no restart either.
 
 ---
 
+## Try it — no install required
+
+Curious? Run this against any Spring Boot app already running on your machine. **No code changes, no dependency, no restart:**
+
+```bash
+echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell
+```
+
+This downloads a small agent bundle, lists the running JVMs, and lets you pick one.
+Once attached you get `info()`, `beans()`, `eval()`, `sql()`, and `demo()` in a live jshell prompt.
+
+> **Java 21+ note:** start your target app with `-XX:+EnableDynamicAgentLoading` to allow dynamic agent injection.
+> For Maven: `mvn spring-boot:run -Dspring-boot.run.jvmArguments="-XX:+EnableDynamicAgentLoading"`
+
+⚠️ Dev/staging only — never attach to a JVM with real user data.
+
+---
+
 ## Installation
 
 ### Prerequisites

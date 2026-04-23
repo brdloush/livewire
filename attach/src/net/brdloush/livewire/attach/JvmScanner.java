@@ -109,6 +109,10 @@ public class JvmScanner {
                     : "(Java " + major + ")";
 
         } catch (AttachNotSupportedException e) {
+            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            if (msg.contains("native") || msg.contains("graal")) {
+                return "(native image — Livewire attach not supported)";
+            }
             return "(attach not supported — try sudo?)";
         } catch (IOException e) {
             return "(cannot read — " + e.getMessage() + ")";

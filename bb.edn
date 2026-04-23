@@ -146,10 +146,26 @@
            (println "\n✅ Deployed! GitHub Pages will be live at https://brdloush.github.io/livewire/"))}
 
   attach-jar
-  {:doc "Build the livewire-attach uber-jar (attach/ module, deps.edn + tools.build)"
+  {:doc "Build the livewire-attach jar (attach/ module, deps.edn + tools.build)"
    :task (do
            (println "Building livewire-attach jar...")
            (shell {:dir "attach"} "clj -T:build jar"))}
+
+  attach-pom
+  {:doc "Generate POM for net.brdloush:livewire-attach"
+   :task (shell {:dir "attach"} "clj -T:build pom")}
+
+  attach-source-jar
+  {:doc "Build the livewire-attach sources JAR (-sources.jar)"
+   :task (shell {:dir "attach"} "clj -T:build source-jar")}
+
+  attach-javadoc-jar
+  {:doc "Build a placeholder livewire-attach javadoc JAR (-javadoc.jar)"
+   :task (shell {:dir "attach"} "clj -T:build javadoc-jar")}
+
+  attach-release-jars
+  {:doc "Build all livewire-attach release artifacts: JAR, sources, javadoc, POM"
+   :task (shell {:dir "attach"} "clj -T:build release-jars")}
 
   stop-serve
   {:doc "Kill the bbserve process on port 4000"

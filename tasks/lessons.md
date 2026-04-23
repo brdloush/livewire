@@ -32,4 +32,9 @@ and removed from here.
   requires a commit SHA, not a tag name — use `git rev-list -n1 vX.Y.Z` to obtain it.
 -->
 
+- 2026-04-23: jshell interactive mode requires `;` at the end of every statement. When
+  giving the user jshell snippets to paste at a live `jshell>` prompt, always include the
+  trailing semicolon. Script files (loaded via `/open`) do not require them, but interactive
+  input does.
+
 

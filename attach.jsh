@@ -10,10 +10,11 @@ String  _LW_VERSIONS_URL =
     "https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/versions.json";
 
 // Mutable session state — populated by attach(int).
-String[]  _lw_pid        = {null};   // [0] = pid of attached JVM (String)
-Object[]  _lw_helpers    = {null};   // [0] = AttachHelpers instance (via reflection)
-Object[]  _lw_client     = {null};   // [0] = Client instance (via reflection)
-ClassLoader[] _lw_cl     = {null};   // [0] = URLClassLoader holding bundle classes
+String[]      _lw_pid         = {null};   // [0] = pid of attached JVM (String)
+Object[]      _lw_helpers     = {null};   // [0] = AttachHelpers instance (via reflection)
+Object[]      _lw_client      = {null};   // [0] = Client instance (via reflection)
+ClassLoader[] _lw_cl          = {null};   // [0] = URLClassLoader holding bundle classes
+String[]      _lw_bundle_path = {null};   // [0] = resolved local path to bundle jar
 
 // ─── internal helpers ─────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ String _lw_callStatic(String className, String methodName, Object... args) {
 {
     try {
         String jarPath = _lw_resolveBundle();
+        _lw_bundle_path[0] = jarPath;
         _lw_loadBundle(jarPath);
 
         _lw_print("scanning for attachable JVMs...");
@@ -159,14 +161,69 @@ String _lw_callStatic(String className, String methodName, Object... args) {
 
 // ─── public API ───────────────────────────────────────────────────────────────
 
-/** Attach to the JVM at position [index] in the list printed above. */
-void attach(int index) {
-    _lw_print("attach(" + index + ") — not yet implemented (coming in Step 4)");
-}
-
 /** Attach to the JVM at position [index], using a custom nREPL port. */
 void attach(int index, int port) {
-    _lw_print("attach(" + index + ", " + port + ") — not yet implemented (coming in Step 4)");
+    if (_lw_bundle_path[0] == null) { _lw_print("bundle not loaded — restart jshell"); return; }
+    try {
+        // 1. Resolve PID from the scan list.
+        Class<?> scannerClass = _lw_cl[0].loadClass("net.brdloush.livewire.attach.JvmScanner");
+        String pid = (String) scannerClass.getMethod("getPid", int.class).invoke(null, index);
+
+        // 2. Load agent into the target JVM.
+        _lw_print("loading agent into pid " + pid + " ...");
+        Class<?> vmClass = Class.forName("com.sun.tools.attach.VirtualMachine");
+        Object   vm      = vmClass.getMethod("attach", String.class).invoke(null, pid);
+        try {
+            vmClass.getMethod("loadAgent", String.class, String.class)
+                   .invoke(vm, _lw_bundle_path[0], String.valueOf(port));
+        } finally {
+            vmClass.getMethod("detach").invoke(vm);
+        }
+        _lw_print("✓ agent loaded");
+
+        // 3. Poll for the port file written by the agent (up to 15s).
+        java.nio.file.Path portFile = java.nio.file.Path.of("/tmp/livewire-attach-" + pid + ".port");
+        int actualPort = -1;
+        for (int i = 0; i < 150; i++) {
+            if (java.nio.file.Files.exists(portFile)) {
+                actualPort = Integer.parseInt(java.nio.file.Files.readString(portFile).trim());
+                break;
+            }
+            Thread.sleep(100);
+        }
+        if (actualPort < 0) {
+            _lw_print("ERROR: agent loaded but no port file appeared at " + portFile);
+            _lw_print("       check the target JVM's stdout or /tmp/livewire-attach.log");
+            return;
+        }
+
+        // 4. Connect the nREPL client.
+        Class<?> clientClass = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
+        Object   client      = clientClass.getDeclaredConstructor(int.class).newInstance(actualPort);
+        clientClass.getMethod("connect").invoke(client);
+        String sessionId = (String) clientClass.getMethod("getSession").invoke(client);
+
+        _lw_pid[0]    = pid;
+        _lw_client[0] = client;
+
+        _lw_print("✓ nREPL server on 127.0.0.1:" + actualPort);
+        _lw_print("✓ client connected (session " + sessionId + ")");
+        _lw_print("ready. try:  info()  or  eval(\"(+ 1 2)\")");
+
+    } catch (Exception e) {
+        _lw_print("attach failed: " + e.getMessage());
+        // Full stack trace to log file
+        try (var pw = new java.io.PrintWriter(new java.io.FileWriter("/tmp/livewire-attach.log", true))) {
+            pw.println("--- attach(" + index + ") " + new java.util.Date() + " ---");
+            e.printStackTrace(pw);
+        } catch (Exception ignored) {}
+    }
+}
+
+/** Attach to the JVM at position [index] in the list printed above (default nREPL port 7888). */
+// Defined after the two-arg overload so jshell resolves the call correctly.
+void attach(int index) {
+    attach(index, 7888);
 }
 
 /** Print runtime, datasource, and framework version info for the attached JVM. */
@@ -183,8 +240,15 @@ void beans(String pattern) {
 
 /** Evaluate arbitrary Clojure code against the live nREPL session. */
 void eval(String clojureCode) {
-    if (_lw_helpers[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "eval", clojureCode));
+    if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    // Use Client directly (AttachHelpers wired in Step 5).
+    try {
+        Class<?> cc  = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
+        Object result = cc.getMethod("eval", String.class).invoke(_lw_client[0], clojureCode);
+        System.out.println(result);
+    } catch (Exception e) {
+        _lw_print("eval error: " + e.getMessage());
+    }
 }
 
 /** Run a read-only SQL query through the live DataSource and print results. */
@@ -201,8 +265,16 @@ void demo() {
 
 /** Stop the nREPL server, close the client connection, keep jshell running. */
 void detach() {
-    if (_lw_helpers[0] == null) { _lw_print("not attached"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "detach"));
+    if (_lw_client[0] == null) { _lw_print("not attached"); return; }
+    if (_lw_helpers[0] != null) {
+        System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "detach"));
+    } else {
+        try {
+            Class<?> cc = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
+            cc.getMethod("close").invoke(_lw_client[0]);
+            _lw_print("detached ✓");
+        } catch (Exception e) { _lw_print("detach error: " + e.getMessage()); }
+    }
     _lw_helpers[0] = null;
     _lw_client[0]  = null;
     _lw_pid[0]     = null;

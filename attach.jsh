@@ -126,6 +126,21 @@ String _lw_callStatic(String className, String methodName, Object... args) {
     }
 }
 
+/** Reflectively call an instance method on _lw_helpers[0] (AttachHelpers), returning a String. */
+String _lw_callHelper(String methodName, Object... args) {
+    try {
+        Class<?> hc = _lw_cl[0].loadClass("net.brdloush.livewire.attach.AttachHelpers");
+        Class<?>[] paramTypes = new Class<?>[args.length];
+        for (int i = 0; i < args.length; i++) paramTypes[i] = args[i].getClass();
+        java.lang.reflect.Method m = hc.getMethod(methodName, paramTypes);
+        Object result = m.invoke(_lw_helpers[0], args);
+        return result == null ? "" : result.toString();
+    } catch (Exception e) {
+        String cause = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+        return "[livewire] " + methodName + "() error: " + cause;
+    }
+}
+
 // ─── scan and print JVM list on startup ───────────────────────────────────────
 
 {
@@ -206,6 +221,11 @@ void attach(int index, int port) {
         _lw_pid[0]    = pid;
         _lw_client[0] = client;
 
+        // Instantiate AttachHelpers with the connected Client.
+        Class<?> helpersClass    = _lw_cl[0].loadClass("net.brdloush.livewire.attach.AttachHelpers");
+        Class<?> clientClassType = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
+        _lw_helpers[0] = helpersClass.getDeclaredConstructor(clientClassType).newInstance(client);
+
         _lw_print("✓ nREPL server on 127.0.0.1:" + actualPort);
         _lw_print("✓ client connected (session " + sessionId + ")");
         _lw_print("ready. try:  info()  or  eval(\"(+ 1 2)\")");
@@ -228,57 +248,38 @@ void attach(int index) {
 
 /** Print runtime, datasource, and framework version info for the attached JVM. */
 void info() {
-    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
-    if (_lw_helpers[0] == null) { _lw_print("info() not yet available — use eval() for now"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "info"));
+    if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    System.out.println(_lw_callHelper("info"));
 }
 
 /** List Spring beans whose names match the given regex pattern. */
 void beans(String pattern) {
-    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
-    if (_lw_helpers[0] == null) { _lw_print("beans() not yet available — use eval() for now"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "beans", pattern));
+    if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    System.out.println(_lw_callHelper("beans", pattern));
 }
 
 /** Evaluate arbitrary Clojure code against the live nREPL session. */
 void eval(String clojureCode) {
     if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
-    // Use Client directly (AttachHelpers wired in Step 5).
-    try {
-        Class<?> cc  = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
-        Object result = cc.getMethod("eval", String.class).invoke(_lw_client[0], clojureCode);
-        System.out.println(result);
-    } catch (Exception e) {
-        _lw_print("eval error: " + e.getMessage());
-    }
+    System.out.println(_lw_callHelper("eval", clojureCode));
 }
 
 /** Run a read-only SQL query through the live DataSource and print results. */
 void sql(String query) {
-    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
-    if (_lw_helpers[0] == null) { _lw_print("sql() not yet available — use eval() for now"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "sql", query));
+    if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    System.out.println(_lw_callHelper("sql", query));
 }
 
 /** Show something interesting about the attached application (N+1 demo, bean count, etc.). */
 void demo() {
-    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
-    if (_lw_helpers[0] == null) { _lw_print("demo() not yet available — use eval() for now"); return; }
-    System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "demo"));
+    if (_lw_client[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    System.out.println(_lw_callHelper("demo"));
 }
 
 /** Stop the nREPL server, close the client connection, keep jshell running. */
 void detach() {
     if (_lw_client[0] == null) { _lw_print("not attached"); return; }
-    if (_lw_helpers[0] != null) {
-        System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "detach"));
-    } else {
-        try {
-            Class<?> cc = _lw_cl[0].loadClass("net.brdloush.livewire.attach.Client");
-            cc.getMethod("close").invoke(_lw_client[0]);
-            _lw_print("detached ✓");
-        } catch (Exception e) { _lw_print("detach error: " + e.getMessage()); }
-    }
+    System.out.println(_lw_callHelper("detach"));
     _lw_helpers[0] = null;
     _lw_client[0]  = null;
     _lw_pid[0]     = null;

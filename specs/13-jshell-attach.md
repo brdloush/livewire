@@ -265,3 +265,9 @@ Part 1 is done when **all** of the following are true:
 2. Is reusing the existing `net.brdloush:livewire` artifact with a classifier (`:agent`) cleaner than a separate `net.brdloush:livewire-attach` artifact? Slight preference for separate artifact — keeps dep tree clean for regular users.
 3. The three ApplicationContext-discovery strategies (§2.4) — is there a fourth worth considering, e.g. walking `Instrumentation.getInitiatedClasses(systemCL)` for Spring marker classes? Worth evaluating during implementation.
 4. For the Windows path: is it worth a dedicated GitHub Action runner and test, or punt to "best effort, document known issues"? Depends on expected Windows user share.
+
+---
+
+## 6. Nice to have
+
+- Colored output in `help()` in jshell (ANSI escape codes for command names, descriptions, and the warning line).

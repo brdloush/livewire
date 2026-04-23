@@ -136,6 +136,17 @@ These are worth remembering — they signal what "good" looks like in this proje
   means not just understanding what to build, but also recognising where the spec can be
   simplified — and being honest about it upfront rather than discovering it mid-implementation.
 
+- 2026-04-23: "it works flawlessly" — for the full Step 5 delivery: AttachHelpers wired,
+  all jshell commands working end-to-end against bloated-shelf — info(), beans(), demo(),
+  eval(), detach() all verified in one clean test run.
+
+  *Why I think this was praised:* Step 4 involved a lot of debugging (wrong JVM target,
+  agentmain not called, jshell filtering, class caching, EnableDynamicAgentLoading). Step 5
+  was deliberately kept clean by building on that foundation rather than fighting it —
+  Clojure eval expressions for each command, one reflection helper, minimal jshell surface
+  area. The "flawlessly" signals that getting the hard stuff right in Step 4 made Step 5
+  feel effortless, which is exactly the right outcome.
+
 - 2025-03-15: "Beautiful job." — for the complete `diff-entity` end-to-end REPL test session:
   no-op thunk returning `{:changed {}}`, real mutation via `bookRepository.save()` showing
   `{:availableCopies [3 2]}`, and DB rollback confirmed with `q/sql`.

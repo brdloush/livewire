@@ -228,13 +228,15 @@ void attach(int index) {
 
 /** Print runtime, datasource, and framework version info for the attached JVM. */
 void info() {
-    if (_lw_helpers[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_helpers[0] == null) { _lw_print("info() not yet available — use eval() for now"); return; }
     System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "info"));
 }
 
 /** List Spring beans whose names match the given regex pattern. */
 void beans(String pattern) {
-    if (_lw_helpers[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_helpers[0] == null) { _lw_print("beans() not yet available — use eval() for now"); return; }
     System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "beans", pattern));
 }
 
@@ -253,13 +255,15 @@ void eval(String clojureCode) {
 
 /** Run a read-only SQL query through the live DataSource and print results. */
 void sql(String query) {
-    if (_lw_helpers[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_helpers[0] == null) { _lw_print("sql() not yet available — use eval() for now"); return; }
     System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "sql", query));
 }
 
 /** Show something interesting about the attached application (N+1 demo, bean count, etc.). */
 void demo() {
-    if (_lw_helpers[0] == null) { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_client[0] == null)  { _lw_print("not attached — run attach(N) first"); return; }
+    if (_lw_helpers[0] == null) { _lw_print("demo() not yet available — use eval() for now"); return; }
     System.out.println(_lw_callStatic("net.brdloush.livewire.attach.AttachHelpers", "demo"));
 }
 

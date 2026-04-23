@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Usage: lw-trace-sql <clojure-expr>
+#
+# Captures SQL fired by the expression and returns :queries, :count, and
+# :duration-ms. The :result field is stripped — this script is for SQL
+# inspection, not data inspection. Use trace/trace-sql directly in Clojure
+# if you also need the return value.
 clj-nrepl-eval -p "${LW_PORT:-7888}" \
   "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc])"
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(trace/trace-sql $1)"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(dissoc (trace/trace-sql $1) :result)"

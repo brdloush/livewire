@@ -16,7 +16,7 @@ methods.
 | `(lw/bean MyService)` | Bean by type |
 | `(lw/beans-of-type DataSource)` | All beans of a type → map |
 | `(lw/bean-names)` | All registered bean names |
-| `(lw/find-beans-matching ".*Repo.*")` | Filter bean names by regex |
+| `(lw/find-beans-matching ".*repo.*")` | Filter bean names by regex (case-insensitive) |
 | `(lw/bean-deps "name")` | Wiring map for one bean: `:class`, `:dependencies`, `:dependents` |
 | `(lw/all-bean-deps)` | Wiring maps for app-level beans (`:app-only true` by default) |
 | `(lw/all-bean-deps :app-only false)` | Wiring maps for all beans including Spring infrastructure |
@@ -335,6 +335,20 @@ clj-nrepl-eval -p 7888 '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.ge
 | `(trace/trace-sql & body)` | Captures every SQL fired by Hibernate on the current thread |
 | `(trace/trace-sql-global & body)` | Same, but captures across *all* threads (useful for `@Async`) |
 | `(trace/detect-n+1 trace-res)` | Analyzes a trace result and flags repeated queries |
+
+### `lw-trace-sql` strips `:result` — use `trace/trace-sql` directly if you need the return value
+
+The `lw-trace-sql` wrapper script is for SQL inspection. It omits `:result` from the
+output to avoid dumping megabytes of DTOs when tracing service calls on large datasets.
+If you also need the return value, call `trace/trace-sql` directly in Clojure:
+
+```clojure
+;; Full result including :result
+(trace/trace-sql (.getBooksByGenreId (lw/bean "bookService") 1))
+
+;; SQL-only (same as lw-trace-sql)
+(dissoc (trace/trace-sql (.getBooksByGenreId (lw/bean "bookService") 1)) :result)
+```
 
 ### Gotchas
 

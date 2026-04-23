@@ -33,6 +33,39 @@ If `lw-start` finds no server, say so briefly and suggest the user start the app
 
 ---
 
+## Trigger Rules
+
+MUST read the referenced file BEFORE acting on any question matching the keyword.
+This is not optional — static knowledge is unreliable for live-app questions.
+
+| Keywords in user query | File to read | File path |
+|---|---|---|
+| **`N+1` `n+1` `query count` `N plus one` `slow query`** | **N+1 Hunting** | **`references/n-plus-one-hunting.md`** |
+| `blast radius` `call graph` `blast-radius` `inbound` `dead code` `split` `method dependencies` | Call Graph | `references/callgraph.md` |
+| `hot swap` `hot-swap` `@Query` `jpql` `query watcher` `swapped` | API Core | `references/api-core.md` |
+| `faker` `fake data` `build-entity` `build-test-recipe` `test data` | Writing Tests & Fake Data | `references/writing-tests-and-fake-data.md` |
+| `pitfall` `error` `exception` `unexpected` `what went wrong` | Pitfalls | `references/pitfalls.md` |
+
+---
+
+## ⚠️ Before you act — mandatory file reads
+
+When your message contains any keyword from the table above, **read the referenced file before doing anything else**. This is not a suggestion — the file contains fixes to known traps (lazy results, Cartesian products, shell escaping) that will save you 10+ failed attempts.
+
+If you skip the read and produce a wrong result, the most likely cause is that you missed something in the reference file that you already knew but forgot.
+
+### ⚠️ N+1 HUNTING (keywords: `N+1`, `n+1`, `slow query`, `query count`)
+
+**Read `references/n-plus-one-hunting.md` before writing any trace expression.** That file contains:
+- The exact procedure for N+1 hunting (service method, not controller)
+- Why `jpa/jpa-query` returns **lazy** results → wrap in `doall` or trace count is always 0
+- The **Cartesian product trap** — `JOIN FETCH` on two collections duplicates rows
+- The exact tool for each phase (`lw-trace-nplus1` → `hq/hot-swap-query!` → `hq/reset-all!`)
+
+Do not rely on memory. Read the file. Then act.
+
+---
+
 ## Reference files
 
 Load these on demand — read the relevant file before working in that area:
@@ -134,7 +167,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-inspect-entity <Name>` | Table, columns, relations for one entity |
 | `lw-inspect-all-entities` | Table, columns, relations for **all** entities in one call |
 | `lw-list-endpoints` | All HTTP endpoints with auth info |
-| `lw-find-beans <regex>` | Filter bean names by regex |
+| `lw-find-beans <regex>` | Filter bean names by regex (case-insensitive) |
 | `lw-bean-deps <beanName>` | Dependencies and dependents for one bean |
 | `lw-all-bean-deps` | Wiring maps for all app-level beans (auto-filtered to own package) |
 | `lw-bean-tx <beanName>` | `@Transactional` surface for one bean |

@@ -65,11 +65,12 @@
 
 (defn find-beans-matching
   "Returns all bean names whose name matches the given regex pattern.
+   The match is case-insensitive by default ((?i) is prepended automatically).
 
    Example:
-     (find-beans-matching \".*Repository.*\")"
+     (find-beans-matching \".*repository.*\")   ; matches bookRepository, authorRepository, ..."
   [pattern]
-  (let [re (re-pattern pattern)]
+  (let [re (re-pattern (str "(?i)" pattern))]
     (filter #(re-find re %) (bean-names))))
 
 (defn bean->map

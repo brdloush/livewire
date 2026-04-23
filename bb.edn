@@ -145,6 +145,12 @@
            (babashka.fs/delete-tree tmp)
            (println "\n✅ Deployed! GitHub Pages will be live at https://brdloush.github.io/livewire/"))}
 
+  attach-jar
+  {:doc "Build the livewire-attach uber-jar (attach/ module, deps.edn + tools.build)"
+   :task (do
+           (println "Building livewire-attach jar...")
+           (shell {:dir "attach"} "clj -T:build jar"))}
+
   stop-serve
   {:doc "Kill the bbserve process on port 4000"
    :task (let [procs (->> (java.lang.ProcessHandle/allProcesses)

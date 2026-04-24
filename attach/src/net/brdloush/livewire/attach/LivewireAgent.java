@@ -54,6 +54,12 @@ public class LivewireAgent {
         try {
             log("[livewire] agent v2 starting in pid " + pid + " ...");
 
+            // Open java.base/java.lang so the shutdown hook strategy can access
+            // private fields (ApplicationShutdownHooks.hooks, Thread.target).
+            // Using Instrumentation.redefineModule() avoids the need for any
+            // --add-opens JVM startup flag on the target.
+            openJavaLang(inst);
+
             // Fast path: nREPL is already listening (Livewire started via autoconfig).
             // No context discovery needed — just write the port file and we're done.
             if (isPortListening(port)) {
@@ -76,21 +82,30 @@ public class LivewireAgent {
 
             // 2. Discover the ApplicationContext.
             Object ctx = discoverContext(appCl);
-            if (ctx == null) {
-                log("[livewire] ERROR: no Spring ApplicationContext found — is the app fully started?");
-                return;
-            }
-            String appName = getAppName(ctx, appCl);
-            log("[livewire] ✓ Spring ApplicationContext discovered" +
-                    (appName != null ? ": \"" + appName + "\"" : ""));
 
-            // 3. Start nREPL via Livewire.
-            int actualPort = ensureNrepl(ctx, appCl, port);
-            log("[livewire] ✓ nREPL ready on 127.0.0.1:" + actualPort);
+            // 3. Start nREPL via bundled Livewire (works whether or not the target has Livewire).
+            //    Fall back to a bare exploration nREPL if Livewire bootstrap fails.
+            int actualPort;
+            if (ctx != null) {
+                String appName = getAppName(ctx, appCl);
+                log("[livewire] ✓ Spring ApplicationContext discovered" +
+                        (appName != null ? ": \"" + appName + "\"" : ""));
+                try {
+                    actualPort = startLivewireNrepl(ctx, appCl, port);
+                } catch (Exception e) {
+                    log("[livewire] Livewire nREPL bootstrap failed (" + e.getMessage()
+                            + ") — falling back to exploration nREPL");
+                    actualPort = startExplorationNrepl(appCl, port);
+                }
+            } else {
+                log("[livewire] no Spring ApplicationContext found — starting exploration nREPL");
+                actualPort = startExplorationNrepl(appCl, port);
+            }
 
             // 4. Write port file so the jshell client knows where to connect.
             writePortFile(pid, actualPort);
             log("[livewire] ✓ port file written: /tmp/livewire-attach-" + pid + ".port");
+            log("[livewire] ✓ nREPL ready on 127.0.0.1:" + actualPort);
 
         } catch (Throwable e) {
             log("[livewire] ERROR: " + e);
@@ -139,11 +154,21 @@ public class LivewireAgent {
 
     /**
      * Tries each discovery strategy in order, returning the first non-null result.
+     *
+     * <ol>
+     *   <li>ContextLoader — only set for WAR deployments; usually null for embedded Boot.</li>
+     *   <li>SpringApplicationShutdownHook — requires java.lang to be opened first via
+     *       {@link #openJavaLang}.</li>
+     *   <li>Tomcat container thread — walks the {@code container-N} Thread subclass
+     *       ({@code TomcatWebServer$N}) through {@code TomcatWebServer → Tomcat → Host
+     *       → StandardContext → ServletContext → ROOT WebApplicationContext attribute}.
+     *       No {@code --add-opens} needed; all touched classes are in unnamed modules.</li>
+     * </ol>
      */
     static Object discoverContext(ClassLoader appCl) {
         Object ctx;
 
-        // Strategy 1: Spring MVC ContextLoader (works for all servlet-based Boot apps).
+        // Strategy 1: Spring MVC ContextLoader (works for WAR deployments).
         ctx = tryContextLoader(appCl);
         if (ctx != null) {
             log("[livewire] context found via ContextLoader (strategy 1)");
@@ -154,6 +179,13 @@ public class LivewireAgent {
         ctx = tryShutdownHook(appCl);
         if (ctx != null) {
             log("[livewire] context found via shutdown hook (strategy 2)");
+            return ctx;
+        }
+
+        // Strategy 3: Embedded Tomcat container thread (Spring Boot embedded; most common).
+        ctx = tryTomcatContainerThread(appCl);
+        if (ctx != null) {
+            log("[livewire] context found via Tomcat container thread (strategy 3)");
             return ctx;
         }
 
@@ -217,8 +249,16 @@ public class LivewireAgent {
         return null;
     }
 
-    /** Extracts the Runnable target from a platform Thread (Java 11-25). */
+    /**
+     * Extracts the Runnable target from a platform Thread.
+     * <ul>
+     *   <li>Java 11–20: stored in {@code Thread.target}</li>
+     *   <li>Java 21+:   stored in {@code Thread.holder.task} (Project Loom refactor)</li>
+     * </ul>
+     * Requires {@code java.lang} to be opened ({@link #openJavaLang} must have been called).
+     */
     private static Object getThreadTarget(Thread t) {
+        // Java 11–20: direct field on Thread
         for (String name : new String[]{"target", "task", "runnable"}) {
             try {
                 java.lang.reflect.Field f = Thread.class.getDeclaredField(name);
@@ -229,49 +269,197 @@ public class LivewireAgent {
                 log("[livewire] getThreadTarget field '" + name + "' failed: " + e.getMessage());
             }
         }
+        // Java 21+: task lives in Thread.holder (FieldHolder inner class)
+        try {
+            java.lang.reflect.Field holderField = Thread.class.getDeclaredField("holder");
+            holderField.setAccessible(true);
+            Object holder = holderField.get(t);
+            if (holder != null) {
+                java.lang.reflect.Field taskField = holder.getClass().getDeclaredField("task");
+                taskField.setAccessible(true);
+                return taskField.get(holder);
+            }
+        } catch (Exception e) {
+            log("[livewire] getThreadTarget holder.task failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Strategy 3 — Embedded Tomcat container thread.
+     * <p>
+     * Spring Boot's {@code TomcatWebServer} keeps the JVM alive by blocking a dedicated
+     * {@code Thread} subclass ({@code TomcatWebServer$N}) in
+     * {@code StandardServer.await()}. Because this class is an anonymous inner class,
+     * it holds a synthetic {@code this$0} reference to the outer {@code TomcatWebServer}
+     * instance. From there the path is:
+     * {@code TomcatWebServer → Tomcat → Host → StandardContext → ServletContext →
+     * ROOT WebApplicationContext attribute}.
+     * <p>
+     * All touched classes (Spring Boot, Tomcat) are in unnamed modules, so
+     * {@code setAccessible(true)} works without any {@code --add-opens}.
+     */
+    private static Object tryTomcatContainerThread(ClassLoader appCl) {
+        try {
+            for (Thread t : Thread.getAllStackTraces().keySet()) {
+                // The keeper thread is an anonymous subclass of Thread defined inside
+                // TomcatWebServer, so its class name contains "TomcatWebServer".
+                if (!t.getClass().getName().contains("TomcatWebServer")) continue;
+
+                // Synthetic this$0 field → TomcatWebServer instance.
+                // setAccessible works: TomcatWebServer$N is in unnamed module (Spring Boot jar).
+                java.lang.reflect.Field f0 = t.getClass().getDeclaredField("this$0");
+                f0.setAccessible(true);
+                Object tws = f0.get(t);
+
+                // TomcatWebServer.tomcat → org.apache.catalina.startup.Tomcat
+                java.lang.reflect.Field tf = tws.getClass().getDeclaredField("tomcat");
+                tf.setAccessible(true);
+                Object tomcat = tf.get(tws);
+
+                // Tomcat.getHost() → Host; Host.findChildren()[0] → StandardContext
+                Object host = tomcat.getClass().getMethod("getHost").invoke(tomcat);
+                Object[] children = (Object[]) host.getClass()
+                        .getMethod("findChildren").invoke(host);
+                if (children == null || children.length == 0) continue;
+
+                // StandardContext.getServletContext() → javax/jakarta.servlet.ServletContext
+                Object sc = children[0].getClass()
+                        .getMethod("getServletContext").invoke(children[0]);
+
+                // getAttribute("...ROOT") → Spring's WebApplicationContext
+                Object ctx = sc.getClass()
+                        .getMethod("getAttribute", String.class)
+                        .invoke(sc, "org.springframework.web.context.WebApplicationContext.ROOT");
+
+                if (ctx != null) return ctx;
+            }
+        } catch (Exception e) {
+            log("[livewire] strategy 3 (Tomcat container thread) failed: " + e.getMessage());
+        }
         return null;
     }
 
     // ─── nREPL bootstrap ──────────────────────────────────────────────────────
 
+
+
+    // ─── module opening ───────────────────────────────────────────────────────
+
     /**
-     * Ensures an nREPL server is running on {@code port}.
-     * <p>
-     * If the port is already listening (Livewire was started via Spring autoconfig),
-     * this is a no-op and returns the port immediately.
-     * Otherwise it starts Livewire by reflectively calling
-     * {@code LivewireBootstrapBean.afterPropertiesSet()} through the app classloader.
+     * Opens {@code java.base/java.lang} to this (unnamed) module using
+     * {@link Instrumentation#redefineModule}. This allows the shutdown-hook
+     * strategy to access private fields ({@code ApplicationShutdownHooks.hooks},
+     * {@code Thread.target}) without requiring {@code --add-opens} at JVM startup.
      */
-    private static int ensureNrepl(Object ctx, ClassLoader appCl, int port) throws Exception {
-        if (isPortListening(port)) {
-            log("[livewire] nREPL already running on port " + port);
-            return port;
-        }
-
-        log("[livewire] starting nREPL on port " + port + " via LivewireBootstrapBean ...");
-
-        // LivewireBootstrapBean uses Clojure.var() internally, which reads
-        // Thread.currentThread().getContextClassLoader().  We must set it to
-        // appCl so the Livewire namespaces are found.
-        ClassLoader prevCl = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(appCl);
+    private static void openJavaLang(Instrumentation inst) {
         try {
-            Class<?> bootstrapClass = appCl.loadClass("net.brdloush.livewire.LivewireBootstrapBean");
-            Class<?> appCtxClass    = appCl.loadClass("org.springframework.context.ApplicationContext");
-            Constructor<?> ctor     = bootstrapClass.getConstructor(appCtxClass, int.class);
-            Object bootstrap        = ctor.newInstance(ctx, port);
-            bootstrapClass.getMethod("afterPropertiesSet").invoke(bootstrap);
-        } finally {
-            Thread.currentThread().setContextClassLoader(prevCl);
+            Module unnamed  = LivewireAgent.class.getModule();
+            Module javaBase = Object.class.getModule();
+            Map<String, Set<Module>> extraOpens = new HashMap<>();
+            extraOpens.put("java.lang", Collections.singleton(unnamed));
+            inst.redefineModule(javaBase,
+                    Collections.emptySet(),
+                    Collections.emptyMap(),
+                    extraOpens,
+                    Collections.emptySet(),
+                    Collections.emptyMap());
+            log("[livewire] ✓ java.lang opened via Instrumentation.redefineModule");
+        } catch (Exception e) {
+            log("[livewire] note: could not open java.lang (" + e.getMessage()
+                    + ") — shutdown hook strategy may fail");
         }
+    }
 
-        // Give nREPL a moment to bind the port before we declare success.
-        for (int i = 0; i < 50; i++) {
-            if (isPortListening(port)) return port;
-            Thread.sleep(100);
+    // ─── Livewire + exploration nREPL ─────────────────────────────────────────
+
+    /**
+     * Starts a full Livewire nREPL using the Clojure runtime and Livewire namespaces
+     * bundled in this agent jar. Works regardless of whether Livewire is on the target
+     * app's classpath.
+     * <p>
+     * A child {@link java.net.URLClassLoader} (parent = {@code appCl}) loads Clojure
+     * and Livewire from the agent jar. Spring/Hibernate classes are resolved via parent
+     * delegation ({@code appCl}). The discovered Spring {@code ApplicationContext} is
+     * injected via {@code boot/start!}, giving a fully functional Livewire REPL with
+     * {@code lw}, {@code q}, {@code trace}, and all other aliases set up.
+     */
+    private static int startLivewireNrepl(Object ctx, ClassLoader appCl, int port)
+            throws Exception {
+        java.net.URL agentUrl = LivewireAgent.class
+                .getProtectionDomain().getCodeSource().getLocation();
+
+        // Parent = appCl so Livewire/Clojure code can reach Spring/Hibernate classes.
+        ClassLoader agentCl = new java.net.URLClassLoader(
+                new java.net.URL[]{agentUrl}, appCl);
+
+        ClassLoader prev = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(agentCl);
+        try {
+            Class<?> clj  = agentCl.loadClass("clojure.java.api.Clojure");
+            java.lang.reflect.Method var  = clj.getMethod("var",  Object.class, Object.class);
+            java.lang.reflect.Method read = clj.getMethod("read", String.class);
+            Class<?> ifn  = agentCl.loadClass("clojure.lang.IFn");
+            java.lang.reflect.Method inv1 = ifn.getMethod("invoke", Object.class);
+            java.lang.reflect.Method inv2 = ifn.getMethod("invoke", Object.class, Object.class);
+
+            // (require 'net.brdloush.livewire.boot)
+            Object requireFn = var.invoke(null, "clojure.core", "require");
+            inv1.invoke(requireFn, read.invoke(null, "net.brdloush.livewire.boot"));
+
+            // (net.brdloush.livewire.boot/start! ctx port)
+            Object startFn = var.invoke(null, "net.brdloush.livewire.boot", "start!");
+            inv2.invoke(startFn, ctx, (long) port);
+
+            log("[livewire] ✓ Livewire nREPL started on port " + port
+                    + " (lw/q/trace/hq aliases active)");
+            return port;
+        } finally {
+            Thread.currentThread().setContextClassLoader(prev);
         }
-        throw new RuntimeException("nREPL started but port " + port
-                + " is not yet listening after 5s — check the target app's logs.");
+    }
+
+    /**
+     * Starts a minimal Clojure + nREPL server using the Clojure runtime bundled
+     * in this agent jar. Works even when Livewire is not on the target classpath.
+     * <p>
+     * A child {@link java.net.URLClassLoader} (parent = {@code appCl}) loads
+     * Clojure from the agent jar, so Spring classes remain accessible via
+     * parent delegation. This gives us a live REPL inside the target JVM for
+     * interactive exploration.
+     */
+    private static int startExplorationNrepl(ClassLoader appCl, int port) throws Exception {
+        java.net.URL agentUrl = LivewireAgent.class
+                .getProtectionDomain().getCodeSource().getLocation();
+
+        // Parent = appCl so Clojure code can reach Spring/Hibernate classes.
+        ClassLoader agentCl = new java.net.URLClassLoader(
+                new java.net.URL[]{agentUrl}, appCl);
+
+        ClassLoader prev = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(agentCl);
+        try {
+            Class<?> clj  = agentCl.loadClass("clojure.java.api.Clojure");
+            java.lang.reflect.Method var  = clj.getMethod("var",  Object.class, Object.class);
+            java.lang.reflect.Method read = clj.getMethod("read", String.class);
+            Class<?> ifn  = agentCl.loadClass("clojure.lang.IFn");
+            java.lang.reflect.Method inv1 = ifn.getMethod("invoke", Object.class);
+            java.lang.reflect.Method inv2 = ifn.getMethod("invoke", Object.class, Object.class);
+
+            // (require 'nrepl.server)
+            Object requireFn = var.invoke(null, "clojure.core", "require");
+            inv1.invoke(requireFn, read.invoke(null, "nrepl.server"));
+
+            // (nrepl.server/start-server :port port)
+            Object startFn = var.invoke(null, "nrepl.server", "start-server");
+            inv2.invoke(startFn, read.invoke(null, ":port"), (long) port);
+
+            log("[livewire] ✓ exploration nREPL started on port " + port);
+            log("[livewire]   (no Spring context injected — explore freely via eval)");
+            return port;
+        } finally {
+            Thread.currentThread().setContextClassLoader(prev);
+        }
     }
 
     // ─── utilities ────────────────────────────────────────────────────────────

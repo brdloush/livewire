@@ -1,5 +1,12 @@
 {:paths []
- :deps  {}
+ ;; Runtime deps bundled into the uber-jar so the agent is self-contained.
+ ;; Clojure + nREPL are loaded into a child classloader of the target app,
+ ;; so there is no conflict when the target already has them.
+ ;; Spring/Hibernate are declared :scope provided in livewire's pom —
+ ;; they are NOT bundled (resolved from the target app's classloader at runtime).
+ :deps {org.clojure/clojure   {:mvn/version "1.12.0"}
+        nrepl/nrepl            {:mvn/version "1.3.1"}
+        net.brdloush/livewire  {:mvn/version "0.12.0-SNAPSHOT"}}
 
  :aliases
  {:build

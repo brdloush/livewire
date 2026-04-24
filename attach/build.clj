@@ -27,12 +27,13 @@
             :basis      basis
             :javac-opts ["--release" "17" "-Xlint:unchecked"]})
   (.mkdirs (java.io.File. "target"))
-  (println (str "[livewire-attach] assembling " jar-file " ..."))
-  (b/jar {:class-dir class-dir
-          :jar-file  jar-file
-          :manifest  {"Agent-Class"             "net.brdloush.livewire.attach.LivewireAgent"
-                      "Can-Retransform-Classes"  "true"
-                      "Can-Redefine-Classes"     "true"}})
+  (println (str "[livewire-attach] assembling uber-jar " jar-file " ..."))
+  (b/uber {:class-dir class-dir
+           :uber-file jar-file
+           :basis     basis
+           :manifest  {"Agent-Class"             "net.brdloush.livewire.attach.LivewireAgent"
+                       "Can-Retransform-Classes"  "true"
+                       "Can-Redefine-Classes"     "true"}})
   (println (str "✅ " jar-file)))
 
 (defn pom [_]

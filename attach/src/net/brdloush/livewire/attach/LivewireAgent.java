@@ -411,8 +411,16 @@ public class LivewireAgent {
             Object startFn = var.invoke(null, "net.brdloush.livewire.boot", "start!");
             inv2.invoke(startFn, ctx, (long) port);
 
+            // Patch Hibernate's StatementInspector so trace-sql captures SQL.
+            // LivewireEnvironmentPostProcessor normally does this before SessionFactory
+            // is built, but in agent-inject mode Spring is already started.
+            // SessionFactoryOptionsBuilder.statementInspector is not final —
+            // Hibernate reads it on every new session creation, so this takes
+            // effect immediately for all subsequent queries.
+            patchStatementInspector(ctx, agentCl);
+
             log("[livewire] ✓ Livewire nREPL started on port " + port
-                    + " (lw/q/trace/hq aliases active)");
+                    + " (lw/q/trace/hq/trace-sql all active)");
             return port;
         } finally {
             Thread.currentThread().setContextClassLoader(prev);
@@ -459,6 +467,50 @@ public class LivewireAgent {
             return port;
         } finally {
             Thread.currentThread().setContextClassLoader(prev);
+        }
+    }
+
+    // ─── StatementInspector patching ──────────────────────────────────────────
+
+    /**
+     * Patches Hibernate's {@code StatementInspector} so that {@code trace-sql}
+     * captures SQL queries in agent-inject mode.
+     * <p>
+     * Normally {@code LivewireEnvironmentPostProcessor} injects the inspector
+     * before the {@code SessionFactory} is built. When Livewire is loaded via
+     * agent, the {@code SessionFactory} is already constructed with no inspector.
+     * {@code SessionFactoryOptionsBuilder.statementInspector} is not final —
+     * Hibernate reads it on every new session construction, so patching it
+     * here takes effect immediately for all subsequent queries.
+     */
+    private static void patchStatementInspector(Object ctx, ClassLoader agentCl) {
+        try {
+            // Get entityManagerFactory bean from the Spring context
+            Class<?> ctxClass    = ctx.getClass();
+            Object   emf         = ctxClass.getMethod("getBean", String.class)
+                                           .invoke(ctx, "entityManagerFactory");
+            // Unwrap to SessionFactoryImplementor
+            Class<?> sfiClass    = agentCl.loadClass(
+                    "org.hibernate.engine.spi.SessionFactoryImplementor");
+            Object   sfi         = emf.getClass()
+                                      .getMethod("unwrap", Class.class)
+                                      .invoke(emf, sfiClass);
+            Object   opts        = sfi.getClass()
+                                      .getMethod("getSessionFactoryOptions")
+                                      .invoke(sfi);
+            java.lang.reflect.Field field = opts.getClass()
+                                                .getDeclaredField("statementInspector");
+            field.setAccessible(true);
+
+            // Create a LivewireSqlTracer instance from agentCl
+            Object tracer = agentCl.loadClass("net.brdloush.livewire.LivewireSqlTracer")
+                                   .getDeclaredConstructor()
+                                   .newInstance();
+            field.set(opts, tracer);
+            log("[livewire] ✓ StatementInspector patched — trace-sql will capture SQL");
+        } catch (Exception e) {
+            log("[livewire] note: could not patch StatementInspector ("
+                    + e.getMessage() + ") — trace-sql may not capture SQL");
         }
     }
 

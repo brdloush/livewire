@@ -5,13 +5,16 @@
 (def version "0.12.0-SNAPSHOT")
 (def lib     'net.brdloush/livewire-attach)
 
-(def class-dir   "target/classes")
-(def out-dir     "target/provided")
-(def basis       (b/create-basis {:project "deps.edn"}))
-(def jar-file    (format "%s/livewire-attach-%s.jar"    out-dir version))
-(def src-jar     (format "%s/livewire-attach-%s-sources.jar" out-dir version))
-(def javadoc-jar-file (format "%s/livewire-attach-%s-javadoc.jar" out-dir version))
-(def pom-file    (format "%s/livewire-attach-%s.pom"    out-dir version))
+(def class-dir        "target/classes")
+(def out-dir          "target/provided")
+(def basis            (b/create-basis {:project "deps.edn"}))
+;;; Simple jar path used by `bb attach-jar` for fast dev iteration.
+(def jar-file         (format "target/livewire-attach-%s.jar" version))
+;;; Release paths — all under target/provided/ for Maven Central bundling.
+(def rel-jar-file     (format "%s/livewire-attach-%s.jar"            out-dir version))
+(def src-jar          (format "%s/livewire-attach-%s-sources.jar"    out-dir version))
+(def javadoc-jar-file (format "%s/livewire-attach-%s-javadoc.jar"   out-dir version))
+(def pom-file         (format "%s/livewire-attach-%s.pom"            out-dir version))
 
 (defn clean [_]
   (b/delete {:path "target"}))
@@ -23,7 +26,7 @@
             :class-dir  class-dir
             :basis      basis
             :javac-opts ["--release" "17" "-Xlint:unchecked"]})
-  (clojure.java.io/make-parents jar-file)
+  (.mkdirs (java.io.File. "target"))
   (println (str "[livewire-attach] assembling " jar-file " ..."))
   (b/jar {:class-dir class-dir
           :jar-file  jar-file
@@ -33,7 +36,7 @@
   (println (str "✅ " jar-file)))
 
 (defn pom [_]
-  (clojure.java.io/make-parents pom-file)
+  (.mkdirs (java.io.File. out-dir))
   (b/write-pom {:class-dir class-dir
                 :lib       lib
                 :version   version
@@ -60,7 +63,7 @@
   (println (str "✅ " pom-file)))
 
 (defn source-jar [_]
-  (clojure.java.io/make-parents src-jar)
+  (.mkdirs (java.io.File. out-dir))
   (b/jar {:class-dir "src"   ; pack sources directly
           :jar-file  src-jar})
   (println (str "✅ " src-jar)))
@@ -77,9 +80,12 @@
 (defn release-jars [_]
   (clean nil)
   (jar nil)
+  ;; Copy the dev jar into the release dir alongside sources/javadoc/pom.
+  (.mkdirs (java.io.File. out-dir))
+  (b/copy-file {:src jar-file :target rel-jar-file})
   (pom nil)
   (source-jar nil)
   (javadoc-jar nil)
   (println (str "\nRelease artifacts for livewire-attach " version ":"))
-  (doseq [f [jar-file src-jar javadoc-jar-file pom-file]]
+  (doseq [f [rel-jar-file src-jar javadoc-jar-file pom-file]]
     (println (str "  " f " — " (if (.exists (java.io.File. f)) "✅" "❌")))))

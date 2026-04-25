@@ -320,13 +320,48 @@ bb release-jars
 
 Verify all four artifacts are reported as ✅ before continuing.
 
-### 3. Tag the release
+### 3. Update `versions.json` with the artifact sha256
+
+After `bb release-jars` the attach bundle exists locally. Compute its checksum and
+update `versions.json` before tagging, so the sha256 is part of the tagged commit.
+
+```bash
+# Linux
+sha256sum attach/target/provided/livewire-attach-X.Y.Z.jar
+
+# macOS
+shasum -a 256 attach/target/provided/livewire-attach-X.Y.Z.jar
+```
+
+Edit `versions.json`:
+- Set `"latest"` to `"X.Y.Z"`
+- Add (or update) the version entry under `"versions"` with the correct `"bundle-url"` and the computed `"sha256"`
+
+```json
+{
+  "latest": "X.Y.Z",
+  "versions": {
+    "X.Y.Z": {
+      "bundle-url": "https://github.com/brdloush/livewire/releases/download/vX.Y.Z/livewire-attach-X.Y.Z.jar",
+      "sha256": "<computed-hash>"
+    }
+  }
+}
+```
+
+Commit it alongside the version bump:
+```bash
+git add versions.json
+git commit -m "chore: update versions.json sha256 for X.Y.Z"
+```
+
+### 4. Tag the release
 
 ```bash
 git tag -a vX.Y.Z -m "Release X.Y.Z"
 ```
 
-### 4. Create the GitHub Release
+### 5. Create the GitHub Release
 
 Using the changelog notes for the version being released:
 
@@ -349,7 +384,7 @@ The `--target` must be the **commit SHA** that the tag points to (not the tag na
 git rev-list -n1 vX.Y.Z
 ```
 
-### 5. Sign the artifacts — ⚠️ ask first
+### 6. Sign the artifacts — ⚠️ ask first
 
 **Before running `bb sign-jars`, always tell the user to have their GPG password
 ready and wait for explicit confirmation.** The command prompts immediately and will
@@ -360,7 +395,7 @@ Once the user confirms:
 bb sign-jars
 ```
 
-### 6. Build the upload bundle
+### 7. Build the upload bundle
 
 ```bash
 bb bundle
@@ -369,7 +404,7 @@ bb bundle
 This produces `target/livewire-X.Y.Z-bundle.zip` ready for upload to
 **https://central.sonatype.com/** (Publishing → Upload).
 
-### 7. Push commits and tag
+### 8. Push commits and tag
 
 Remind the user to push — do **not** push autonomously (see Git discipline above):
 ```
@@ -380,7 +415,7 @@ Push the specific release tag by name rather than `git push --tags`. The `--tags
 pushes **all** local tags including old ones that already exist on the remote, causing
 a spurious rejection error even when the new tag is pushed successfully.
 
-### 8. Bump to next SNAPSHOT immediately
+### 9. Bump to next SNAPSHOT immediately
 
 ⚠️ **Do not run this step until the user confirms the bundle has been uploaded and accepted
 by Maven Central.** Running `bb install` overwrites the signed release artifacts in
@@ -398,7 +433,7 @@ git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
 bb install
 ```
 
-### 9. Update web/ and docs while Maven Central publishes
+### 10. Update web/ and docs while Maven Central publishes
 
 Maven Central publishing takes **10+ minutes** after the bundle is uploaded. Use this
 waiting time productively — update `web/` and any docs that reference the previous version.
@@ -419,7 +454,7 @@ Commit these `web/` changes to `main` as usual. **Do not run `bb deploy-pages` y
 the artifacts must be live on Maven Central first or the install instructions will point
 to a version that cannot be resolved.
 
-### 10. Deploy the website — ⚠️ only after Maven Central confirms
+### 11. Deploy the website — ⚠️ only after Maven Central confirms
 
 Once the user confirms the release is visible on Maven Central
 (https://central.sonatype.com/ or by resolving the dependency), remind them:

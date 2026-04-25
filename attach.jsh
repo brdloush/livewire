@@ -6,7 +6,6 @@
 
 // ─── bootstrap ────────────────────────────────────────────────────────────────
 
-String  _LW_VERSION     = "0.13.0-SNAPSHOT";
 String  _LW_VERSIONS_URL =
     "https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/versions.json";
 
@@ -32,8 +31,8 @@ String _lw_resolveBundle() throws Exception {
         return envPath;
     }
 
-    // --- read versions.json to find the download URL + sha256 for this version ---
-    _lw_print("attach.jsh v" + _LW_VERSION + " — fetching versions.json...");
+    // --- read versions.json to find the download URL + sha256 for the latest release ---
+    _lw_print("fetching versions.json...");
     java.net.URL vurl = new java.net.URI(_LW_VERSIONS_URL).toURL();
     String versionsJson;
     try (java.io.InputStream in = vurl.openStream()) {
@@ -46,10 +45,11 @@ String _lw_resolveBundle() throws Exception {
 
     // Minimal JSON parsing — no external deps allowed here.
     // versions.json shape: {"latest":"X","versions":{"X":{"bundle-url":"...","sha256":"..."}}}
-    String bundleUrl = _lw_jsonString(versionsJson, "bundle-url");
-    String sha256    = _lw_jsonString(versionsJson, "sha256");
+    String bundleVersion = _lw_jsonString(versionsJson, "latest");
+    String bundleUrl     = _lw_jsonString(versionsJson, "bundle-url");
+    String sha256        = _lw_jsonString(versionsJson, "sha256");
 
-    String tmpPath = "/tmp/livewire-bundle-" + _LW_VERSION + ".jar";
+    String tmpPath = "/tmp/livewire-bundle-" + bundleVersion + ".jar";
     java.io.File tmpFile = new java.io.File(tmpPath);
 
     // Reuse cached file if checksum matches.
@@ -332,7 +332,7 @@ void detach() {
 /** Print available commands. */
 void help() {
     System.out.println();
-    System.out.println("Livewire jshell client v" + _LW_VERSION + " — available commands:");
+    System.out.println("Livewire jshell client — available commands:");
     System.out.println();
     System.out.println("  attach(N)              — inject Livewire into JVM #N from the list above");
     System.out.println("  attach(N, port)        — same, using a custom nREPL port (default: 7888)");

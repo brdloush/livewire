@@ -301,12 +301,11 @@ The output must show **"nothing to commit, working tree clean"** and **"Your bra
 
 ### 1. Bump version + update CHANGELOG
 
-Bump the version in **four places**:
+Bump the version in **three places**:
 
 - `project.clj` — change `X.Y.Z-SNAPSHOT` → `X.Y.Z`
 - `attach/build.clj` — change `(def version "X.Y.Z-SNAPSHOT")` → `"X.Y.Z"`
 - `attach/deps.edn` — change `net.brdloush/livewire {:mvn/version "X.Y.Z-SNAPSHOT"}` → `"X.Y.Z"`
-- `attach.jsh` — change `String _LW_VERSION = "X.Y.Z-SNAPSHOT"` → `"X.Y.Z"`
 
 Add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md` covering all changes
 since the previous release (new features, fixes, breaking changes).
@@ -442,18 +441,17 @@ by Maven Central.** Running `bb install` overwrites the signed release artifacts
 `target/provided/` with SNAPSHOT builds, destroying them. If you proceed too early the user
 will have to re-run `bb release-jars`, `bb sign-jars`, and `bb bundle` from scratch.
 
-After Maven Central confirms, bump the version in **four places**:
+After Maven Central confirms, bump the version in **three places**:
 ```
 X.Y.Z → X.(Y+1).0-SNAPSHOT   (or X.Y.(Z+1)-SNAPSHOT for a patch release)
 ```
 - `project.clj`
 - `attach/build.clj`
 - `attach/deps.edn`
-- `attach.jsh` — `String _LW_VERSION`
 
 Commit and install locally so dependent apps pick up the new snapshot immediately:
 ```bash
-git add project.clj attach/build.clj attach/deps.edn attach.jsh
+git add project.clj attach/build.clj attach/deps.edn
 git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
 bb install
 ```

@@ -1,5 +1,6 @@
 // Livewire attach.jsh — zero-install bootstrap for live Spring Boot inspection.
-// Usage: echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell
+// Usage: start jshell, then at the prompt type:
+//   /open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh
 //
 // Set LIVEWIRE_BUNDLE_PATH to a local jar path to skip the download (dev/offline use).
 

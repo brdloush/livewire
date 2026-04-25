@@ -95,7 +95,13 @@ No REPL call needed — no restart either.
 Curious? Run this against any Spring Boot app already running on your machine. **No code changes, no dependency, no restart:**
 
 ```bash
-echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell
+jshell
+```
+
+Then at the jshell prompt, paste:
+
+```
+/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh
 ```
 
 This downloads a small agent bundle, lists the running JVMs, and lets you pick one.

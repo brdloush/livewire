@@ -108,7 +108,9 @@ using the `attach.jsh` bootstrap script. This is useful for quick exploration of
 you didn't write, or for onboarding teammates who haven't added the dependency yet.
 
 ```bash
-echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell
+jshell
+# then at the jshell prompt:
+/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh
 ```
 
 Or, for a local development build:

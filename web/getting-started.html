@@ -320,7 +320,9 @@
         <strong style="color: var(--text)">no dependency, no code changes, no restart</strong>.
         Great for a quick look before committing to the full install.
       </p>
-      <div class="code-block" style="margin-bottom: 1rem;"><pre>echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell</pre></div>
+      <div class="code-block" style="margin-bottom: 1rem;"><pre><span class="kw">jshell</span>
+<span class="c"># then at the jshell prompt, paste:</span>
+<span class="n">/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh</span></pre></div>
       <p style="color: var(--muted); font-size: 0.88rem; margin: 0;">
         ⚠️ <strong style="color: var(--text)">Java 21+:</strong> start your app with
         <code>-XX:+EnableDynamicAgentLoading</code> to allow dynamic agent injection.

@@ -3,7 +3,7 @@
   "versions": {
     "0.12.0": {
       "bundle-url": "https://github.com/brdloush/livewire/releases/download/v0.12.0/livewire-attach-0.12.0.jar",
-      "sha256": "UPDATE_AT_RELEASE_TIME"
+      "sha256": "c02cf31f2dff605dadfa75efcfb08474cc88d515db203677fde9bd341300bae7"
     }
   }
 }

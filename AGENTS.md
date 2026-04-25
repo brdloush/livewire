@@ -301,14 +301,18 @@ The output must show **"nothing to commit, working tree clean"** and **"Your bra
 
 ### 1. Bump version + update CHANGELOG
 
-In `project.clj`, change `X.Y.Z-SNAPSHOT` → `X.Y.Z`.
+Bump the version in **three places**:
+
+- `project.clj` — change `X.Y.Z-SNAPSHOT` → `X.Y.Z`
+- `attach/build.clj` — change `(def version "X.Y.Z-SNAPSHOT")` → `"X.Y.Z"`
+- `attach/deps.edn` — change `net.brdloush/livewire {:mvn/version "X.Y.Z-SNAPSHOT"}` → `"X.Y.Z"`
 
 Add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md` covering all changes
 since the previous release (new features, fixes, breaking changes).
 
-Commit both files:
+Commit all files:
 ```bash
-git add project.clj CHANGELOG.md
+git add project.clj attach/build.clj attach/deps.edn CHANGELOG.md
 git commit -m "chore: bump version to X.Y.Z and update changelog"
 ```
 

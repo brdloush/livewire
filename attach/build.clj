@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 ;;; Version must stay in sync with the root project.clj.
-(def version "0.12.0-SNAPSHOT")
+(def version "0.12.0")
 (def lib     'net.brdloush/livewire-attach)
 
 (def class-dir        "target/classes")

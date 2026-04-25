@@ -7,6 +7,46 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.12.0] — 2026-04-25
+
+### Added
+
+- **Zero-install attach via jshell** — inject Livewire into any running Spring Boot app
+  without adding a dependency. Start `jshell`, paste
+  `/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh`
+  and pick a JVM from the list. Provides `attach()`, `info()`, `beans()`, `eval()`,
+  `sql()`, `demo()`, `detach()`, and `help()` at the jshell prompt. Bundles Clojure,
+  nREPL, and Livewire in a self-contained uber-jar (`livewire-attach`) published
+  separately to Maven Central.
+- **`cg/method-dep-clusters`** — cluster methods by shared dependency footprint for
+  service-split planning. Groups methods into natural extraction candidates, flags
+  exclusive vs. shared deps, and highlights intra-call violations that would make a
+  proposed split unsafe. `lw-method-dep-clusters` CLI wrapper.
+- **`cg/method-dep-map` enriched** — each dep entry now carries a `:calls` list of
+  the specific methods invoked on that dependency in bytecode, giving finer-grained
+  split signal beyond just which deps a method touches.
+- **`cg/dead-methods` orchestrator detection improvement** — intra-call depth heuristic
+  more accurately identifies orchestrator methods that delegate entirely to siblings.
+- **`lw/find-beans-matching` case-insensitive** — regex matching no longer requires
+  the caller to account for bean name casing.
+
+### Changed
+
+- **SKILL.md restructured** — split into a lean core file plus five on-demand reference
+  files (`api-core.md`, `callgraph.md`, `n-plus-one-hunting.md`, `pitfalls.md`,
+  `writing-tests-and-fake-data.md`). Agents load only what they need, keeping the
+  working context smaller for routine tasks.
+- **Default fetch limits reduced** — `lw-call-endpoint` and related wrappers default
+  to 10 rows (previously 20) to keep REPL output readable.
+
+### Fixed
+
+- **Hibernate `StatementInspector` patched after agent-inject boot** — `trace-sql`
+  query counts were always 0 in zero-install mode; the inspector is now registered
+  into the live `SessionFactory` after the agent boots.
+
+---
+
 ## [0.11.0] — 2026-04-04
 
 ### Added

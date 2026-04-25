@@ -318,16 +318,31 @@ git commit -m "chore: bump version to X.Y.Z and update changelog"
 
 ### 2. Build release artifacts
 
+The build order matters here — `livewire-attach` depends on the main `livewire` jar,
+which isn't on Maven Central yet. Install it locally first so the attach build can
+resolve it, then build both release artifact sets:
+
 ```bash
-bb release-jars
+bb install           # installs livewire X.Y.Z into the local Maven repo
+bb release-jars      # builds the main livewire release artifacts
+bb attach-release-jars  # builds the livewire-attach release artifacts
 ```
 
-Verify all four artifacts are reported as ✅ before continuing.
+⚠️ **Do not run `bb install` again after this point** — it overwrites `target/provided/`
+with a SNAPSHOT build, destroying the signed release artifacts. If anything goes wrong
+and you need to rebuild, you must redo `bb release-jars`, `bb attach-release-jars`,
+`bb sign-jars`, and `bb bundle` from scratch.
+
+Verify all four artifacts for each module are reported as ✅ before continuing.
 
 ### 3. Update `versions.json` with the artifact sha256
 
-After `bb release-jars` the attach bundle exists locally. Compute its checksum and
-update `versions.json` before tagging, so the sha256 is part of the tagged commit.
+After `bb attach-release-jars` the attach bundle exists locally. Compute its checksum
+and update `versions.json` before tagging, so the sha256 is part of the tagged commit.
+
+⚠️ **The sha256 must be computed from the exact jar that will be uploaded to the GitHub
+Release.** If the jar is ever rebuilt (e.g. because a previous step failed), recompute
+the sha256 — rebuilt jars are not byte-for-byte identical due to timestamps.
 
 ```bash
 # Linux
@@ -426,13 +441,17 @@ by Maven Central.** Running `bb install` overwrites the signed release artifacts
 `target/provided/` with SNAPSHOT builds, destroying them. If you proceed too early the user
 will have to re-run `bb release-jars`, `bb sign-jars`, and `bb bundle` from scratch.
 
-After Maven Central confirms, bump `project.clj` to the next development version:
+After Maven Central confirms, bump the version in **three places**:
 ```
 X.Y.Z → X.(Y+1).0-SNAPSHOT   (or X.Y.(Z+1)-SNAPSHOT for a patch release)
 ```
+- `project.clj`
+- `attach/build.clj`
+- `attach/deps.edn`
+
 Commit and install locally so dependent apps pick up the new snapshot immediately:
 ```bash
-git add project.clj
+git add project.clj attach/build.clj attach/deps.edn
 git commit -m "chore: bump version to X.(Y+1).0-SNAPSHOT"
 bb install
 ```

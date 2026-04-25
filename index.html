@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Livewire — Live nREPL wire into your Spring Boot app</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/asciinema-player.css" />
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav>
+  <a class="nav-brand" href="#">
+    <img src="images/logo-transparent.png" alt="Livewire logo" />
+  </a>
+  <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+  <ul class="nav-links" id="nav-links">
+    <li><a href="#hero">Demo</a></li>
+    <li><a href="#problem">Problem</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#human">Human-friendly</a></li>
+    <li><a href="#story">Story</a></li>
+    <li><a href="getting-started.html">Get started</a></li>
+    <li><a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener">GitHub ↗</a></li>
+  </ul>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-warning">⚡ Dev only &nbsp;·&nbsp; You've been warned</div>
+        <h1 class="hero-title">
+          Stop guessing.<br>
+          Ask the <span class="live">live</span> Spring app.
+        </h1>
+        <p class="hero-tagline">
+          Livewire embeds a Clojure nREPL server inside your running Spring Boot app —
+          giving your AI agent a <strong>live, stateful probe into the JVM</strong>.
+          Beans, queries, transactions, security context, and all.
+        </p>
+        <div class="hero-cta">
+          <a href="getting-started.html" class="btn btn-primary">⚡ Get started</a>
+          <a href="#features" class="btn btn-ghost">See what it can do →</a>
+          <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" class="btn btn-ghost">GitHub ↗</a>
+        </div>
+      </div>
+      <div class="hero-demo-wrap">
+        <div id="hero-demo"></div>
+        <p class="hero-demo-caption">
+          Recorded live against
+          <a href="https://github.com/brdloush/bloated-shelf" target="_blank" rel="noopener">bloated-shelf</a>
+          — from first connection to confirmed fix, zero restarts.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Problem ──────────────────────────────────────────────────────── -->
+<section id="problem">
+  <div class="container">
+    <div class="section-label">The problem</div>
+    <h2>The restart tax is killing your loop</h2>
+    <p class="section-sub">
+      Modern Spring Boot development has a fundamental feedback problem. And AI agents make it worse.
+    </p>
+
+    <div class="loop-arrow">
+      <span class="step bad">edit</span>
+      <span class="arrow">→</span>
+      <span class="step bad">restart (30–120s)</span>
+      <span class="arrow">→</span>
+      <span class="step bad">observe</span>
+      <span class="arrow">→</span>
+      <span class="step bad">repeat</span>
+    </div>
+
+    <div class="loop-arrow">
+      <span class="step good">edit</span>
+      <span class="arrow">→</span>
+      <span class="step struck">restart (30–120s)</span>
+      <span class="arrow">→</span>
+      <span class="step good">observe</span>
+      <span class="arrow">→</span>
+      <span class="step good">repeat</span>
+      <span class="loop-badge">⚡ zero restarts</span>
+    </div>
+
+    <p class="problem-pivot">You and your agent deserve better.</p>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <span class="emoji">🤖</span>
+        <h3>Agents guess. They don't ask.</h3>
+        <p>
+          AI coding agents reason statically about your Spring app. They read the code,
+          form a hypothesis, and apply a fix — but they can't observe the running system.
+          They're flying blind every time.
+        </p>
+      </div>
+      <div class="problem-card">
+        <span class="emoji">⏱️</span>
+        <h3>Restarts destroy state and time</h3>
+        <p>
+          Every restart costs 30 seconds to 2 minutes and destroys all in-memory state
+          accumulated during a debugging session. You lose context, momentum, and time.
+        </p>
+      </div>
+      <div class="problem-card highlight">
+        <span class="emoji">⚡</span>
+        <h3>Livewire closes the gap</h3>
+        <p>
+          With a live nREPL wired into the JVM, your agent can probe beans, run queries,
+          trace SQL, and hot-swap fixes — all against the actual running app.
+          Hypotheses are tested in seconds, not minutes.
+        </p>
+      </div>
+      <div class="problem-card">
+        <span class="emoji">🔁</span>
+        <h3>The loop you actually want</h3>
+        <div class="loop-arrow" style="margin: 1rem 0 0;">
+          <span class="step good">observe</span>
+          <span class="arrow">→</span>
+          <span class="step good">hypothesise</span>
+          <span class="arrow">→</span>
+          <span class="step good">hot-swap</span>
+          <span class="arrow">→</span>
+          <span class="step good">verify</span>
+          <span class="arrow">→</span>
+          <span class="step good">recompile</span>
+        </div>
+        <p style="margin-top:0.85rem; font-size:0.85rem; color:var(--muted)">Recompile and the watcher applies your <code>@Query</code> changes live — no REPL call needed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How it works ──────────────────────────────────────────────────── -->
+<section id="how">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2>One wire. Everything inside.</h2>
+    <p class="section-sub">
+      Livewire auto-configures when <code>livewire.enabled=true</code> is set.
+      No code changes. No Spring profiles to configure. Just a JAR dependency.
+    </p>
+
+    <div class="arch-box">
+      <span class="hl-text">Spring Boot App</span> <span style="color:var(--border-mid)">(running)</span><br>
+      &nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-green">nREPL server</span> <span style="color:var(--border-mid)">(embedded, dev only · port 7888)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-text">Livewire namespaces</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">core</span> &nbsp;&nbsp;· beans, transactions, run-as<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">trace</span> &nbsp;· SQL tracing, N+1 detection<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query</span> &nbsp;· raw SQL execution<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">jpa-query</span> · JPQL with smart entity serialization<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">mvc</span> &nbsp;&nbsp;· controller probing, JSON serialization<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">introspect</span> · entities, endpoints, schema<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">faker</span> &nbsp;· realistic test entity generation<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">callgraph</span> · blast radius, dead methods, dep fingerprinting<br>
+      <br>
+      <span class="hl-green">AI agent</span> <span style="color:var(--border-mid)">(Claude Code, ECA, …) →</span> <span class="hl-blue">clj-nrepl-eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ──────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2>Everything you need to probe a live Spring app</h2>
+    <p class="section-sub">A growing suite of namespaces. Require and go.</p>
+
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Live Bean &amp; Property Inspection</h3>
+        <p>Query any Spring bean, map the full dependency wiring graph, and inspect <code>@Transactional</code> boundaries — propagation, isolation, and read-only flags for every method. Find coupling smells and transaction misconfigurations in one call. All against the running app, no source reading required.</p>
+        <div class="code-block"><pre><span class="c">;; wiring graph — auto-filtered to your own classes</span>
+<span class="p">(</span><span class="kw">lw/all-bean-deps</span><span class="p">)</span>
+
+<span class="c">;; @Transactional surface of all app beans</span>
+<span class="p">(</span><span class="kw">lw/all-bean-tx</span><span class="p">)</span>
+<span class="c">;; =&gt; [{:bean "bookService" :methods [{:method "archiveBook" :read-only false …}  …]}  …]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗄️</div>
+        <h3>SQL &amp; JPQL Execution</h3>
+        <p>Run JPQL via the live <code>EntityManager</code> or raw SQL through the <code>DataSource</code> — with Hibernate type converters, active <code>@Filter</code>s, and real transaction semantics. Prefer JPQL for entity data; raw SQL for DB-level metadata (indexes, constraints).</p>
+        <div class="code-block"><pre><span class="c">;; JPQL — no schema prefix, entity property names, paged by default</span>
+<span class="p">(</span><span class="kw">jpa/jpa-query</span>
+  <span class="s">"SELECT b.title AS title, COUNT(lr) AS loans
+   FROM Book b JOIN b.loanRecords lr
+   GROUP BY b.id, b.title
+   ORDER BY COUNT(lr) DESC"</span>
+  <span class="kw">:page</span> 0 <span class="kw">:page-size</span> 5<span class="p">)</span>
+<span class="r">;; => [{:title "The Green Bay Tree",          :loans 7}
+;;     {:title "Let Us Now Praise Famous Men", :loans 7}
+;;     {:title "Vanity Fair",                  :loans 7} ...]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔬</div>
+        <h3>SQL Tracing &amp; N+1 Detection</h3>
+        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">trace/detect-n+1</span>
+  <span class="p">(</span><span class="kw">trace/trace-sql</span>
+    <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+      <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)))))</span>
+<span class="r">;; => {:suspicious-queries
+;;      [{:sql "select ... from book_genre ...", :count 200}
+;;       {:sql "select ... from review ...",     :count 200}]
+;;     :total-queries 481, :duration-ms 226}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <h3><code>run-as</code> — Call Secured Beans Directly</h3>
+        <p>Set a Spring <code>SecurityContext</code> for the duration of a REPL call. Call <code>@PreAuthorize</code>-guarded controllers and services directly — no more bypassing to the service layer.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"alice"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
+  <span class="p">(</span><span class="kw">.getBookById</span>
+    <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)</span>
+    <span class="p">(</span><span class="kw">long</span> 25<span class="p">)))</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔥</div>
+        <h3>Live <code>@Query</code> Hot-Swap</h3>
+        <p>Replace any Spring Data JPA <code>@Query</code> live — no restart. Fix it, verify it, write it back to source. Works by patching three internal layers of Spring Data JPA + Hibernate in concert.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">hq/hot-swap-query!</span>
+  <span class="s">"bookRepository"</span>
+  <span class="s">"findAllWithAuthorAndGenres"</span>
+  <span class="s">"SELECT DISTINCT b FROM Book b
+   JOIN FETCH b.author
+   LEFT JOIN FETCH b.genres
+   LEFT JOIN FETCH b.loanRecords"</span><span class="p">)</span>
+<span class="r">;; [hot-queries] hot-swapped ✓</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🏗️</div>
+        <h3>Hibernate Entity Introspection</h3>
+        <p>Inspect any entity's live Hibernate metamodel: table name, column mappings, relation definitions, fetch strategies. No annotation parsing — the live metamodel is the source of truth. Use <code>inspect-entity</code> for one entity or <code>inspect-all-entities</code> to get the full domain model in a single call — perfect for agents building ER diagrams.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">intro/inspect-all-entities</span><span class="p">)</span>
+<span class="r">;; => {"Book"   {:table-name "book", :identifier {...}, :properties [...]}
+;;     "Author" {:table-name "author", ...}
+;;     ...}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>HTTP Endpoint Introspection</h3>
+        <p>Discover every registered route with its auth requirements, parameter sources, and required/optional flags — all from the live <code>RequestMappingHandlerMapping</code>. Resolved <code>:required-roles</code> and <code>:required-authorities</code> let you construct a <code>lw/run-as</code> call mechanically, without parsing the raw SpEL string.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">intro/list-endpoints</span><span class="p">)</span>
+<span class="r">;; => [{:paths ["/api/books/{id}"], :methods ["GET"],
+;;      :required-roles ["MEMBER"],
+;;      :parameters [{:source :path, :required true,
+;;                    :type "java.lang.Long"}]}
+;;     ...]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">👁️</div>
+        <h3>Query Watcher — Auto-apply on Recompile</h3>
+        <p>Livewire watches your compiled output directory and automatically applies any changed <code>@Query</code> JPQL to the live JVM within 500 ms of a recompile — no REPL call needed. <strong>Last one wins:</strong> a recompile overrides a REPL swap, and a new REPL swap overrides the last recompile.</p>
+        <div class="code-block"><pre><span class="c">;; just recompile — watcher applies the change</span>
+<span class="c">;; [query-watcher] detected change</span>
+<span class="c">;; bookRepository#findByIdWithDetails</span>
+<span class="c">;; [hot-queries] watcher re-swapped ✓</span>
+
+<span class="p">(</span><span class="kw">qw/status</span><span class="p">)</span>
+<span class="r">;; => {:running? true, :disk-state-size 8}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🧩</div>
+        <h3>JPQL with Smart Entity Serialization</h3>
+        <p>Run any JPQL query via the live <code>EntityManager</code> and get back plain Clojure maps — no <code>.toString()</code> surprises. Lazy collections render as <code>"&lt;lazy&gt;"</code> rather than firing surprise queries. Scalar projections (<code>SELECT expr, …</code>) are unpacked into maps using <code>AS</code> aliases or positional <code>:col0</code>, <code>:col1</code> keys. Paged by default.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">jpa/jpa-query</span>
+  <span class="s">"SELECT b.title AS title, COUNT(lr) AS loans
+   FROM Book b JOIN b.loanRecords lr
+   GROUP BY b.id, b.title
+   ORDER BY COUNT(lr) DESC"</span>
+  <span class="kw">:page</span> 0 <span class="kw">:page-size</span> 5<span class="p">)</span>
+<span class="r">;; => [{:title "Vanity Fair",  :loans 7}
+;;     {:title "The Green Bay Tree", :loans 7} ...]</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Controller Endpoint Probing</h3>
+        <p>Call any Spring bean method under a live <code>SecurityContext</code> and get back proper JSON — serialized with the exact same Jackson <code>ObjectMapper</code> Spring MVC uses. List results are capped at 20 by default and returned with <code>{:total :returned :content-size :content-size-gzip}</code> metadata so you always know the full picture.</p>
+        <div class="code-block"><pre>lw-call-endpoint bookController getBooks ROLE_MEMBER
+<span class="r">;; ^{:total 200, :returned 20,
+;;   :content-size 515299, :content-size-gzip 82995}
+;; [{"id" 1, "title" "All the King's Men",
+;;   "author" {"id" 6, ...}, "genres" [...]} ...]</span>
+
+<span class="c">;; or from the REPL:</span>
+<span class="p">(</span><span class="kw">mvc/serialize</span>
+  <span class="p">(</span><span class="kw">lw/run-as</span> <span class="p">[</span><span class="s">"u"</span> <span class="s">"ROLE_MEMBER"</span><span class="p">]</span>
+    <span class="p">(</span><span class="kw">.getBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookController"</span><span class="p">)))</span>
+  <span class="kw">:limit</span> 3<span class="p">)</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔎</div>
+        <h3>Mutation Observer — what did that service call write?</h3>
+        <p>Snapshot an entity before and after calling a service method. The thunk runs in a transaction that always rolls back — the database is never touched — but the diff captures exactly what changed.</p>
+        <p>Useful for discovering unintended writes, verifying a fix changed exactly the right fields, or systematically calling suspect service methods until the guilty one confesses.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">q/diff-entity</span> <span class="s">"Book"</span> <span class="n">100</span>
+  <span class="p">(</span><span class="kw">fn</span> <span class="p">[]</span> <span class="p">(</span><span class="kw">.archiveBook</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)</span> <span class="n">100</span><span class="p">)))</span>
+<span class="r">;; => {:before {:archived false, :archivedAt nil, ...}
+;;     :after  {:archived true,  :archivedAt "2026-03-28T16:16:20", ...}
+;;     :changed {:archived   [false true]
+;;               :archivedAt [nil "2026-03-28T16:16:20"]}}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>Method-level Dependency Fingerprinting</h3>
+        <p>For each method on a bean, see exactly which injected dependencies it touches in bytecode. <code>:dep-frequency</code> ranks deps by how many methods use them — count-1 deps are prime extraction candidates. <code>:intra-calls?</code> adds which siblings each method calls; <code>:callers?</code> adds the inverse. Kotlin <code>$default</code> synthetic call variants resolved automatically.</p>
+        <div class="code-block"><pre><span class="p">(</span><span class="kw">cg/method-dep-map</span> <span class="s">"adminService"</span><span class="p">)</span>
+<span class="r">;; :methods    [{:method "getSystemStats"
+;;               :deps ["authorRepository" "bookRepository" ...]
+;;               :orchestrator? false} ...]
+;; :dep-frequency [{:dep "bookRepository"
+;;                  :used-by-count 2} ...]</span>
+
+<span class="c">;; Who has no external callers? Split :dead from :internal-only</span>
+<span class="p">(</span><span class="kw">cg/dead-methods</span> <span class="s">"bookService"</span><span class="p">)</span>
+<span class="r">;; {:dead [] :internal-only [{:method "archiveBook"
+;;                             :intra-callers ["adminHelper"]}]
+;;  :warnings ["2 @EventListener beans detected — ...]}</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎲</div>
+        <h3>Test Data Generation — build valid entities on the fly</h3>
+        <p>Construct realistic, persistable Hibernate entity instances from the REPL — no fixture files, no test annotations, no restart. 54+ heuristic patterns match property names and types to <code>net.datafaker</code> providers (person, address, financial, content, and more). <code>jakarta.validation.constraints</code> annotations are respected at generation time — <code>@Min</code>/<code>@Max</code> clamp numeric ranges, <code>@Email</code> ensures valid addresses, <code>@Size</code> clamps string length — and overrides that violate <code>@NotNull</code> or <code>@Min</code>/<code>@Max</code> throw immediately with a clear message instead of a cryptic Hibernate error at flush time. Lookup tables (like <code>Genre</code>) are fetched from the DB to avoid unique-constraint violations. Use <code>build-test-recipe</code> to capture every generated value with its Java type and repo bean name — the exact seed for <code>@BeforeEach</code> setup and assertions.</p>
+        <div class="code-block"><pre><span class="c">;; Simple entity — all scalar fields filled with realistic data</span>
+<span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Author"</span><span class="p">)</span>
+
+<span class="c">;; Capture full graph as typed recipe — seed for integration tests</span>
+<span class="p">(</span><span class="kw">faker/build-test-recipe</span> <span class="s">"Review"</span><span class="p">)</span>
+<span class="c">;; =&gt; {:Review {:repo "reviewRepository"</span>
+<span class="c">;;              :fields {:rating {:type "short" :value 5} …}}}</span>
+
+<span class="c">;; Speculative: get a real id, call your service, roll everything back</span>
+<span class="p">(</span><span class="kw">let</span> <span class="p">[</span><span class="n">review</span> <span class="p">(</span><span class="kw">faker/build-entity</span> <span class="s">"Review"</span>
+                <span class="p">{</span><span class="kw">:auto-deps?</span> <span class="hl-blue">true</span> <span class="kw">:persist?</span> <span class="hl-blue">true</span> <span class="kw">:rollback?</span> <span class="hl-blue">true</span><span class="p">})]</span>
+  <span class="p">(</span><span class="kw">.computeRating</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"ratingService"</span><span class="p">)</span> <span class="p">(</span><span class="kw">.getId</span> <span class="n">review</span><span class="p">)))</span></pre></div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗂️</div>
+        <h3>Repository → Entity Mapping — no convention guessing</h3>
+        <p>Spring Data repository names follow a convention that breaks down with custom names, multi-module projects, or unfamiliar codebases. <code>repo-entity</code> and <code>all-repo-entities</code> give the authoritative answer at runtime — entity class, fully-qualified name, and ID type — in one call. No source reading, no guessing.</p>
+        <div class="code-block"><pre><span class="c">;; What entity does this repo manage?</span>
+<span class="p">(</span><span class="kw">lw/repo-entity</span> <span class="s">"bookRepository"</span><span class="p">)</span>
+<span class="c">;; =&gt; {:bean "bookRepository" :entity "Book"</span>
+<span class="c">;;     :entity-fqn "com.example.domain.Book" :id-type "Long"}</span>
+
+<span class="c">;; Full repo → entity map for the whole application</span>
+<span class="p">(</span><span class="kw">lw/all-repo-entities</span><span class="p">)</span>
+<span class="c">;; =&gt; [{:bean "authorRepository" :entity "Author" …}</span>
+<span class="c">;;     {:bean "bookRepository"   :entity "Book"   …} …]</span></pre></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Human-friendly ────────────────────────────────────────────────── -->
+<section id="human">
+  <div class="container">
+    <div class="section-label">No AI required</div>
+    <h2>Agents welcome. Humans too.</h2>
+    <p class="section-sub">An nREPL server embedded in your app — bring your own client.</p>
+
+    <div class="human-block">
+      <div class="human-card agent">
+        <div class="card-icon">🤖</div>
+        <h3>AI agent</h3>
+        <p>Claude, Cursor, or any coding assistant with an nREPL tool can connect, query beans, trace SQL, and hot-swap queries — autonomously, in a feedback loop.</p>
+      </div>
+      <div class="human-card human">
+        <div class="card-icon">🧑‍💻</div>
+        <h3>You</h3>
+        <p>Open Calva, CIDER, or any nREPL client and explore the live app yourself. Poke at beans, run transactions, trace a suspicious endpoint — no AI in the loop unless you want one.</p>
+      </div>
+    </div>
+
+    <p class="human-tagline">The experience is richer with an agent driving it, but the wire is open to everyone. Your curiosity is the only prerequisite.</p>
+  </div>
+</section>
+
+<!-- ── Story ──────────────────────────────────────────────────────────── -->
+<section id="story">
+  <div class="container">
+    <div class="section-label">Real-world story</div>
+    <h2>From "I heard it's slow"<br>to confirmed fix. 72 seconds.</h2>
+
+    <div class="story-box">
+      <p>
+        "Call the <code>getBooksByGenre</code> endpoint — I heard it's a slow one. Investigate."
+        The agent connected via Livewire, listed all endpoints to orient itself, then
+        grabbed a valid genre ID from the live database and started tracing.
+      </p>
+      <p>
+        First attempt hit an <strong>AuthorizationDeniedException</strong> — the endpoint
+        requires <code>ROLE_MEMBER</code>, not admin. The agent corrected its
+        <code>run-as</code> call and retried. <strong>detect-n+1</strong> came back
+        with <strong>98 queries for 20 books</strong>: genres, reviews, authors, and each
+        reviewer's member record all loading separately in a loop.
+      </p>
+      <p>
+        <strong>hq/list-queries</strong> showed the culprit immediately —
+        <code>findByGenreId</code> had a bare JPQL with no <code>JOIN FETCH</code> at all.
+        The agent wrote a fix and hot-swapped it live. First attempt bounced with a
+        JPQL grammar error; the agent self-corrected and swapped again. Query count:
+        <strong>98 → 1</strong>. Verified across five genres. Fix written to
+        <code>BookRepository.java</code>, hot-swap reset.
+      </p>
+      <div class="result">72 seconds. Zero restarts. Root cause found, verified, and fixed.</div>
+    </div>
+
+    <div class="story-stats">
+      <div class="stat">
+        <span class="stat-num">98→1</span>
+        <div class="stat-label">SQL queries per request</div>
+      </div>
+      <div class="stat">
+        <span class="stat-num">0</span>
+        <div class="stat-label">App restarts needed</div>
+      </div>
+      <div class="stat">
+        <span class="stat-num">72s</span>
+        <div class="stat-label">Total investigation time</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<!-- ── Screenshots ───────────────────────────────────────────────────── -->
+<section id="screenshots">
+  <div class="container">
+    <div class="section-label">In action</div>
+    <h2>See it happen</h2>
+    <p class="section-sub">A developer runs the app locally with anonymized seed data. The AI agent connects via Livewire and gets to work.</p>
+
+    <div class="screenshots-grid">
+      <div class="screenshot-card" onclick="openLightbox(this)">
+        <img src="images/01-connecting-to-nrepl.png" alt="Connecting to the nREPL" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
+        <div class="screenshot-caption">Connecting to the live app via nREPL</div>
+      </div>
+      <div class="screenshot-card" onclick="openLightbox(this)">
+        <img src="images/02-listing-endpoints.png" alt="Listing endpoints" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
+        <div class="screenshot-caption">Listing all endpoints from the REPL</div>
+      </div>
+      <div class="screenshot-card" onclick="openLightbox(this)">
+        <img src="images/03-detection-of-nplus1.png" alt="N+1 detection" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
+        <div class="screenshot-caption">Detecting the N+1 query problem</div>
+      </div>
+      <div class="screenshot-card" onclick="openLightbox(this)">
+        <img src="images/04-hypothesis-verification-and-fix.png" alt="Hypothesis verification and fix" loading="lazy" />
+        <div class="screenshot-zoom-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><line x1="15.5" y1="15.5" x2="21" y2="21"/><line x1="10.5" y1="7.5" x2="10.5" y2="13.5"/><line x1="7.5" y1="10.5" x2="13.5" y2="10.5"/></svg></div>
+        <div class="screenshot-caption">Verifying the hypothesis and hot-fixing live</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Warning ───────────────────────────────────────────────────────── -->
+<section id="warning">
+  <div class="container">
+    <div class="section-label">⚠ Before you proceed</div>
+    <h2>Know what you're wiring up.</h2>
+
+    <div class="warning-box">
+      <div class="warning-title">⚠ Data sensitivity</div>
+      <p>
+        When an AI agent drives Livewire, <strong>everything it observes gets sent to a remote model</strong>
+        — query results, entity field values, stack traces, bean state. If your dev database contains
+        real customer data, PII, credentials, or anything sensitive, the AI will see it and transmit it.
+        Use <strong>anonymized seed data</strong>. Always.
+      </p>
+      <p>
+        The screenshots on this page were taken against a synthetic dataset built specifically for this purpose.
+        Build yours too.
+      </p>
+
+      <div class="warning-title" style="margin-top:1.5rem">⚠ Execution power</div>
+      <p>
+        nREPL is not a read-only probe. It is a <strong>full code execution environment</strong>
+        — equivalent to shell access to your running JVM. An agent (or a human) can read files,
+        write to the database, call external services, or do anything the JVM process is allowed to do.
+      </p>
+      <p>
+        <strong>Bring your own security.</strong>
+        <strong>Bring your own sandbox.</strong>
+        <strong>Bring your own brain.</strong>
+        Think about what you expose, to whom, and why.
+      </p>
+
+      <div class="warning-verdict">Dev only. You have been warned.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Zero-install try-it ────────────────────────────────────────────── -->
+<section id="try-it">
+  <div class="container">
+    <div class="section-label">Just curious?</div>
+    <h2>Try it first — no install needed.</h2>
+    <p class="section-sub">
+      Run this against any Spring Boot app already on your machine.
+      No dependency, no code changes, no restart.
+    </p>
+    <div class="arch-box" style="margin-top: 1.5rem;">
+      <span class="hl-green">$ jshell</span><br>
+      <span style="color:var(--muted)">jshell&gt; </span><span class="hl-blue">/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh</span><br>
+      <br>
+      <span style="color:var(--muted)">Downloads a small agent bundle, lists running JVMs, lets you pick one.</span><br>
+      <span style="color:var(--muted)">Once attached: <span class="hl-blue">info()</span>, <span class="hl-blue">beans()</span>, <span class="hl-blue">eval()</span>, <span class="hl-blue">sql()</span>, <span class="hl-blue">demo()</span></span>
+    </div>
+    <p style="margin-top: 1.25rem; color: var(--muted); font-size: 0.9rem;">
+      ⚠️ <strong style="color: var(--text)">Java 21+ note:</strong> start your target app with
+      <code>-XX:+EnableDynamicAgentLoading</code> to allow dynamic agent injection.<br>
+      This path is great for quick exploration. For regular use — repeatable runs,
+      full SQL tracing, query-watcher — the dependency install below is the recommended way.
+    </p>
+  </div>
+</section>
+
+<!-- ── Install ───────────────────────────────────────────────────────── -->
+<section id="install">
+  <div class="container">
+    <div class="section-label">Get started</div>
+    <h2>Three steps. One property.</h2>
+    <p class="section-sub">No code changes to your app. No Spring profiles to configure.</p>
+
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="step-num">1</div>
+        <div class="install-step-body">
+          <h3>Add the dependency</h3>
+          <p>Add to your <code>pom.xml</code> or <code>build.gradle</code>.</p>
+          <p class="install-footnote">The JAR is <strong>36 KB</strong>. It brings in the Clojure runtime and nREPL — everything else (Spring, Hibernate, ASM) is already in your app. Compatible with <strong>Spring Boot 3.x</strong> (Hibernate 6) and <strong>Spring Boot 4.x</strong> (Hibernate 7). Requires Java 17+.</p>
+        </div>
+        <div class="code-block"><pre><span class="c">&lt;!-- Maven --&gt;</span>
+<span class="kw">&lt;dependency&gt;</span>
+  &lt;groupId&gt;<span class="n">net.brdloush</span>&lt;/groupId&gt;
+  &lt;artifactId&gt;<span class="n">livewire</span>&lt;/artifactId&gt;
+  &lt;version&gt;<span class="n">0.12.0</span>&lt;/version&gt;
+<span class="kw">&lt;/dependency&gt;</span></pre></div>
+      </div>
+
+      <div class="install-step">
+        <div class="step-num">2</div>
+        <div class="install-step-body">
+          <h3>Enable it locally</h3>
+          <p>One property in your local profile. Never committed, never shipped.</p>
+        </div>
+        <div class="code-block"><pre><span class="c"># application-local.properties</span>
+<span class="kw">livewire.enabled</span>=<span class="n">true</span>
+
+<span class="c"># optional: change the port (default 7888)</span>
+<span class="kw">livewire.nrepl.port</span>=<span class="n">7888</span></pre></div>
+      </div>
+
+      <div class="install-step">
+        <div class="step-num">3</div>
+        <div class="install-step-body">
+          <h3>Connect &amp; probe</h3>
+          <p>From <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>, <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>, or any nREPL client.</p>
+        </div>
+        <div class="code-block"><pre><span class="c"># all aliases are pre-loaded at startup</span>
+<span class="c"># lw, q, intro, trace, qw, hq, jpa, mvc, faker, cg</span>
+
+<span class="c"># lw-start discovers the nREPL + prints app info</span>
+lw-start
+<span class="r">;; Discovered nREPL servers:
+;;   localhost:7888 (clj) - /your-project
+;; => {:application-name "your-app", ...}</span></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-logo">
+      <img src="images/logo-transparent.png" alt="Livewire" />
+      Livewire
+    </div>
+    <p class="footer-warning">
+      <strong>Dev only. Not for production.</strong>
+      You've been warned.
+    </p>
+    <p style="margin-top:1rem; font-size:0.85rem;">
+      <a href="https://github.com/brdloush/livewire" target="_blank" rel="noopener" style="color:var(--muted);">GitHub ↗</a>
+    </p>
+    <p style="margin-top:1.25rem;">
+      <a href="https://ko-fi.com/A0A11W6698" target="_blank" rel="noopener"
+         style="box-shadow:1px 1px 0px rgba(0,0,0,0.2);line-height:36px;min-width:150px;display:inline-block;background-color:#72a4f2;padding:2px 12px;text-align:center;border-radius:7px;color:#fff;cursor:pointer;border:0;font-family:'Quicksand',Helvetica,'Century Gothic',sans-serif;text-decoration:none;text-shadow:none;font-weight:700;font-size:14px;vertical-align:middle;">
+        <img src="images/kofi-cup.png" alt="" class="kofi-fallback-img" style="height:13px;width:20px;transform:scale(1.25);vertical-align:middle;margin-right:5px;margin-bottom:3px;border:none;"/>Support me on Ko-fi
+      </a>
+    </p>
+  </div>
+</footer>
+
+<!-- ── Lightbox ──────────────────────────────────────────────────────── -->
+<div id="lightbox" role="dialog" aria-modal="true" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()" aria-label="Close">✕</button>
+  <img id="lightbox-img" src="" alt="" onclick="closeLightbox()" />
+</div>
+
+<script src="js/asciinema-player.min.js"></script>
+<script>
+  AsciinemaPlayer.create(
+    'screencasts/livewire-n1-investigation.cast',
+    document.getElementById('hero-demo'),
+    {
+      theme: 'monokai',
+      poster: 'npt:170',
+      autoPlay: false,
+      loop: false,
+      idleTimeLimit: 2,
+      speed: 1.5,
+      fit: 'width',
+      terminalFontSize: 'small'
+    }
+  );
+</script>
+
+<script>
+  function openLightbox(card) {
+    const img = card.querySelector('img');
+    document.getElementById('lightbox-img').src = img.src;
+    document.getElementById('lightbox-img').alt = img.alt;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeLightbox(); closeMenu(); }
+  });
+
+  const hamburger = document.getElementById('nav-hamburger');
+  const navLinks  = document.getElementById('nav-links');
+
+  function closeMenu() {
+    hamburger.classList.remove('open');
+    navLinks.classList.remove('open');
+  }
+
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    navLinks.classList.toggle('open');
+  });
+
+  // Close menu when a link is tapped
+  navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+
+  // Close menu when clicking outside the nav
+  document.addEventListener('click', e => {
+    if (!e.target.closest('nav')) closeMenu();
+  });
+</script>
+
+</body>
+</html>

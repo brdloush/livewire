@@ -184,7 +184,7 @@ That's it. No annotations, no Spring profiles to configure, no code changes.
 M-x cider-connect-clj  →  localhost  →  7888
 ```
 
-All 8 namespaces are pre-aliased in the `user` namespace at startup — no `require` needed:
+All namespaces are pre-aliased in the `user` namespace at startup — no `require` needed:
 
 | Alias | Namespace |
 |---|---|
@@ -222,7 +222,7 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
 ```
 
 Then point your agent at port 7888 and load the Livewire skill (see the SKILL.md section
-below). All 8 namespaces are pre-aliased at startup — no manual `require` needed.
+below). All namespaces are pre-aliased at startup — no manual `require` needed.
 
 Start every session with `lw-start` — it discovers the nREPL, prints app info, and confirms
 the connection is live:
@@ -791,7 +791,7 @@ a solid starting point for an agentic session.
 [`skills/livewire/SKILL.md`](skills/livewire/SKILL.md) is the most important file
 in this repository if you're working with an AI agent.
 
-It covers the full API across all eight namespaces, worked examples, known pitfalls,
+It covers the full API, worked examples, known pitfalls,
 and escalation strategies for debugging without restarts. It's written for agents —
 but it's perfectly readable by humans too.
 
@@ -802,9 +802,10 @@ With it, the agent knows exactly what tools it has, how to use them, and what to
 
 ### Make it discoverable
 
-The skill is a **directory** — `skills/livewire/` — containing `SKILL.md` and the `bin/`
-CLI wrapper scripts (`lw-jpa-query`, `lw-call-endpoint`, `lw-sql`, etc.). Copy the whole
-thing, not just the markdown file.
+The skill is a **directory** — `skills/livewire/` — containing `SKILL.md`, the `bin/`
+CLI wrapper scripts (`lw-jpa-query`, `lw-call-endpoint`, `lw-sql`, etc.), and the
+`references/` files that the agent loads on demand for specific topics. Copy the whole
+directory, not just the markdown file.
 
 First, clone this repository (you don't need to build anything — you just need the files):
 
@@ -858,7 +859,7 @@ Quick namespace cheatsheet:
 
 ## What's next
 
-- 📖 Read the full [SKILL.md](skills/livewire/SKILL.md) — every function, pitfall, and worked example across all ten namespaces
+- 📖 Read the full [SKILL.md](skills/livewire/SKILL.md) — every function, pitfall, and worked example across all namespaces
 - 🚀 Try the [bloated-shelf](https://github.com/brdloush/bloated-shelf) demo app — a realistic N+1 scenario ready to investigate
 - 🐛 Found a bug or have an idea? [Open an issue](https://github.com/brdloush/livewire/issues)
 

@@ -161,7 +161,9 @@
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">mvc</span> &nbsp;&nbsp;· controller probing, JSON serialization<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">introspect</span> · entities, endpoints, schema<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">hot-queries</span> · live @Query swap<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">query-watcher</span> · auto-apply @Query on recompile<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">├──</span> <span class="hl-blue">faker</span> &nbsp;· realistic test entity generation<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--border-mid)">└──</span> <span class="hl-blue">callgraph</span> · blast radius, dead methods, dep fingerprinting<br>
       <br>
       <span class="hl-green">AI agent</span> <span style="color:var(--border-mid)">(Claude Code, ECA, …) →</span> <span class="hl-blue">clj-nrepl-eval</span> <span style="color:var(--border-mid)">→</span> <span class="hl-green">nREPL</span> <span style="color:var(--border-mid)">→</span> <span class="hl-text">live app</span>
     </div>
@@ -173,7 +175,7 @@
   <div class="container">
     <div class="section-label">Features</div>
     <h2>Everything you need to probe a live Spring app</h2>
-    <p class="section-sub">Ten namespaces. Require and go.</p>
+    <p class="section-sub">A growing suite of namespaces. Require and go.</p>
 
     <div class="features-grid">
 
@@ -519,6 +521,30 @@
   </div>
 </section>
 
+<!-- ── Zero-install try-it ────────────────────────────────────────────── -->
+<section id="try-it">
+  <div class="container">
+    <div class="section-label">Just curious?</div>
+    <h2>Try it first — no install needed.</h2>
+    <p class="section-sub">
+      Run this against any Spring Boot app already on your machine.
+      No dependency, no code changes, no restart.
+    </p>
+    <div class="arch-box" style="margin-top: 1.5rem;">
+      <span class="hl-green">$ echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell</span><br>
+      <br>
+      <span style="color:var(--muted)">Downloads a small agent bundle, lists running JVMs, lets you pick one.</span><br>
+      <span style="color:var(--muted)">Once attached: <span class="hl-blue">info()</span>, <span class="hl-blue">beans()</span>, <span class="hl-blue">eval()</span>, <span class="hl-blue">sql()</span>, <span class="hl-blue">demo()</span></span>
+    </div>
+    <p style="margin-top: 1.25rem; color: var(--muted); font-size: 0.9rem;">
+      ⚠️ <strong style="color: var(--text)">Java 21+ note:</strong> start your target app with
+      <code>-XX:+EnableDynamicAgentLoading</code> to allow dynamic agent injection.<br>
+      This path is great for quick exploration. For regular use — repeatable runs,
+      full SQL tracing, query-watcher — the dependency install below is the recommended way.
+    </p>
+  </div>
+</section>
+
 <!-- ── Install ───────────────────────────────────────────────────────── -->
 <section id="install">
   <div class="container">
@@ -561,7 +587,7 @@
           <h3>Connect &amp; probe</h3>
           <p>From <a href="https://www.anthropic.com/claude-code" target="_blank" rel="noopener">Claude Code</a>, <a href="https://eca.dev" target="_blank" rel="noopener">ECA</a>, or any nREPL client.</p>
         </div>
-        <div class="code-block"><pre><span class="c"># all 10 aliases are pre-loaded at startup</span>
+        <div class="code-block"><pre><span class="c"># all aliases are pre-loaded at startup</span>
 <span class="c"># lw, q, intro, trace, qw, hq, jpa, mvc, faker, cg</span>
 
 <span class="c"># lw-start discovers the nREPL + prints app info</span>

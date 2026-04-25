@@ -310,6 +310,31 @@
   </div>
 </section>
 
+<!-- ── Zero-install try-it ────────────────────────────────────────────── -->
+<section id="try-it" style="padding-top: 0; padding-bottom: 0;">
+  <div class="container">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 1rem;">
+      <div class="gs-substep-label" style="margin-bottom: 0.6rem;">Just want to try it first?</div>
+      <p style="color: var(--muted); font-size: 0.95rem; margin-bottom: 1rem;">
+        Run this against any Spring Boot app already running on your machine —
+        <strong style="color: var(--text)">no dependency, no code changes, no restart</strong>.
+        Great for a quick look before committing to the full install.
+      </p>
+      <div class="code-block" style="margin-bottom: 1rem;"><pre>echo "/open https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/attach.jsh" | jshell</pre></div>
+      <p style="color: var(--muted); font-size: 0.88rem; margin: 0;">
+        ⚠️ <strong style="color: var(--text)">Java 21+:</strong> start your app with
+        <code>-XX:+EnableDynamicAgentLoading</code> to allow dynamic agent injection.
+        Once attached you get <code>info()</code>, <code>beans()</code>, <code>eval()</code>,
+        <code>sql()</code>, and <code>demo()</code> at the jshell prompt.<br>
+        <span style="margin-top: 0.4rem; display: block;">
+          For repeated use, full SQL tracing, and the query-watcher, follow the steps below —
+          the dependency install is the recommended path.
+        </span>
+      </p>
+    </div>
+  </div>
+</section>
+
 <!-- ── Steps ─────────────────────────────────────────────────────────── -->
 <section id="steps" style="padding-top: 2rem;">
   <div class="container">
@@ -380,10 +405,12 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git \
               <div>
                 <div class="gs-substep-label">Copy the skill into your project</div>
                 <p>
-                  The skill is the agent's cheat-sheet for Livewire's full API. It ships with
-                  two parts: <code>SKILL.md</code> (the API reference) and <code>bin/</code>
-                  (shell wrapper scripts like <code>lw-start</code>, <code>lw-call-endpoint</code>,
-                  <code>lw-jpa-query</code>, and more). Copy or symlink both.
+                  The skill is the agent's cheat-sheet for Livewire's full API. It ships as
+                  a directory with three parts: <code>SKILL.md</code> (the lean core reference),
+                  <code>bin/</code> (shell wrapper scripts like <code>lw-start</code>,
+                  <code>lw-call-endpoint</code>, <code>lw-jpa-query</code>, and more), and
+                  <code>references/</code> (topic-specific deep-dives the agent loads on demand).
+                  Copy or symlink the whole directory.
                 </p>
                 <p style="margin-top: 0.6rem; overflow-wrap: break-word;">
                   The skill is designed for agents that support slash-command skills
@@ -847,7 +874,7 @@ mvn spring-boot:run \
         <p>
           The <a href="https://github.com/brdloush/livewire/blob/main/skills/livewire/SKILL.md" target="_blank" rel="noopener"><code>SKILL.md</code></a>
           you copied into your project is the authoritative
-          API reference — all ten namespaces, every function signature, known pitfalls,
+          API reference — every namespace, every function signature, known pitfalls,
           and worked examples. Read it once; Claude reads it every session.
         </p>
       </div>

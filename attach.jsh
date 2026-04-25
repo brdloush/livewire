@@ -6,7 +6,7 @@
 
 // ─── bootstrap ────────────────────────────────────────────────────────────────
 
-String  _LW_VERSION     = "0.12.0-SNAPSHOT";
+String  _LW_VERSION     = "0.13.0-SNAPSHOT";
 String  _LW_VERSIONS_URL =
     "https://raw.githubusercontent.com/brdloush/livewire/refs/heads/main/versions.json";
 

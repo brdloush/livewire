@@ -257,8 +257,12 @@ The method body always reveals the actual lookup.
    name is unknown) to confirm the exact entity name, field names, and table structure before
    writing any JPQL. Never guess entity or field names — `Genre` might be `BookGenre`,
    `id` might be `genreCode`. One inspect call prevents multiple failed query attempts.
-4. Only then write a JPQL query targeting the confirmed entity and field names
-5. Call the method with valid IDs
+4. **Look up real IDs from the DB** — run `lw-sql "SELECT id, name FROM <table> ORDER BY id LIMIT 5"`
+   to get actual parameter values. Never guess IDs — a lucky hit (genre 1 happened to be
+   "Science Fiction" and returned results) still gives the user no way to reproduce the call
+   with a different value, and a miss silently returns 404.
+5. Only then write a JPQL query targeting the confirmed entity and field names
+6. Call the method with valid IDs from the DB lookup
 
 ```bash
 # ❌ guessing entity/field names directly

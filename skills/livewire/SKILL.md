@@ -15,8 +15,25 @@ the JVM beats static analysis every time.
 ## Session start behaviour
 
 ### On skill load
-Say exactly one line — nothing more:
-> Livewire skill loaded. Run `lw-start` to connect to a running app, or ask `lw-help` for an overview of what Livewire can do.
+**Step 1 — discover:** Run this single chain — it checks known locations then the project tree, and stops at the first match:
+
+```bash
+if [ -f ~/.claude/skills/livewire/SKILL.md ]; then echo ~/.claude/skills/livewire
+elif [ -f ~/.pi/agent/skills/livewire/SKILL.md ]; then echo ~/.pi/agent/skills/livewire
+elif [ -f "/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/skills/livewire/SKILL.md" ]; then echo "/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/skills/livewire"
+elif [ -f "$PWD/skills/livewire/SKILL.md" ]; then echo "$PWD/skills/livewire"
+elif [ -f "$PWD/../skills/livewire/SKILL.md" ]; then echo "$PWD/../skills/livewire"
+else find ~ -path '*/livewire/SKILL.md' 2>/dev/null | head -1
+fi
+```
+**Fallback:** If none of the above match, only then run `find ~ -path '*/livewire/SKILL.md' 2>/dev/null`.
+
+**Step 2 — remember:** That directory is `$SKILL_DIR`. It is your single source of truth for **everything** relative to this skill — wrapper scripts are at `$SKILL_DIR/bin/`, reference files are at `$SKILL_DIR/references/`. Use it everywhere instead of any hardcoded path. Before acting on any query, tracing, or endpoint call, **read the referenced file** — the pitfalls section catches method name guessing, Cartesian products, lazy results, shell escaping, and `trace/trace-sql` traps that cause 10+ failed attempts.
+
+**Step 3 — confirm:** Say exactly this (replacing `$SKILL_DIR` with the actual full path you found):
+> Livewire skill loaded from <actual-path>. Run `lw-start` to connect to a running app, or ask `lw-help` for an overview of what Livewire can do.
+
+**Never hardcode `~/.claude/skills/livewire/`. The skill can live anywhere.**
 
 ### On `lw-help` (or any "what can Livewire do?" question)
 Give a brief prose overview — no headers, no tables, no bullet soup:
@@ -33,6 +50,29 @@ If `lw-start` finds no server, say so briefly and suggest the user start the app
 
 ---
 
+## General interaction rules
+
+This skill's purpose is to be an **interactive assistant**. The user expects help, not
+a report.
+
+**Minimum reasonable effort.** When the user asks a question, provide the smallest amount
+of investigation that leads to a correct answer. Do not chase every variant, every angle,
+or every follow-up step unless the user signals they want it. If `lw-trace-nplus1` gives
+you the diagnosis, that's enough — present it and stop. Do not proceed to test fixes
+unless the user asks.
+
+**Variants = strong signal.** The user signals they want fix variants by explicitly asking
+for them ("fix it", "what are my options", "variants?"). Do not present fix options
+without that signal — even when the skill's reference files contain extensive variant
+tables. Those tables are there so you can answer the user's question *when they ask it*,
+not to preempt their request.
+
+**Stop at the answer.** A diagnosis that explains "what", "where", "how many", and
+"why" is complete. The user may agree with the diagnosis and want to fix it themselves.
+They may ask for variants. They may not. Don't guess.
+
+---
+
 ## Trigger Rules
 
 MUST read the referenced file BEFORE acting on any question matching the keyword.
@@ -40,11 +80,11 @@ This is not optional — static knowledge is unreliable for live-app questions.
 
 | Keywords in user query | File to read | File path |
 |---|---|---|
-| **`N+1` `n+1` `query count` `N plus one` `slow query`** | **N+1 Hunting** | **`references/n-plus-one-hunting.md`** |
-| `blast radius` `call graph` `blast-radius` `inbound` `dead code` `split` `method dependencies` | Call Graph | `references/callgraph.md` |
-| `hot swap` `hot-swap` `@Query` `jpql` `query watcher` `swapped` | API Core | `references/api-core.md` |
-| `faker` `fake data` `build-entity` `build-test-recipe` `test data` | Writing Tests & Fake Data | `references/writing-tests-and-fake-data.md` |
-| `pitfall` `error` `exception` `unexpected` `what went wrong` | Pitfalls | `references/pitfalls.md` |
+| **`N+1` `n+1` `query count` `N plus one` `slow query` `Cartesian product` `row duplication` `JOIN FETCH` two collections** `id-first` `ID-first` | **N+1 Hunting** | **`$SKILL_DIR/references/n-plus-one-hunting.md`** |
+| `blast radius` `call graph` `blast-radius` `inbound` `dead code` `split` `method dependencies` | Call Graph | `$SKILL_DIR/references/callgraph.md` |
+| `hot swap` `hot-swap` `@Query` `jpql` `query watcher` `swapped` `jpa/jpa-query` | API Core | `$SKILL_DIR/references/api-core.md` |
+| `faker` `fake data` `build-entity` `build-test-recipe` `test data` | Writing Tests & Fake Data | `$SKILL_DIR/references/writing-tests-and-fake-data.md` |
+| `pitfall` `error` `exception` `unexpected` `what went wrong` | Pitfalls | `$SKILL_DIR/references/pitfalls.md` |
 
 ---
 
@@ -56,7 +96,7 @@ If you skip the read and produce a wrong result, the most likely cause is that y
 
 ### ⚠️ N+1 HUNTING (keywords: `N+1`, `n+1`, `slow query`, `query count`)
 
-**Read `references/n-plus-one-hunting.md` before writing any trace expression.** That file contains:
+**Read `$SKILL_DIR/references/n-plus-one-hunting.md` before writing any trace expression.** That file contains:
 - The exact procedure for N+1 hunting (service method, not controller)
 - Why `jpa/jpa-query` returns **lazy** results → wrap in `doall` or trace count is always 0
 - The **Cartesian product trap** — `JOIN FETCH` on two collections duplicates rows
@@ -72,11 +112,11 @@ Load these on demand — read the relevant file before working in that area:
 
 | File | Read when... |
 |---|---|
-| `references/api-core.md` | Working with beans, transactions, security contexts, entity/endpoint introspection, SQL tracing, JPQL queries, mutation observation (`diff-entity`), or hot-swapping `@Query` methods |
-| `references/callgraph.md` | Analysing blast radius of a change, planning a service split, or detecting dead/internal-only methods |
-| `references/writing-tests-and-fake-data.md` | Writing integration tests or prototyping test data with `faker/build-entity` / `faker/build-test-recipe` |
-| `references/pitfalls.md` | You hit an unexpected error, are about to write a query, or want to verify correct conventions for data access, security, or argument passing |
-| `references/n-plus-one-hunting.md` | Investigating N+1 query problems, measuring query counts, or validating that a JPQL / `JOIN FETCH` fix eliminates excess queries |
+| `$SKILL_DIR/references/api-core.md` | Working with beans, transactions, security contexts, entity/endpoint introspection, SQL tracing, JPQL queries, mutation observation (`diff-entity`), or hot-swapping `@Query` methods |
+| `$SKILL_DIR/references/callgraph.md` | Analysing blast radius of a change, planning a service split, or detecting dead/internal-only methods |
+| `$SKILL_DIR/references/writing-tests-and-fake-data.md` | Writing integration tests or prototyping test data with `faker/build-entity` / `faker/build-test-recipe` |
+| `$SKILL_DIR/references/pitfalls.md` | You hit an unexpected error, are about to write a query, or want to verify correct conventions for data access, security, or argument passing |
+| `$SKILL_DIR/references/n-plus-one-hunting.md` | Investigating N+1 query problems, measuring query counts, or validating that a JPQL / `JOIN FETCH` fix eliminates excess queries |
 
 ---
 
@@ -195,10 +235,10 @@ issues. Fall back to raw `clj-nrepl-eval` only for ad-hoc expressions that have 
 equivalent — for example, multi-step `mapv` calls or thunks for `diff-entity`.
 
 The scripts are installed alongside this skill. **Do not check for their existence — invoke
-them directly.** If you ever need to locate them, find this `SKILL.md` file first:
-`find ~ -path '*/livewire/SKILL.md' 2>/dev/null` — the `bin/` folder is right next to it.
+them directly.** The `bin/` folder is right next to this `SKILL.md`.
 
-Use them via their full path: `~/.claude/skills/livewire/bin/<script-name>`.
+Use them via their full path: `$SKILL_DIR/bin/<script-name>` (where `$SKILL_DIR` is the
+path you discovered on load — **never** use `~/.claude/skills/livewire/`).
 The port defaults to **7888** and can be overridden with `LW_PORT`.
 
 | Script | What it does |
@@ -244,7 +284,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 
 ## API namespaces — quick reference
 
-Read `references/api-core.md` for full details, patterns, and examples for any of these.
+Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and examples for any of these.
 
 | Namespace | alias | What it covers |
 |---|---|---|
@@ -317,7 +357,7 @@ transaction boundary.**
 
 ---
 
-## ⚠️ Critical pitfalls (inline — full list in `references/pitfalls.md`)
+## ⚠️ Critical pitfalls (inline — full list in `$SKILL_DIR/references/pitfalls.md`)
 
 - **Never call `.findAll` without a `Pageable`** — may return millions of rows and hang the REPL.
 - **`lw/run-as` requires `["username" "ROLE_X"]`, not a bare string** — `"admin"` only grants `ROLE_USER`+`ROLE_ADMIN`; any other role needs the vector form. Same `ROLE_` prefix required for `lw-call-endpoint`.
@@ -327,8 +367,15 @@ transaction boundary.**
 - **Bean name ≠ class name, and `:controller` from `lw-list-endpoints` is ALWAYS a FQN — never pass it directly to `lw-call-endpoint` or `lw/bean`.** Derive the bean name by taking the simple class name and lowercasing the first letter: `com.example.web.BookController` → `bookController`. When in doubt, verify with `lw-find-beans`.
 - **Always use JPQL (`lw-jpa-query`) for data queries** — raw SQL only for metadata, DDL, or unmapped tables. `lw-jpa-query` and `lw-call-endpoint` default to **10 rows**; raw SQL has no limit so add one explicitly.
 - **Always inspect entities before writing any query** — never guess table/column names.
+- **Never guess method names** — controller method name ≠ service method name ≠ repository method name. The controller `getBooks()` delegates to `bookService.getAllBooks()`, not `getBooks()`. **Always read the source code** (`grep -n "getBooks" /path/to/Controller.java`) before calling a method on a bean. Same trap: the bean name is lowercase (`bookService`), the controller class is `BookController`, the endpoint path is `/api/books` — none of these are the same. Full rule: `$SKILL_DIR/references/pitfalls.md`.
+- **Never guess IDs for method parameters** — always look up real values from the DB first (`lw-sql "SELECT id, name FROM <table> ORDER BY id LIMIT 5"`). A lucky hit gives the user no way to reproduce with a different value; a miss returns 404. Full rule: `$SKILL_DIR/references/pitfalls.md`.
 - **`lw-eval` mangles `!`, `?`, `->` in zsh** — use `clj-nrepl-eval -p 7888` directly for expressions with these characters.
+- **`trace/trace-sql` only works on JPA entities** — DTOs, Java records, and `select-keys` results have no JPA metadata. `trace/trace-sql` will fail on them with `find not supported on type`. Trace against repository methods that return entities instead.
+- **Don't nest `trace/trace-sql`** — `lw-trace-sql` and `lw-trace-nplus1` already wrap your expression. Putting `trace/trace-sql` or `trace/detect-n+1` inside the expression creates double-wrapping. Use raw `clj-nrepl-eval` when you need both tracing and transformation.
+- **Never use `(dorun (map ...))` in transaction context** — it creates a lazy seq chain that silently blocks and hangs. `dorun` does NOT realize lazy seqs it receives; it only consumes realized ones. Always use `doseq` for side effects or `mapv` for returning data.
 - **Never use `hq/hot-swap-query!` to test a hypothesis** — it mutates JVM state for all callers until explicitly reset. To prove a candidate JPQL reduces N+1, use `jpa/jpa-query` wrapped in `trace/trace-sql` or `lw-trace-nplus1` — zero side effects, no cleanup needed. Hot-swap is only for final end-to-end confirmation once the fix is already validated.
 - **`jpa/jpa-query` takes keyword args, not positional** — correct form: `(jpa/jpa-query jpql :page 0 :page-size 20)`. It does **not** support named query parameters (`:genreId` etc.); for parameterized JPQL use `(lw/bean jakarta.persistence.EntityManager)` directly.
+- **Always warn about Cartesian product when suggesting `JOIN FETCH`** — `JOIN FETCH` on two collections of the same parent duplicates rows at the SQL level (Cartesian product) and produces bloated entities/DTOs even though Hibernate deduplicates. **This is silently wrong — no exception, no warning — the DTO looks "mostly right" but nested collections contain duplicated items.** Even 2 genres × 2 reviews on a single row = 4× duplicated items. Never suggest `JOIN FETCH` on a second collection alongside an already-fetched collection without explicitly calling out the multiplication risk and offering an alternative (batch fetching with `@BatchSize`, two-query approach, or `IN` clause). Full rule: `$SKILL_DIR/references/n-plus-one-hunting.md`.
+- **Only present fix variants when the user explicitly asks.** Diagnostic output (N+1 trace, query counts, SQL patterns) is a complete diagnosis — the user knows what's wrong and how many queries it costs. Presenting variants unasked wastes effort and signals you don't distinguish between "what's wrong" and "how to fix it." When the user does ask, read `$SKILL_DIR/references/n-plus-one-hunting.md` for the full variant table and present 2–4 options with pros/cons so they can choose based on their constraints (source edit cost, performance, global vs local impact). The common variants are full `JOIN FETCH` (single query), partial `JOIN FETCH` + `@BatchSize`, multiple queries merged in code, and `@BatchSize` annotation-only fixes. **Never assume one approach is universally best** — context matters (result set size, call frequency, source edit permissions). Never present a single `JOIN FETCH` as THE answer if asked.
 
-For all other pitfalls (UUID args, optional params, `@PreAuthorize`, `javax` vs `jakarta`, timing warm-up, etc.), read `references/pitfalls.md`.
+For all other pitfalls (UUID args, optional params, `@PreAuthorize`, `javax` vs `jakarta`, timing warm-up, etc.), read `$SKILL_DIR/references/pitfalls.md`.

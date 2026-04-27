@@ -7,6 +7,42 @@ to verify you are following the correct conventions for data access, security, a
 
 ## Important Rules
 
+### Never guess method names — always read the source
+
+Controller method names, service method names, and repository method names are **never** the same thing. Guessing one from another is the most common cause of `No matching field found` errors and wastes multiple REPL attempts.
+
+```bash
+# Controller says: getBooks()
+# Service actually has: getAllBooks() ← different name!
+# Repository has: findAllWithAuthorGenresReviewsAndMember() ← yet another name!
+
+# ❌ guessing — throws NoSuchMethodError immediately
+(.getBooks (lw/bean "bookService"))
+
+# ✅ read the source — one grep, exact answer
+grep -n "public.*getBooks\|def getBooks" /path/to/BookService.java
+# => returns: getAllBooks(), getBookById(), getReviewsForBook(), getBooksByGenreId()
+
+# Then call with the real method name
+(.getAllBooks (lw/bean "bookService"))
+```
+
+**The full naming chain is always different:**
+
+| Layer | Example | Notes |
+|---|---|---|
+| Controller class | `BookController` | FQN from `intro/list-endpoints` |
+| Controller bean | `bookController` | lowercase first letter of class name |
+| Controller method | `getBooks()` | `@GetMapping` handler method name |
+| Service bean | `bookService` | lowercase first letter of service class |
+| Service method | `getAllBooks()` | **often different from controller method name** |
+| Repository method | `findAllWithAuthorGenresReviewsAndMember()` | **completely different name** |
+| Endpoint path | `/api/books` | `@RequestMapping` + `@GetMapping` path |
+
+**Rule: always verify by reading source. One `grep` is faster than three `No matching field` errors.**
+
+---
+
 ### Always use JPQL (`lw-jpa-query`) for data queries — raw SQL is the last resort
 
 **Default to `lw-jpa-query` for any query that fetches application data.** Raw `lw-sql` / `q/sql`
@@ -22,6 +58,48 @@ lw-sql "SELECT TOP 5 id FROM dbo.loan_record"
 # ✅ JPQL — no schema prefix needed, uses entity property names, auto-paginated
 lw-jpa-query 'SELECT lr.id FROM LoanRecord lr' 0 5
 ```
+
+---
+
+### `jpa/jpa-query` uses ID-first pagination — query count is inflated
+
+`jpa/jpa-query` runs the JOIN FETCH query just to collect IDs, then issues a second
+`SELECT ... WHERE id IN (...)` to reload each entity with hydrated state. When you wrap
+`jpa/jpa-query` in `trace/trace-sql` to prototype a JPQL fix, the count is roughly **doubled**.
+
+This is by design — it allows efficient paged queries on JOIN FETCH results without
+returning millions of rows. It is not a bug. But the absolute query count from a
+`jpa/jpa-query` prototype is always wrong for the real service method.
+
+```clojure
+;; Prototype via jpa/jpa-query — 36 queries (ID-only query + JOIN FETCH + count + reloads)
+(jpa/jpa-query jpql-variant :page 0 :page-size 100)
+
+;; Real service method — 2 queries (JOIN FETCH, no reload)
+(trace/trace-sql (.getBooksByGenreId (lw/bean "bookService") 1))
+```
+
+**How to compare correctly:** the ID-first wrapper adds overhead to **both** baseline and
+variant equally. So the **relative difference is still valid** — if baseline is 98 and
+variant is 36, the fix works. But never report the variant's raw count as "2 queries".
+
+**To get accurate counts in the REPL:**
+
+```clojure
+;; Call the real service method — trace/trace-sql captures it cleanly
+(trace/trace-sql (.getBooksByGenreId (lw/bean "bookService") 1))
+;; → 98 queries
+
+;; Use EntityManager directly — no ID-first pagination
+(let [em (lw/bean jakarta.persistence.EntityManager)]
+  (trace/trace-sql
+    (doto (clojure.lang.Reflector/invokeInstanceMethod
+            em "createQuery" [jpql] [jakarta.persistence.Query])
+      (.getResultList))))
+```
+
+**Rule of thumb:** use `jpa/jpa-query` to **validate JPQL syntax** and result shape.
+Use `trace/trace-sql` on the real service method for **accurate query counts**.
 
 ---
 
@@ -46,6 +124,32 @@ lw-jpa-query 'SELECT lr.id FROM LoanRecord lr' 0 5
 
 ---
 
+### Never guess IDs — look them up from the database first
+
+**Before calling any endpoint or service method that takes an ID, foreign key, or lookup parameter, find real values from the live database.** Guessing an ID may work (it happened to match genre 1 = "Science Fiction" and returned 20 results) but it also might not, and it gives the user no way to reproduce the call with a different value. **The lookup is the default, guessing is never the answer.**
+
+**Before calling an endpoint with an ID parameter:**
+1. Find the entity name: `lw-list-entities`
+2. Inspect the entity: `lw-inspect-entity <Name>` — confirms table and field names
+3. **Query the DB for real IDs**: `lw-sql "SELECT id, name FROM genre ORDER BY id LIMIT 5"`
+4. Call the endpoint with a real ID
+
+```bash
+# ❌ guessing — lucky hit or silent 404
+lw-call-endpoint bookController getBooksByGenre ROLE_MEMBER 1
+
+# ✅ look up genres first, then use a real ID
+lw-sql "SELECT id, name FROM genre ORDER BY id LIMIT 5"
+;; => [{:id 1, :name "Science Fiction"} {:id 2, :name "Fantasy"} ...]
+lw-call-endpoint bookController getBooksByGenre ROLE_MEMBER 3   ; Mystery
+```
+
+**Apply to all ID parameters, not just foreign keys:**
+- `getAuthorBooks(authorId)` → `lw-sql "SELECT id, first_name FROM author ORDER BY id LIMIT 5"`
+- `getBookReviews(bookId)` → `lw-sql "SELECT id, title FROM book ORDER BY id LIMIT 5"`
+- `getActiveLoans(memberId)` → `lw-sql "SELECT id, first_name FROM member ORDER BY id LIMIT 5"`
+- `archiveBook(bookId)` → **never guess for mutating endpoints** — verify the ID exists and its current state first
+
 ### Always limit queries when fetching sample data or IDs
 
 Tables in a live app can contain millions of rows. **Always cap results.** The default cap is **10 rows**.
@@ -62,6 +166,41 @@ lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 10
 ;; ✅ cap explicitly
 (lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 10"))
 ```
+
+---
+
+### Always split large `IN (:ids)` clauses to avoid the "maximum number of ? in a SQL statement" limit
+
+Many databases and JDBC drivers enforce a hard cap on the number of bind parameters per
+statement. PostgreSQL's wire protocol supports ~65,535 parameters, but **most frameworks,
+connection pools, and ORM layers impose much lower limits** (often 1000–2000). A `WHERE id
+IN (…2000+ IDs…)` query can crash at runtime with "too many arguments" or silently be
+rejected. This is especially relevant when building `IN` clauses from in-memory collections
+(e.g. after fetching 200 book IDs and then batch-loading reviews with `WHERE review.book_id
+IN (:bookIds)`).
+
+**Rule: never pass more than 500 IDs in a single `IN (:ids)` clause.** Always split large
+collections into batches and merge results.
+
+```clojure
+;; ❌ may crash — 2000 IDs in one IN clause
+(jp/jpa-query "SELECT r FROM Review r WHERE r.book.id IN (:ids)" :ids (mapv #(.getId %) large-book-list))
+
+;; ✅ always split into batches
+(defn in-batches [items batch-size]
+  (mapv vec (partition-all batch-size items)))
+
+(->> (in-batches (mapv #(.getId %) large-book-list) 500)
+     (mapv (fn [batch]
+             (jp/jpa-query "SELECT r FROM Review r WHERE r.book.id IN (:ids)" :ids batch)))
+     (apply concat))
+```
+
+**When this bites you:**
+- N+1 fixes that replace per-row queries with a single `IN (:ids)` for a large result set
+- `build-entity` / `build-test-recipe` generating large graphs and persisting in one go
+- Any code that does `WHERE x.id IN (:ids)` where `ids` comes from a collection query
+- `@BatchSize`-based batch fetching — Hibernate itself uses ~10–50 IDs per batch
 
 ---
 
@@ -352,6 +491,74 @@ causes `AuthorizationDeniedException` because no authorities are set on the auth
 
 ---
 
+### Never use `(dorun (map ...))` in Hibernate transaction context
+
+In the nREPL + Hibernate `in-readonly-tx` context, `(dorun (map ...))` creates a lazy
+seq chain that silently blocks and hangs — it never completes and eventually times out.
+The `dorun` call returns the lazy seq instead of consuming it, and the transaction/nREPL
+thread pool deadlocks on the lazy chain.
+
+**Why this is tricky:** `dorun` exists to consume side effects from realized seqs, but
+`map` returns a lazy seq. `(dorun (map ...))` passes that lazy seq to `dorun`, which
+doesn't realize it — `dorun` only consumes what it receives, it doesn't realize lazy
+inputs. The lazy seq sits un-consumed and the nREPL thread blocks.
+
+```clojure
+;; ❌ hangs silently — dorun receives lazy seq but never realizes it
+(dorun (map #(process x) collection))
+
+;; ✅ eager, always works — no lazy seq created
+doseq [x collection]
+  (process x))
+
+;; ✅ eager, returns data — no laziness
+doseq [x collection]
+  (mapv process collection))
+```
+
+**Rule of thumb:** `dorun` is effectively dead code when paired with `map`. Use `doseq`
+for side effects (eager) or `mapv` for returning data (eager). If you ever find
+yourself wrapping `map` in `dorun`, stop — that's a code smell even in plain Clojure.
+
+### `lw-call-endpoint` defaults to 10 rows — never override unless necessary
+
+`lw-call-endpoint` lists results capped at **10 by default**. Do not pass `--limit` with an arbitrary higher number (15, 20, 50) just to "see more." 10 is enough to show the response structure and a representative sample. Higher limits flood the output and make it harder to read. Only increase the limit if the user specifically needs more rows for a particular reason.
+
+```bash
+# ✅ default — 10 rows, structured output
+lw-call-endpoint bookController getBooksByGenre ROLE_MEMBER 1
+
+# ❌ arbitrary override — no reason to fetch 20 when 10 suffices
+lw-call-endpoint --limit 20 bookController getBooksByGenre ROLE_MEMBER 1
+```
+
+### `JOIN FETCH` on multiple collections causes a Cartesian product — always warn about it
+
+When fixing N+1 by adding `JOIN FETCH`, **never suggest `JOIN FETCH` on a second collection alongside an already-fetched collection without explicitly warning about the Cartesian product.** A `JOIN FETCH` on two collections (e.g. `JOIN FETCH b.author` + `JOIN FETCH b.reviews`) multiplies rows: if a book has 3 authors and 20 reviews, the query returns 3 × 20 = 60 rows for that single book. Hibernate deduplicates at the entity level, but the DTO still contains duplicated data, and the response is bloated identically to what N+1 would produce.
+
+**⚠️ This is silently wrong — no exception, no warning, only bloated responses.**
+Even a single row with 2 genres × 2 reviews produces 4 duplicated genres and 4 duplicated reviews. The DTO looks "mostly right" (all entities present, all data correct) but the nested collections contain duplicates. This is **always wrong**, even for tiny result sets. There is no scenario where joining two collections on the same parent produces a correct DTO.
+
+**Rule: when suggesting `JOIN FETCH`, you must simultaneously warn:**
+1. The multiplication factor (how many items per collection)
+2. The risk that DTOs or responses will be inflated even after Hibernate deduplication — **this is always wrong, never acceptable for DTOs**
+3. Alternatives — `@BatchSize(size = N)` on the collection, two-query approach, or `IN` clause for the second collection
+
+```bash
+# ❌ dangerous — two collections on the same parent
+"select distinct b from Book b join fetch b.author join fetch b.reviews"
+;; Book has 2 authors × 20 reviews = 40 rows per book
+;; Hibernate deduplicates entities but the DTO still sees 40× inflated data
+
+# ✅ safe — first collection in JOIN FETCH, second via @BatchSize
+"select distinct b from Book b join fetch b.genres"
+;; @BatchSize(size=50) on the reviews collection → 1 extra batched IN query
+
+# ✅ safe — two queries, no multiplication
+;; Query 1: parent + first collection
+;; Query 2: second collection via IN clause
+```
+
 ### First call after restart inflates timing — always warm up before measuring
 
 ```clojure
@@ -367,3 +574,63 @@ causes `AuthorizationDeniedException` because no authorities are set on the auth
 
 Older Livewire builds silently registered no `StatementInspector` on Hibernate 7 apps,
 resulting in `{:count 0, :queries []}`. Ensure the app is running with a current Livewire JAR.
+
+### `trace/trace-sql` only works on JPA entities — not DTOs, records, or `select-keys`
+
+`trace/trace-sql` inspects each result to capture which SQL statements loaded it. It does this
+by calling JPA `EntityManager.find()` metadata on the result type. DTOs, Java records, and
+`select-keys` results are not JPA-managed — they have no entity metadata, so `find` fails:
+
+```
+find not supported on type: com.example.dto.BookWithReviewsDto
+```
+
+**Always trace against repository methods that return managed JPA entities**, then map
+to DTOs/records *after* tracing:
+
+```clojure
+;; ❌ fails — trace tries to inspect BookWithReviewsDto (a Java record)
+(trace/trace-sql (mapv #(select-keys % [:id :title]) (.getAllBooks (lw/bean "bookService"))))
+
+;; ✅ works — trace inspects Book entities, then you map afterward
+(let [res (trace/trace-sql (doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean "bookRepository"))))]
+  ;; now safely convert to DTOs
+  (count res))
+```
+
+### Never nest `trace/trace-sql` inside a wrapper call
+
+`lw-trace-sql` and `lw-trace-nplus1` already wrap your expression in `trace/trace-sql`
+internally. Putting `trace/trace-sql` or `trace/detect-n+1` **inside** the expression
+creates a double-wrap that fails:
+
+```
+bash
+# ❌ lw-trace-sql wraps your expression — no need to add trace/trace-sql inside it
+lw-trace-sql '(do (let [res (trace/trace-sql ...)] ...))
+;; => Syntax error (ArityException) — let binds res but the body tries to use it wrong
+
+# ✅ correct — just pass the raw expression, the wrapper handles tracing
+lw-trace-sql '(doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean "bookRepository")))
+
+# ✅ if you need both tracing + transformation, use raw clj-nrepl-eval
+clj-nrepl-eval -p 7888 "(let [res (trace/trace-sql (doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean \"bookRepository\"))))] (:count res))"
+```
+
+### Self-referential `let` bindings fail silently
+
+In Clojure, you **cannot** reference a `let` binding from its own initializer:
+
+```clojure
+;; ❌ res is not bound yet when the body tries to use it
+(let [res (trace/trace-sql (doall {:data (.getAllBooks ...) :queries (:queries res)}))] res)
+;; => Unable to resolve symbol: res
+
+;; ✅ correct — separate the computation from the inspection
+(let [data (.getAllBooks (lw/bean "bookService"))]
+  (let [res (trace/trace-sql (doall data))]
+    {:count (:count res)}))
+```
+
+This happens when trying to compute data and inspect the trace in a single `let` form.
+Always split into two forms: compute first, trace second.

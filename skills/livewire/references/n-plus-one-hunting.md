@@ -24,6 +24,73 @@ Only drop to `lw-trace-sql` when you need the raw SQL list or want to compare ex
 
 ---
 
+## ⚠️ The Cartesian product trap — never JOIN FETCH two collections on the same parent
+
+A `JOIN FETCH` on two collections in one query produces a **Cartesian product**: every row
+of collection A × every row of collection B. This is not an N+1 (it's one query) but it
+duplicates data identically to what N+1 would do — bloated responses, inflated collections,
+and 500 KB where 10 KB would do.
+
+```
+Book has: 3 genres, 9 reviews
+JOIN FETCH genres + JOIN FETCH reviews → 3 × 9 = 27 rows for ONE book
+Result: reviews appear duplicated 3×, genres appear duplicated 9×
+```
+
+**⚠️ Silent inflation — no warning, no exception, always wrong.**
+Hibernate deduplicates entity instances in the persistence context, but the **nested
+collections inside each entity are silently multiplied**. The DTO will contain repeated
+items with the same `id`. This happens **even for a single result row**:
+
+```
+1 book with 2 genres × 2 reviews → 4 rows returned by SQL
+Hibernate deduplicates to 1 entity
+→ genres list: [genre1, genre1, genre2, genre2]   ← duplicated!
+→ reviews list: [review1, review1, review2, review2]  ← duplicated!
+Response is 4× bloated for one book. No warning. No exception.
+```
+
+This is **always wrong**, even for tiny result sets. A single row with 3 genres × 3 reviews
+gives 9 duplicated genres and 9 duplicated reviews. There is no scenario where a Cartesian
+product `JOIN FETCH` produces a correct DTO. **Always warn explicitly when suggesting
+`JOIN FETCH` and never suggest `JOIN FETCH` on two collections on the same parent**.
+
+**Symptoms:**
+- `lw-trace-nplus1` reports `{:total-queries 1}` but the response is enormous
+- The SQL contains multiple `left join fetch` on collection associations
+- Collection fields in the response contain repeated entries with the same `id`
+- Total rows returned by the query vastly exceeds the parent entity count
+- Even a single result row shows duplicated items in nested collections
+
+**Diagnosis — check the row multiplication factor:**
+
+```clojure
+;; Run the query and check how many rows Hibernate got vs how many unique parents
+(def rows (.findAllWithAuthorGenresReviewsAndMember (lw/bean "bookRepository")))
+(count rows)                    ; ← e.g. 200 (Hibernate deduplicates)
+(reduce + (map #(count (.getReviews %)) rows))  ; ← inflated review count, e.g. 1776
+;; If review count / unique reviews >> 1, you have Cartesian product
+```
+
+**Fix — two queries instead of one JOIN FETCH chain:**
+
+```sql
+-- Query 1: parent + first collection (no join fetch on second)
+select distinct b from Book b left join fetch b.author left join fetch b.genres
+
+-- Query 2: load the second collection separately (Hibernate batches this with IN)
+select distinct r from Review r left join fetch r.member where r.book.id in (:ids)
+```
+
+Or use `@BatchSize(size = 50)` on the collection association and skip `JOIN FETCH` entirely —
+Hibernate loads collections in batches with `IN` clauses.
+
+**Never use `hq/hot-swap-query!` to fix a Cartesian product** — swap a single JPQL string
+cannot remove a `JOIN FETCH` on the second collection while keeping the first. This requires
+rewriting the query strategy, which is a source-level change, not a hot-swap.
+
+---
+
 ## Tracing an endpoint you have already called
 
 When you have just called an endpoint (e.g. via `lw-call-endpoint`) and are then asked
@@ -173,14 +240,190 @@ reimplements the **core flow** of the service method with your candidate fix, wr
 
 ---
 
+## ⚠️ `jpa/jpa-query` applies ID-first pagination — query count is inflated
+
+`jpa/jpa-query` (the `lw-jpa-query` wrapper) uses an **ID-first pagination strategy**:
+it runs the JOIN FETCH query just to collect IDs, then issues a second `SELECT ... WHERE
+id IN (...)` to reload each entity with the hydrated state. When you wrap `jpa/jpa-query`
+in `trace/trace-sql` to prototype a JPQL fix, you will see the count roughly **doubled**.
+
+This is by design — it allows efficient paged queries on JOIN FETCH results without
+returning millions of rows. It is not a bug. **But it means the absolute query count
+from a `jpa/jpa-query` prototype is always wrong.**
+
+```clojure
+;; Prototype: JOIN FETCH fix via jpa/jpa-query
+(jpa/jpa-query jpql-variant :page 0 :page-size 100)
+;; → 36 queries (20 entities × 2 reloads + 1 JOIN FETCH + 1 count query)
+;; → the variant fires the JOIN FETCH ONCE but then reloads each entity
+
+;; But the real service method fires:
+;; → 2 queries (1 JOIN FETCH, no reload)
+```
+
+**How to compare correctly:** the ID-first wrapper adds the same overhead to **both**
+baseline and variant (it runs the same ID-first logic for any JPQL). So the **relative
+difference is still valid** — if baseline is 98 queries and variant is 36, the fix is
+real. But never report the variant's raw count as "2 queries" — that only holds
+for the actual service method, not for `jpa/jpa-query` in the REPL.
+
+**To get accurate counts in the REPL without the wrapper:**
+
+```clojure
+;; Use EntityManager directly — no ID-first pagination, no COUNT query
+(let [em (lw/bean jakarta.persistence.EntityManager)]
+  (trace/trace-sql
+    (doto (clojure.lang.Reflector/invokeInstanceMethod
+            em "createQuery" [jpql] [jakarta.persistence.Query])
+      (.getResultList))))
+
+;; Or call the real service method — trace/trace-sql captures it cleanly
+(trace/trace-sql
+  (.getBooksByGenreId (lw/bean "bookService") 1))
+;; → 98 queries (baseline)
+```
+
+**Rule of thumb:** use `jpa/jpa-query` to **validate JPQL syntax** and to see that the
+result shape is correct (no duplicates, right associations). Use `trace/trace-sql` on
+the real service method or `EntityManager` directly for **accurate query count**.
+
+---
+
+## When offering fix — always present multiple known variants
+
+> ⚠️ **Diagnostic phase is complete when `lw-trace-nplus1` returns.** The N+1 detection
+> gives you: total query count, suspicious queries with frequencies, and the SQL patterns
+> firing per-entity. That is a **complete diagnosis** — the user knows what's wrong,
+> which associations are lazy, and how many queries it costs.
+>
+> **Do not present fix variants until the user explicitly asks for one.** The skill should
+> not assume the user wants solutions — it's an interactive assistant. If the user says
+> "fix it" or asks about variants, then present options. Otherwise, stop at the diagnosis.
+> Presenting variants unasked wastes effort the user may never read and signals that the
+> agent doesn't understand the difference between "what's wrong" and "how to fix it."
+
+Never propose a single `JOIN FETCH` query as THE solution. Always evaluate the N+1
+associations and present 2–4 viable variants with pros/cons. The common choices are:
+
+### Variant A — Full `JOIN FETCH` (single query)
+`JOIN FETCH` on every association. One query, no N+1. But **always risks Cartesian product**
+when fetching two or more collections on the same parent — this is **never correct** for DTOs
+because Hibernate deduplicates entities but silently duplicates nested collection items with
+zero warning. **Only acceptable when exactly one collection association is fetched**.
+
+```sql
+-- One query, but JOIN FETCH on books+reviews duplicates each 3× if avg 3 genres/book
+SELECT DISTINCT b FROM Book b
+LEFT JOIN FETCH b.author
+LEFT JOIN FETCH b.reviews r
+LEFT JOIN FETCH r.member
+LEFT JOIN FETCH b.genres
+WHERE b.id IN (SELECT DISTINCT b2.id FROM Book b2 JOIN b2.genres g WHERE g.id = :genreId)
+```
+
+### Variant B — Partial `JOIN FETCH` (scalar + first collection only)
+Fetch the `@ManyToOne` associations and maybe one collection with `JOIN FETCH`, then
+let Hibernate batch-load the rest via `@BatchSize` (or fire per-row lazy loads if no
+`@BatchSize` is configured). Trade: more queries (e.g. 3–5) but no Cartesian product.
+
+```sql
+-- Fetch author+genres; reviews+member load via subsequent IN or per-row selects
+SELECT DISTINCT b FROM Book b
+LEFT JOIN FETCH b.author
+LEFT JOIN FETCH b.genres
+WHERE b.id IN (SELECT DISTINCT b2.id FROM Book b2 JOIN b2.genres g WHERE g.id = :genreId)
+```
+
+### Variant C — Multiple fetches, merge in code
+Two or more repository queries, one per parent/collection pair, then join in Clojure
+with `group-by`. Gives full control over what gets batched but requires code changes.
+
+```clojure
+;; Query 1: books + author + genres
+(def books (-> (.findByGenreId bookRepo genreId)
+               (mapv #(bean->map %))))
+
+;; Query 2: reviews for all fetched books (batched IN)
+(def book-ids (mapv :id books))
+(def reviews (-> (jp/jpa-query (str "SELECT DISTINCT r FROM Review r LEFT JOIN FETCH r.member WHERE r.book.id IN (:ids)"
+                                    :ids book-ids))
+                              ))
+(def reviews-by-book (group-by #(.getId (.getBook %)) reviews))
+```
+
+⚠️ **SQL `IN` clause size limit:** Many databases (PostgreSQL, MySQL) reject `IN (:ids)`
+when the placeholder count exceeds ~1000–2000. For large sets, **split into batches**:
+
+```clojure
+;; Batch-split IN clause — never pass 2000+ IDs in one query
+(defn in-batches [items batch-size]
+  (mapv #(vec %) (partition-all batch-size items)))
+
+(into []
+  (mapcat (fn [batch]
+            (-> (jp/jpa-query (str "SELECT r FROM Review r WHERE r.book.id IN (:ids)"
+                                   :ids batch)))
+  (in-batches book-ids 500)))
+```
+
+### Variant D — `@BatchSize` annotation (source-level, zero query changes)
+Add `@BatchSize(size = 50)` on every `@OneToMany` / `@ManyToOne` association in the
+dependency graph. Hibernate then batches all lazy loads via `IN` clauses with configurable
+batch size. Trade: easy to add. **Downside:** `@BatchSize` is **global** on the entity —
+any code path that lazy-loads that collection benefits (or pays) for the batch size you
+pick. If your entity has a large collection that is rarely loaded, `@BatchSize(50)` may
+cause heavy IN clauses or unnecessary fetches on that code path. **But this can also be
+a good thing:** if multiple endpoints access the same association, one annotation fixes
+all of them — no scattered JPQL changes needed.
+
+```java
+@BatchSize(size = 50)
+private List<Review> reviews;
+
+@BatchSize(size = 50)
+private LibraryMember member;
+```
+
+```java
+@BatchSize(size = 50)
+private List<Review> reviews;
+
+@BatchSize(size = 50)
+private LibraryMember member;
+```
+
+### When to choose which variant
+- **One collection only:** Variant A (full JOIN FETCH) — safe, no Cartesian product risk
+- **Multiple collections:** Variant B (partial FETCH + BatchSize) — always prefer this
+- **Large result set (100+):** Variant C (multiple queries, split IN batches) or Variant D (BatchSize)
+- **Can't modify source:** Variant B (partial JPQL swap) — never use full JOIN FETCH if >1 collection
+- **Can modify source + need best performance:** Variant D + selective Variant B
+
+**Never use Variant A with two or more collection associations** — there is no scenario
+where it produces a correct response. The multiplication is silent, the inflated DTO looks
+"mostly right" (entities are there, data is correct), and it only shows up in memory/CPU
+or response-size budgets. That makes it one of the hardest bugs to catch in testing.
+
+---
+
 ## Use hot-swap only as a final end-to-end check — never for hypothesis testing
 
-**Phase 1 — prove the JPQL fix (no side effects):**
+**Phase 0 — establish the baseline (required):**
+Before testing any fix, record the current query count of the **exact same service
+method call**. This baseline is your control: you compare every variant against it.
+
+```clojure
+;; Record baseline — this is the broken version, no hot-swap needed
+(def baseline (trace/trace-sql (lw/in-readonly-tx (.getBooksByGenreId (lw/bean "bookService") 1))))
+;; => {:count 98, :duration-ms 18, ...}
+```
+
+**Phase 2 — prove the JPQL fix (no side effects):**
 Run the candidate query directly via `jpa/jpa-query` wrapped in `trace/trace-sql` or
-`lw-trace-nplus1`. This mutates nothing and needs no cleanup. Only move to phase 2 once
+`lw-trace-nplus1`. This mutates nothing and needs no cleanup. Only move to phase 3 once
 the fix is validated here.
 
-**Phase 2 — end-to-end confirmation (optional, mutating):**
+**Phase 3 — end-to-end confirmation (optional, mutating):**
 Once the JPQL is proven, hot-swap it into the real repository method to exercise the full
 Spring Data stack (caching, pagination, projections). Swap back and verify the N+1 returns.
 Always call `(hq/reset-all!)` when done.
@@ -190,16 +433,19 @@ Always call `(hq/reset-all!)` when done.
 > `jpa/jpa-query` + `trace/trace-sql` for that.
 
 ```bash
-# 1. swap in the fix
+# BASELINE: record the broken version query count first
+clj-nrepl-eval -p 7888 '(let [r (trace/trace-sql (.myMethod (lw/bean "myRepo")))] (println "baseline:" (:count r)))'
+
+# 2. swap in the fix
 clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")'
 
-# 2. confirm N+1 is gone
+# 3. confirm N+1 is gone
 lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
 
-# 3. swap back to broken — confirm N+1 returns
+# 4. swap back to broken — confirm N+1 returns
 clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original")'
 lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
 
-# 4. restore and write the fix to source
+# 5. restore and write the fix to source
 clj-nrepl-eval -p 7888 '(hq/reset-query! "myRepo" "myMethod")'
 ```

@@ -137,16 +137,20 @@ lw-trace-nplus1 '(lw/run-as "admin" (.myEndpoint (lw/bean "myController") 2))'
 ```
 
 When you need to compare counts across many IDs at once, use `clj-nrepl-eval` with `trace-sql`
-(not `lw-trace-nplus1`, which is a shell script and doesn't compose in a `mapv`):
+(not `lw-trace-nplus1`, which is a shell script and doesn't compose in a `mapv`).
+**Write to a temp file** — the expression uses `fn`, `let`, `mapv`, and nested parens:
 
-```clojure
-;; Compare query counts across multiple IDs — use trace-sql for the mapv
+```bash
+cat > /tmp/lw-multi-id.clj << 'EOF'
 (mapv (fn [id]
         (let [res (trace/trace-sql
                     (lw/run-as "admin"
                       (.myEndpoint (lw/bean "myController") id)))]
           {:id id :total-queries (:count res) :suspicious (count (:suspicious-queries (trace/detect-n+1 res)))}))
       [1 2 3 4 5])
+EOF
+lw-eval --file /tmp/lw-multi-id.clj
+rm /tmp/lw-multi-id.clj
 ;; => look for outliers — the problematic ID will stand out with a much higher :total-queries count
 ```
 
@@ -433,19 +437,35 @@ Always call `(hq/reset-all!)` when done.
 > `jpa/jpa-query` + `trace/trace-sql` for that.
 
 ```bash
-# BASELINE: record the broken version query count first
-clj-nrepl-eval -p 7888 '(let [r (trace/trace-sql (.myMethod (lw/bean "myRepo")))] (println "baseline:" (:count r)))'
+# BASELINE: record the broken version query count first — use temp file for let/trace-sql
+cat > /tmp/lw-baseline.clj << 'EOF'
+(let [r (trace/trace-sql (.myMethod (lw/bean "myRepo")))]
+  (println "baseline:" (:count r)))
+EOF
+lw-eval --file /tmp/lw-baseline.clj
 
-# 2. swap in the fix
-clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")'
+# 2. swap in the fix — temp file for !
+cat > /tmp/lw-swap.clj << 'EOF'
+(hq/hot-swap-query! "myRepo" "myMethod" "select ... join fetch ...")
+EOF
+lw-eval --file /tmp/lw-swap.clj
 
 # 3. confirm N+1 is gone
 lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
 
-# 4. swap back to broken — confirm N+1 returns
-clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original")'
+# 4. swap back to broken — temp file for ! and nested quotes
+cat > /tmp/lw-swap-back.clj << 'EOF'
+(hq/hot-swap-query! "myRepo" "myMethod" "select ... -- original")
+EOF
+lw-eval --file /tmp/lw-swap-back.clj
 lw-trace-nplus1 '(lw/run-as "admin" (.myMethod (lw/bean "myRepo")))'
 
-# 5. restore and write the fix to source
-clj-nrepl-eval -p 7888 '(hq/reset-query! "myRepo" "myMethod")'
+# 5. restore and write the fix to source — temp file for reset-all!
+cat > /tmp/lw-reset.clj << 'EOF'
+(hq/reset-all!)
+EOF
+lw-eval --file /tmp/lw-reset.clj
 ```
+
+**Hot-swap expressions with `!` or nested quotes must use a temp file.**
+See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md` for the complete rule.

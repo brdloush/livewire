@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-# Usage: lw-trace-nplus1 <clojure-expr>
+# Usage: lw-trace-nplus1 [OPTIONS] <clojure-expr | --file <path>>
+# Options:
+#   --file <path>  Read the Clojure expression from a file (preserves multiline)
 clj-nrepl-eval -p "${LW_PORT:-7888}" \
   "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc])"
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(trace/detect-n+1 (trace/trace-sql $1))"
+if [[ "${1:-}" == "--file" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "Usage: $0 --file <path-to-clj-file>" >&2
+    exit 1
+  fi
+  EXPR=$(<"${2}")
+  EXPR=$(echo "$EXPR" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+  exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(trace/detect-n+1 (trace/trace-sql ${EXPR}))"
+else
+  exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(trace/detect-n+1 (trace/trace-sql $1))"
+fi

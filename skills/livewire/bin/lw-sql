@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-# Usage: lw-sql <sql-query>
+# Usage: lw-sql [OPTIONS] [SQL-QUERY | --file <path>]
+# Run a read-only SQL query through the live DataSource.
+# Options:
+#   --file <path>  Read the SQL query from a file (preserves multiline)
 clj-nrepl-eval -p "${LW_PORT:-7888}" \
   "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc])"
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(lw/in-readonly-tx (q/sql \"$*\"))"
+if [[ "${1:-}" == "--file" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "Usage: $0 --file <path-to-sql-file>" >&2
+    exit 1
+  fi
+  SQL_RAW=$(<"${2}")
+  SQL_RAW=$(printf '%s' "$SQL_RAW" | tr '\n\r' ' ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+else
+  SQL_RAW="$*"
+fi
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(lw/in-readonly-tx (q/sql \"${SQL_RAW}\"))"

@@ -46,7 +46,14 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
 2. **Check faker is available:**
    ```bash
-   clj-nrepl-eval -p 7888 "(faker/available?)"
+   lw-eval --file <(echo '(faker/available?)')
+   ```
+   **Or use a temp file** (see `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`):
+   ```bash
+   cat > /tmp/lw-faker-check.clj << 'EOF'
+   (faker/available?)
+   EOF
+   lw-eval --file /tmp/lw-faker-check.clj
    ```
 
 3. **Prototype entity creation in the REPL:**

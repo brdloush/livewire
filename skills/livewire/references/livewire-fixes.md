@@ -72,9 +72,14 @@ Better yet: the skill could note that when the REPL returns unexpected types, it
 
 **Why at that point:** I assumed the user had restarted after I wrote the code, but they restarted *before* I wrote the code. The timeline was: I prototyped in REPL (no code changes) -> user "restarted" -> I checked (still broken) -> then I wrote code. The user's second restart happened after the code was written, but I should have verified the running bean was using the new method.
 
-**Suggestion:** The workflow should include a verification step: after restart, before tracing, check which method the service is actually calling. Something like:
+**Suggestion:** The workflow should include a verification step: after restart, before tracing, check which method the service is actually calling. Use a temp file (multi-step + nested quotes):
 ```bash
-clj-nrepl-eval -p 7888 "(require '[net.brdloush.livewire.core :as lw]) (def svc (lw/bean \"bookService\")) (class svc)"
+cat > /tmp/lw-check.clj << 'EOF'
+(require '[net.brdloush.livewire.core :as lw])
+(def svc (lw/bean "bookService"))
+(class svc)
+EOF
+lw-eval --file /tmp/lw-check.clj
 ```
 Or better yet, the skill could suggest using the query-watcher status to confirm the new method is registered:
 ```clojure

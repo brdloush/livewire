@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
-# Usage: lw-build-test-recipe <EntityName> [edn-opts]
+# Usage: lw-build-test-recipe [OPTIONS] <EntityName> [edn-opts]
 # Builds a faker entity graph and extracts all scalar field values into a nested
 # Clojure map keyed by entity class name (root entity first, deps after).
-# Use the output to seed @BeforeEach setup and assertion values in integration tests.
+# Options:
+#   --file <path>  Read the EDN opts map from a file
 #
-# The entity graph is built with :auto-deps? true :persist? true :rollback? true —
-# nothing is left in the database.
+# Arguments:
+#   EntityName   — simple Hibernate entity name, e.g. Review, Book
+#   edn-opts     — optional EDN map with overrides, e.g.
+#                  '{:overrides {:rating 1 :comment "Terrible"}}'
 #
 # Examples:
 #   lw-build-test-recipe Review
 #   lw-build-test-recipe Review '{:overrides {:rating 1 :comment "Terrible"}}'
+#   lw-build-test-recipe Book --file /tmp/edn-opts.edn
 clj-nrepl-eval -p "${LW_PORT:-7888}" \
   "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc] '[net.brdloush.livewire.faker :as faker])"
-if [ -z "$2" ]; then
-  exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(faker/build-test-recipe \"$1\")"
+ENTITY_NAME="${1}"
+if [[ -z "${2:-}" ]]; then
+  exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(faker/build-test-recipe \"${ENTITY_NAME}\")"
 else
-  exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(faker/build-test-recipe \"$1\" $2)"
+  if [[ "$2" == "--file" ]]; then
+    if [[ -z "${3:-}" ]]; then
+      echo "Usage: $0 $ENTITY_NAME --file <path-to-edn-file>" >&2
+      exit 1
+    fi
+    EDN_OPTS=$(<"${3}")
+    EDN_OPTS=$(printf '%s' "$EDN_OPTS" | tr '\n\r' ' ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+    exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(faker/build-test-recipe \"${ENTITY_NAME}\" ${EDN_OPTS})"
+  else
+    exec clj-nrepl-eval -p "${LW_PORT:-7888}" "(faker/build-test-recipe \"${ENTITY_NAME}\" $2)"
+  fi
 fi

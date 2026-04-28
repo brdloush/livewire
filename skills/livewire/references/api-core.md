@@ -329,6 +329,8 @@ When you need **multiple roles** or a custom username, use `clj-nrepl-eval` dire
 ```bash
 clj-nrepl-eval -p 7888 '(lw/run-as ["alice" "ROLE_LIBRARIAN" "ROLE_VIEWER"] (.getMembers (lw/bean "memberController")))'
 ```
+**Note:** if the expression contains `!`, `?`, `->`, `#()`, nested parens, or spans
+multiple lines, write it to a temp file instead. See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 
 ---
 
@@ -529,7 +531,11 @@ goal is just to prove that a candidate JPQL reduces query count.
 lw-trace-nplus1 '(jpa/jpa-query "SELECT DISTINCT b FROM Book b JOIN FETCH b.author LEFT JOIN FETCH b.genres WHERE b.id IN (SELECT bb.id FROM Book bb JOIN bb.genres g WHERE g.id = :genreId)" :page 0 :page-size 5)'
 
 # Only reach for hot-swap when you need the result to go through .findByGenre() itself
-clj-nrepl-eval -p 7888 '(hq/hot-swap-query! "bookRepository" "findByGenre" "SELECT DISTINCT b FROM Book b ...")'
+# Has ! — use temp file
+cat > /tmp/lw-swap.clj << 'EOF'
+(hq/hot-swap-query! "bookRepository" "findByGenre" "SELECT DISTINCT b FROM Book b ...")
+EOF
+lw-eval --file /tmp/lw-swap.clj
 ```
 
 ### Last-one-wins swap policy

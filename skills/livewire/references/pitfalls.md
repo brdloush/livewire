@@ -234,8 +234,14 @@ startup**. Adding a brand-new method requires a restart.
 # Confirm the compiled artifact is correct
 javap -p target/classes/com/example/yourapp/repository/YourRepository.class
 
-# Confirm the proxy is missing the method
-clj-nrepl-eval -p 7888 '(->> (.getClass (lw/bean "yourRepository")) .getMethods (map #(.getName %)) sort)'
+# Confirm the proxy is missing the method — temp file for ->> and #()
+cat > /tmp/lw-proxy-methods.clj << 'EOF'
+(->> (.getClass (lw/bean "yourRepository"))
+     .getMethods
+     (map #(.getName %))
+     sort)
+EOF
+lw-eval --file /tmp/lw-proxy-methods.clj
 # If the new method is absent here but present in javap output → restart required
 ```
 
@@ -253,8 +259,13 @@ clj-nrepl-eval -p 7888 '(->> (.getClass (lw/bean "yourRepository")) .getMethods 
 # ❌ lw-eval silently drops the ! — "No such var: hq/reset-all"
 lw-eval '(hq/reset-all!)'
 
-# ✅ clj-nrepl-eval passes the expression verbatim
+# ❌ inline clj-nrepl-eval with ! — shell eats it
 clj-nrepl-eval -p 7888 "(hq/reset-all!)"
+
+# ✅ correct — temp file
+lw-eval --file /tmp/lw-reset.clj
+# (in /tmp/lw-reset.clj):
+# (hq/reset-all!)
 ```
 
 ---
@@ -268,8 +279,11 @@ lw-build-test-recipe Review '{:overrides {:comment "Absolutely wonderful!"}}'
 # ✅ avoid ! in string values passed via wrapper scripts
 lw-build-test-recipe Review '{:overrides {:comment "Absolutely wonderful"}}'
 
-# ✅ or use clj-nrepl-eval directly
-clj-nrepl-eval -p 7888 "(faker/build-test-recipe \"Review\" {:overrides {:comment \"Absolutely wonderful!\"}})"
+# ✅ or use clj-nrepl-eval with temp file (has ! and nested quotes)
+cat > /tmp/lw-faker.clj << 'EOF'
+(faker/build-test-recipe "Review" {:overrides {:comment "Absolutely wonderful!"}})
+EOF
+lw-eval --file /tmp/lw-faker.clj
 ```
 
 ---
@@ -349,8 +363,11 @@ lw-call-endpoint adminController archiveBook ROLE_ADMIN 1
 UUID strings like `c97f032f-8e52-4084-9716-1b4ac7295dcc` are not valid Clojure literals.
 
 ```bash
-# ✅ clj-nrepl-eval with explicit UUID conversion
-clj-nrepl-eval -p 7888 "(lw/run-as [\"admin\" \"ROLE_ADMIN\"] (.myMethod (lw/bean \"myController\") (java.util.UUID/fromString \"c97f032f-8e52-4084-9716-1b4ac7295dcc\")))"
+# ✅ correct — temp file (nested quotes + no shell escaping issues)
+cat > /tmp/lw-uuid.clj << 'EOF'
+(lw/run-as ["admin" "ROLE_ADMIN"] (.myMethod (lw/bean "myController") (java.util.UUID/fromString "c97f032f-8e52-4084-9716-1b4ac7295dcc")))
+EOF
+lw-eval --file /tmp/lw-uuid.clj
 ```
 
 ---
@@ -396,7 +413,10 @@ If the Java/Kotlin method has optional parameters, passing fewer args than the m
 causes "No matching method taking N args". Pass `nil` explicitly via `clj-nrepl-eval`:
 
 ```bash
-clj-nrepl-eval -p 7888 "(lw/run-as [\"admin\" \"ROLE_ADMIN\"] (.myMethod (lw/bean \"myController\") (java.util.UUID/fromString \"c97f032f-...\") nil))"
+cat > /tmp/lw-optional.clj << 'EOF'
+(lw/run-as ["admin" "ROLE_ADMIN"] (.myMethod (lw/bean "myController") (java.util.UUID/fromString "c97f032f-...") nil))
+EOF
+lw-eval --file /tmp/lw-optional.clj
 ```
 
 ---
@@ -429,7 +449,13 @@ errors are common. It is always faster and more reliable to read the source file
 
 ```bash
 # ❌ reflection on proxy — noisy, error-prone
-clj-nrepl-eval -p 7888 '(->> (.getMethods (class (lw/bean "bookService"))) (map #(.getName %)) sort)'
+# ❌ also has ->> and #() — would need temp file even if proxy worked
+cat > /tmp/lw-reflect.clj << 'EOF'
+(->> (.getMethods (class (lw/bean "bookService")))
+     (map #(.getName %))
+     sort)
+EOF
+lw-eval --file /tmp/lw-reflect.clj
 
 # ✅ just grep the source — one call, exact answer
 grep -n "public.*getBooks" /path/to/BookService.java
@@ -440,6 +466,31 @@ grep -n "public.*getBooks" /path/to/BookService.java
 Controllers and services are CGLIB proxies. Calling `(clojure.core/bean proxy)` returns
 proxy metadata (`:advisors`, `:callbacks`, etc.), not the bean's own fields. Read source
 code to discover what methods to call on a bean.
+
+---
+
+### `@BatchSize` only works on collections — not `@ManyToOne`
+
+`@BatchSize` is supported on `@OneToMany`, `@ManyToMany`, and element collections. It is **not supported on `@ManyToOne`** — Hibernate throws `AnnotationException: Property 'X' may not be annotated '@BatchSize'`. If you need to batch-load an association that is a `@ManyToOne`, use a JPQL `JOIN FETCH` in the owning query or the `spring.jpa.properties.hibernate.default_batch_fetch_size` property instead.
+
+```java
+@Entity
+public class Book {
+    // ✅ works — collection
+    @OneToMany(mappedBy = "book")
+    @BatchSize(size = 50)
+    private List<Review> reviews;
+
+    // ❌ AnnotationException — @ManyToOne cannot use @BatchSize
+    @ManyToOne
+    @BatchSize(size = 50)
+    private LibraryMember member;  // compilation error
+}
+```
+
+**Alternatives for `@ManyToOne` batch loading:**
+- JPQL `JOIN FETCH` in the query that loads the parent
+- `spring.jpa.properties.hibernate.default_batch_fetch_size=50` in `application.properties` — Hibernate applies batch loading globally to all `@ManyToOne` and `@OneToMany` associations
 
 ---
 
@@ -613,9 +664,65 @@ lw-trace-sql '(do (let [res (trace/trace-sql ...)] ...))
 # ✅ correct — just pass the raw expression, the wrapper handles tracing
 lw-trace-sql '(doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean "bookRepository")))
 
-# ✅ if you need both tracing + transformation, use raw clj-nrepl-eval
-clj-nrepl-eval -p 7888 "(let [res (trace/trace-sql (doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean \"bookRepository\"))))] (:count res))"
+# ✅ if you need both tracing + transformation, use temp file
+# (has let, doall, nested parens — inline quoting will break)
+cat > /tmp/lw-trace-count.clj << 'EOF'
+(let [res (trace/trace-sql (doall (.findAllWithAuthorGenresReviewsAndMember (lw/bean "bookRepository"))))]
+  (:count res))
+EOF
+lw-eval --file /tmp/lw-trace-count.clj
 ```
+
+### After implementing a performance fix, always verify data correctness
+
+**A trace showing `{:total-queries 2, :suspicious-queries []}` only proves the query count went down.**
+It does **not** prove the response data is correct. The most common silent bug after an N+1 fix:
+
+- **Wrong grouping key** — grouping reviews by review ID instead of book ID (compiles fine, traces fine, returns empty reviews)
+- **Missing join condition** — fetching all reviews but grouping by the wrong field (compiles, traces, wrong data)
+- **DTO field mismatch** — populating the wrong DTO fields (compiles, traces, garbled output)
+
+**These bugs never show up in `lw-trace-nplus1` or `lw-trace-sql`.** The trace only measures SQL execution.
+
+**Always verify with a sample call after a fix:**
+
+```bash
+# Step 1: trace confirms query count
+lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGenreId (lw/bean "bookService") 1))'
+;; => {:total-queries 2, :suspicious-queries []}  ← performance is fixed
+
+# Step 2: verify data shape and content
+lw-call-endpoint bookController getBooksByGenre ROLE_MEMBER 1
+;; => look for: author names populated, genres present, reviews NOT empty
+```
+
+**The two-step verification is mandatory.** Performance trace + sample response.
+
+---
+
+### Missing Java imports cause hard compile failures — compile before restarting
+
+After writing a Java source fix, **always run `mvn compile -DskipTests`** before asking the
+user to restart. A single missing import (e.g. forgetting `import com.example.Review;`)
+produces a hard compile failure that prevents the entire app from starting. The query-watcher
+cannot pick up constructor changes, new repository methods, or import fixes — these require
+a full restart.
+
+```bash
+# ✅ compile first — catches the error immediately
+mvn compile -DskipTests
+# => if it fails, fix the error before restarting
+
+# ✅ then restart the app
+```
+
+**Common compile errors to check for:**
+- Missing `import` for a class you reference (Review, Genre, Map, Collectors)
+- Constructor signature change — new injected field requires updating the constructor
+- New repository method name doesn't match the call site
+- Wrong method reference (e.g. `ReviewDto::id` instead of the book ID)
+
+---
 
 ### Self-referential `let` bindings fail silently
 
@@ -634,3 +741,38 @@ In Clojure, you **cannot** reference a `let` binding from its own initializer:
 
 This happens when trying to compute data and inspect the trace in a single `let` form.
 Always split into two forms: compute first, trace second.
+
+---
+
+### Never use positional `?1`, `?2` parameters in JPQL queries via `EntityManager` — always use named `:paramName`
+
+When calling `EntityManager.createQuery()` directly (not via `@Query` or `jpa/jpa-query`),
+Hibernate requires **named parameters** (`:genreId`, `:bookIds`). Positional parameters
+(`?1`, `?2`) are fragile and a frequent source of errors:
+
+- Bare `?` in a string → `ParameterLabelException: Unlabeled ordinal parameter ('?' rather than ?1)`
+- You must manually build `?1, ?2, ...` placeholders and bind each one with `run!` + `iterate inc 1`
+- This pattern is error-prone, hard to read, and easy to forget the `?` vs `?1` distinction
+
+**Named parameters are the only safe default.** Always write JPQL with `:name` and bind with
+`.setParameter(q, "name", val)`:
+
+```clojure
+(def em (lw/bean jakarta.persistence.EntityManager))
+
+;; ✅ Named single param — always the first choice
+(.setParameter q "genreId" (long 1))
+
+;; ✅ Named collection IN (:ids) — simplest for variable-size lists
+(.setParameter q "bookIds" [1 2 3 4 5])
+
+;; ❌ Positional — works but fragile
+;; bare "?" → ParameterLabelException
+;; you must build "?1", "?2" and bind each individually — easy to forget
+(let [placeholders (str/join ", " (mapv #(str "?") (take (count ids) (iterate inc 1))))]
+  (let [q (.createQuery em (str "... IN (" placeholders ")"))]
+    (run! (fn [[val idx]] (.setParameter q idx val))
+          (mapv vector ids (iterate inc 1)))))
+```
+
+**Rule: never write positional parameters.** Use named params (`:name`) and `.setParameter(q, "name", val)` for every case. Only use positional parameters when you are writing code that runs at runtime (not in the REPL), and even then prefer named params for readability.

@@ -1,24 +1,44 @@
 #!/usr/bin/env bash
-# Usage: lw-jpa-query <jpql> [page] [page-size]
-#
+# Usage: lw-jpa-query [OPTIONS] <jpql | --file <path>> [page] [page-size]
 # Executes a JPQL query against the live EntityManager and returns a
 # traced result with :result (vector of entity maps), :count (SQL queries
 # fired), and :duration-ms.
+# Options:
+#   --file <path>  Read the JPQL string from a file (preserves multiline)
 #
 # Arguments:
-#   $1  JPQL string  (required)
-#   $2  page index   (optional, default 0)
-#   $3  page size    (optional, default 10)
+#   $1  JPQL string or --file  (required)
+#   $2  page index             (optional, default 0)
+#   $3  page size              (optional, default 10)
 #
 # Examples:
 #   lw-jpa-query 'SELECT b FROM Book b'
 #   lw-jpa-query 'SELECT b FROM Book b LEFT JOIN FETCH b.genres' 0 5
-#   lw-jpa-query 'SELECT b FROM Book b ORDER BY b.id' 2 10
+#   lw-jpa-query --file /tmp/query.jpql 2 10
 
-PAGE="${2:-0}"
-PAGE_SIZE="${3:-10}"
+PAGE="${3:-0}"
+PAGE_SIZE="${4:-10}"
+
+if [[ "${1:-}" == "--file" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "Usage: $0 --file <path-to-jpql-file> [page] [page-size]" >&2
+    exit 1
+  fi
+  JPQL=$(<"${2}")
+  # Collapse to single line and escape double quotes for embedding
+  JPQL=$(printf '%s' "$JPQL" | tr '\n\r' ' ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+  JPQL_ESCAPED="${JPQL//\\/\\\\}"
+  JPQL_ESCAPED="${JPQL_ESCAPED//\"/\\\"}"
+  EXEC_EXPR="(trace/trace-sql (jpa/jpa-query \"${JPQL_ESCAPED}\" :page ${PAGE} :page-size ${PAGE_SIZE}))"
+else
+  JPQL="${1}"
+  PAGE="${2:-0}"
+  PAGE_SIZE="${3:-10}"
+  JPQL_ESCAPED="${JPQL//\\/\\\\}"
+  JPQL_ESCAPED="${JPQL_ESCAPED//\"/\\\"}"
+  EXEC_EXPR="(trace/trace-sql (jpa/jpa-query \"${JPQL_ESCAPED}\" :page ${PAGE} :page-size ${PAGE_SIZE}))"
+fi
 
 clj-nrepl-eval -p "${LW_PORT:-7888}" \
   "(require '[net.brdloush.livewire.core :as lw] '[net.brdloush.livewire.query :as q] '[net.brdloush.livewire.introspect :as intro] '[net.brdloush.livewire.trace :as trace] '[net.brdloush.livewire.query-watcher :as qw] '[net.brdloush.livewire.hot-queries :as hq] '[net.brdloush.livewire.jpa-query :as jpa] '[net.brdloush.livewire.mvc :as mvc])"
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" \
-  "(trace/trace-sql (jpa/jpa-query \"$1\" :page $PAGE :page-size $PAGE_SIZE))"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "$EXEC_EXPR"

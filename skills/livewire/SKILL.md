@@ -71,6 +71,11 @@ not to preempt their request.
 "why" is complete. The user may agree with the diagnosis and want to fix it themselves.
 They may ask for variants. They may not. Don't guess.
 
+**Risk emoji.** Whenever an option, suggestion, or approach carries real risk
+(Cartesian product, data loss, silent wrongness, unbounded query counts, etc.),
+prefix the risk with ⚠️. When the risk is low, no emoji needed. When in doubt,
+flag it.
+
 ---
 
 ## Trigger Rules
@@ -85,6 +90,7 @@ This is not optional — static knowledge is unreliable for live-app questions.
 | `hot swap` `hot-swap` `@Query` `jpql` `query watcher` `swapped` `jpa/jpa-query` | API Core | `$SKILL_DIR/references/api-core.md` |
 | `faker` `fake data` `build-entity` `build-test-recipe` `test data` | Writing Tests & Fake Data | `$SKILL_DIR/references/writing-tests-and-fake-data.md` |
 | `pitfall` `error` `exception` `unexpected` `what went wrong` | Pitfalls | `$SKILL_DIR/references/pitfalls.md` |
+| `variant discipline` `variant discipline` `don't test other variants` `stop after one` `only test what I chose` | Variant Discipline | `$SKILL_DIR/references/variant-discipline.md` |
 
 ---
 
@@ -202,26 +208,54 @@ in a full nREPL session.
 3. **Namespaces are pre-aliased** in the `user` ns — no manual `require` needed:
    `lw`, `q`, `intro`, `trace`, `qw`, `hq`, `jpa`, `mvc`, `faker`
 
-4. **Evaluate** snippets iteratively:
+4. **Inspect before writing any query** — before writing SQL or JPQL, always run:
    ```bash
-   clj-nrepl-eval -p <port> "<clojure-code>"
-   clj-nrepl-eval -p <port> --timeout 5000 "<clojure-code>"
+   lw-list-entities          # get table names and entity FQNs
+   lw-inspect-entity <Name>  # get columns, FK columns, relations for join paths
+   ```
+   **Never guess table names, column names, or join conditions.** The `lw-inspect-entity` output is
+   the source of truth. Even when the app uses conventional naming (`author_id`, `book_id`),
+   non-standard mappings (`referencedColumnName`, `@JoinTable`) break the pattern.
+
+5. **Evaluate** snippets — **default to a temp file for everything except ultra-trivial
+   inline evals** (see `references/clj-nrepl-eval-temp-files.md`):
+
+   ```bash
+   # Ultra-trivial only (zero args, zero nesting, no special chars):
+   clj-nrepl-eval -p <port> "(lw/info)"
+
+   # Everything else — write a .clj file, then use a wrapper script:
+   $SKILL_DIR/bin/lw-eval --file /tmp/livewire-XXXXX.clj
    ```
 
-5. **Run independent read queries in parallel** — fire unrelated `clj-nrepl-eval` calls in a
+   **Rule of thumb:** inline is fine only for one-liners with no arguments, no nesting,
+   and no special characters — things like `(lw/info)` or `(lw/find-beans-matching "Repo")`.
+   For anything with function arguments, `do`, `let`, threading, or more than one form,
+   use a temp file. When in doubt, use a temp file. It's never wrong.
+
+6. **Run independent read queries in parallel** — fire unrelated `clj-nrepl-eval` calls in a
    single message to reduce wall-clock time. Only serialize when one result feeds into the next.
 
-6. **Present results readably:**
+7. **Present results readably:**
    - Collections of maps → markdown table
    - Single map → inline key/value list
    - Scalars → inline code in prose
 
-7. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it re-reads the same
+8. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it re-reads the same
    old class on the classpath. Instead, evaluate the new `ns` form and function bodies directly.
 
-8. **After writing a source-code fix:** remind the user that a restart may be required for
-   structural changes (new methods, new beans). `@Query` JPQL changes are picked up automatically
-   by the query-watcher on recompile.
+9. **After writing a source-code fix (Java/Kotlin):** always compile first, then restart.
+   `mvn compile -DskipTests` before asking the user to restart. Missing a single `import`
+   or wrong method reference produces a hard compile failure that stops the entire app
+   from starting. The query-watcher cannot pick up constructor changes, new methods, or
+   import fixes.
+
+10. **Always verify data correctness after a fix** — `lw-trace-nplus1` returning `{:total-queries 2}`
+   only confirms the query count. It does **not** verify that the response data is correct.
+   A fix can reduce queries from 98 to 2 and still return empty nested collections
+   (e.g. grouping reviews by review ID instead of book ID). **Always call `lw-call-endpoint`
+   or `lw/jpa-query` to inspect at least one sample of the response after implementing a fix.**
+   The query count trace validates performance; a sample response validates correctness.
 
 ---
 
@@ -272,13 +306,16 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-dead-methods <beanName>` | Analyses public methods on a bean. Splits into `:dead` (no callers anywhere — delete candidates) and `:internal-only` (called only from sibling methods — visibility leaks, refactoring candidates). Warns when messaging beans or db-scheduler tasks are detected. |
 | `lw-eval <clojure-expr>` | Generic nREPL eval — **avoid, see pitfall below** |
 
-> ⚠️ **Prefer `clj-nrepl-eval -p <port>` over `lw-eval` for arbitrary expressions.**
-> Clojure characters like `!`, `?`, `->` / `->>` can be misinterpreted by the shell when
-> passed through `lw-eval`. Use dedicated wrapper scripts for named operations; for everything
-> else call `clj-nrepl-eval` directly:
+> ⚠️ **For arbitrary expressions, use `$SKILL_DIR/bin/lw-eval --file <path>`** to avoid shell escaping issues.
+> Inline `clj-nrepl-eval` is fine only for ultra-trivial one-liners (no args, no nesting, no special chars).
+> Never pass Clojure code with `!`, `?`, `->`, `#()`, `fn`, `doall`, `vec`, `mapv`,
+> or nested parens as an inline shell argument — the shell will mangle them.
+> Use a temp file with a wrapper script:
 > ```bash
-> clj-nrepl-eval -p 7888 "(hq/reset-all!)"
+> # Write the expression, then pass the file
+> $SKILL_DIR/bin/lw-eval --file /tmp/lw-expr.clj
 > ```
+> See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md` for the complete rule.
 
 ---
 
@@ -328,8 +365,8 @@ Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and example
 ```
 
 ```bash
-# N+1 detection — always use the wrapper script, not raw trace/detect-n+1 calls
-lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGenreId (lw/bean "bookService") 1))'
+# N+1 detection — always use the wrapper script via $SKILL_DIR, not raw trace calls
+$SKILL_DIR/bin/lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGenreId (lw/bean "bookService") 1))'
 # => {:suspicious-queries [{:sql "select ... from author ...", :count 20} ...], :total-queries 98, ...}
 ```
 
@@ -357,6 +394,44 @@ transaction boundary.**
 
 ---
 
+## ⚠️ Common Clojure expression gotchas
+
+These are the mistakes that repeatedly cause compiler/runtime errors or wrong return values. They appear in the expression-writing context — apply them **before every `lw-eval`**.
+
+- **Never shadow core functions** — `def`, `let`, `fn`, `loop`, destructuring — don't bind names like `first`, `map`, `update`, `get`, `keys`, `count`, `filter`, `reduce`. Shadowing `first` is the worst offender: every subsequent call to `clojure.core/first` throws `IllegalStateException: Attempting to call unbound fn`. Use `o-first`, `n-first`, `orig`, `new-` as prefixes.
+- **EDN doesn't use Java numeric suffixes** — `1L`, `1.0f`, `1d` are not valid EDN. Use `(long 1)`, `(float 1.0)` instead.
+- **Java records use field-name accessors** — records generate `.id`, `.title`, `.genreNames` — **not** `.getId()`, `.getTitle()`, `.getGenreNames()`. If you see `No matching field found` or a return value that looks like a `clojure.lang.Var`, it's almost certainly the accessor name. When in doubt, inspect a known instance: `(clojure.core/first (lw/in-readonly-tx (.findAll (lw/bean "bookRepository"))))` then check which methods exist.
+- **Always wrap entity access in `in-readonly-tx`** — lazy collections (`reviews`, `member`, etc.) throw `LazyInitializationException` if you touch them outside the transaction boundary. When the trace wrapper alone doesn't keep the session open, explicitly wrap the body in `(lw/in-readonly-tx ...)`.
+- **Hibernate `setParameter` — always use named parameters (`:name`)** — the positional path (`?1`, `?2`) is a trap:
+  - Bare `?` in JPQL → `ParameterLabelException: Unlabeled ordinal parameter ('?' rather than ?1)`
+  - You must construct `?1`, `?2`, ... with `(iterate inc 1)` and `run!`-set each one — easy to get wrong
+  - **Named params are the only safe default.** Always write `:paramName` in JPQL and use `.setParameter(q, "paramName", val)`.
+
+```clojure
+(def em (lw/bean jakarta.persistence.EntityManager))
+
+;; ✅ Named single param — always the first choice
+(.setParameter q "genreId" (long 1))
+;; JPQL: "... WHERE g.id = :genreId"
+
+;; ✅ Named collection IN (:ids) — safest for variable-size lists
+(.setParameter q "bookIds" [1 2 3 4 5])
+;; JPQL: "... WHERE r.book.id IN (:bookIds)"
+
+;; ❌ Positional — works but fragile, easily produces ParameterLabelException
+;; bare "?" → ParameterLabelException
+;; you must construct "?1", "?2" and bind each individually
+(let [placeholders (str/join ", " (mapv #(str "?") (take (count ids) (iterate inc 1))))]
+  (let [q (.createQuery em (str "... IN (" placeholders ")"))]
+    (run! (fn [[val idx]] (.setParameter q idx val))
+          (mapv vector ids (iterate inc 1)))))
+```
+
+**Rule:** never write positional parameters. Use named params (`:name`) and `.setParameter(q, "name", val)` for every case. Only use positional parameters when you are writing code that runs at runtime (not in the REPL), and even then prefer named params for readability.
+- **Never feed an unbounded infinite sequence into a strict consuming function** — `(mapv (iterate inc 1))`, `(reduce + (iterate inc 1))`, `(filter even? (iterate inc 1))` all try to realize the entire infinite lazy seq into a concrete structure (vector, map, set) → `OutOfMemoryError`. Always bound first: `(mapv (iterate inc 1) (take 20 ...))` or use an explicit count. The same trap applies to `partition-all` on an infinite seq. In the REPL, `iterate` is the most common source — if you see `mapv` / `into` / `vec` / `reduce` + `iterate` / `repeatedly` / `cycle`, double-check the consuming function has a finite input.
+
+---
+
 ## ⚠️ Critical pitfalls (inline — full list in `$SKILL_DIR/references/pitfalls.md`)
 
 - **Never call `.findAll` without a `Pageable`** — may return millions of rows and hang the REPL.
@@ -369,13 +444,16 @@ transaction boundary.**
 - **Always inspect entities before writing any query** — never guess table/column names.
 - **Never guess method names** — controller method name ≠ service method name ≠ repository method name. The controller `getBooks()` delegates to `bookService.getAllBooks()`, not `getBooks()`. **Always read the source code** (`grep -n "getBooks" /path/to/Controller.java`) before calling a method on a bean. Same trap: the bean name is lowercase (`bookService`), the controller class is `BookController`, the endpoint path is `/api/books` — none of these are the same. Full rule: `$SKILL_DIR/references/pitfalls.md`.
 - **Never guess IDs for method parameters** — always look up real values from the DB first (`lw-sql "SELECT id, name FROM <table> ORDER BY id LIMIT 5"`). A lucky hit gives the user no way to reproduce with a different value; a miss returns 404. Full rule: `$SKILL_DIR/references/pitfalls.md`.
-- **`lw-eval` mangles `!`, `?`, `->` in zsh** — use `clj-nrepl-eval -p 7888` directly for expressions with these characters.
+- **`lw-eval` mangles `!`, `?`, `->` in zsh** — never pass Clojure code with special characters as inline shell args. Write to a temp file instead: `lw-eval --file /tmp/lw.clj` where the file contains the Clojure expression. Full rule: `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 - **`trace/trace-sql` only works on JPA entities** — DTOs, Java records, and `select-keys` results have no JPA metadata. `trace/trace-sql` will fail on them with `find not supported on type`. Trace against repository methods that return entities instead.
-- **Don't nest `trace/trace-sql`** — `lw-trace-sql` and `lw-trace-nplus1` already wrap your expression. Putting `trace/trace-sql` or `trace/detect-n+1` inside the expression creates double-wrapping. Use raw `clj-nrepl-eval` when you need both tracing and transformation.
+- **Don't nest `trace/trace-sql`** — `lw-trace-sql` and `lw-trace-nplus1` already wrap your expression. Putting `trace/trace-sql` or `trace/detect-n+1` inside the expression creates double-wrapping. Use raw `clj-nrepl-eval` when you need both tracing and transformation — but write the expression to a temp file if it contains `!`, `?`, `->`, `#()`, or nested parens. See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 - **Never use `(dorun (map ...))` in transaction context** — it creates a lazy seq chain that silently blocks and hangs. `dorun` does NOT realize lazy seqs it receives; it only consumes realized ones. Always use `doseq` for side effects or `mapv` for returning data.
 - **Never use `hq/hot-swap-query!` to test a hypothesis** — it mutates JVM state for all callers until explicitly reset. To prove a candidate JPQL reduces N+1, use `jpa/jpa-query` wrapped in `trace/trace-sql` or `lw-trace-nplus1` — zero side effects, no cleanup needed. Hot-swap is only for final end-to-end confirmation once the fix is already validated.
 - **`jpa/jpa-query` takes keyword args, not positional** — correct form: `(jpa/jpa-query jpql :page 0 :page-size 20)`. It does **not** support named query parameters (`:genreId` etc.); for parameterized JPQL use `(lw/bean jakarta.persistence.EntityManager)` directly.
 - **Always warn about Cartesian product when suggesting `JOIN FETCH`** — `JOIN FETCH` on two collections of the same parent duplicates rows at the SQL level (Cartesian product) and produces bloated entities/DTOs even though Hibernate deduplicates. **This is silently wrong — no exception, no warning — the DTO looks "mostly right" but nested collections contain duplicated items.** Even 2 genres × 2 reviews on a single row = 4× duplicated items. Never suggest `JOIN FETCH` on a second collection alongside an already-fetched collection without explicitly calling out the multiplication risk and offering an alternative (batch fetching with `@BatchSize`, two-query approach, or `IN` clause). Full rule: `$SKILL_DIR/references/n-plus-one-hunting.md`.
 - **Only present fix variants when the user explicitly asks.** Diagnostic output (N+1 trace, query counts, SQL patterns) is a complete diagnosis — the user knows what's wrong and how many queries it costs. Presenting variants unasked wastes effort and signals you don't distinguish between "what's wrong" and "how to fix it." When the user does ask, read `$SKILL_DIR/references/n-plus-one-hunting.md` for the full variant table and present 2–4 options with pros/cons so they can choose based on their constraints (source edit cost, performance, global vs local impact). The common variants are full `JOIN FETCH` (single query), partial `JOIN FETCH` + `@BatchSize`, multiple queries merged in code, and `@BatchSize` annotation-only fixes. **Never assume one approach is universally best** — context matters (result set size, call frequency, source edit permissions). Never present a single `JOIN FETCH` as THE answer if asked.
+- **Always verify data correctness after a fix — a trace showing "2 queries, 0 suspicious" does NOT mean the data is correct.** The most common silent bug: grouping by the wrong key (e.g. grouping reviews by review ID instead of book ID, which compiles, traces, and runs fine but returns empty reviews for every book). **Always call `lw-call-endpoint` or `lw/jpa-query` to inspect the response shape after implementing a fix.** The query count trace validates performance; a sample response validates correctness. They are two separate checks.
+- **Always run `mvn compile -DskipTests` after Java source changes** — missing a single `import` or wrong `let` binding produces a hard compile failure that stops the entire restart. The query-watcher cannot pick up constructor changes, new methods, or import fixes. Always compile before restarting.
+- **Never trust `trace/trace-sql` or `lw-trace-nplus1` alone as proof of correctness.** They measure query count and suspicious patterns — not data shape, not group keys, not DTO assembly. A fix can reduce queries from 98 to 2 and still return empty nested collections. Always verify with a sample call to `lw-call-endpoint` or `lw/jpa-query`.
 
 For all other pitfalls (UUID args, optional params, `@PreAuthorize`, `javax` vs `jakarta`, timing warm-up, etc.), read `$SKILL_DIR/references/pitfalls.md`.

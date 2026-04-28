@@ -386,3 +386,63 @@
       (clear-hibernate-caches!)
       (trigger-rescan!))
     (mapv vec keys)))
+
+;; ---------------------------------------------------------------------------
+;; Batch-size hot-patch — global defaultBatchFetchSize
+;; ---------------------------------------------------------------------------
+
+(defonce ^:private original-batch-state (atom nil))
+
+(defn- get-batch-size-field-and-target!
+  "Returns [field opts] pair for defaultBatchFetchSize."
+  []
+  (let [sfi (core/bean "entityManagerFactory")
+        sfi (.unwrap sfi org.hibernate.engine.spi.SessionFactoryImplementor)
+        opts (.getSessionFactoryOptions sfi)
+        field (.getDeclaredField (class opts) "defaultBatchFetchSize")]
+    (.setAccessible field true)
+    [field opts]))
+
+(defn hot-patch-batchsize!
+  "Patches Hibernate defaultBatchFetchSize to SIZE. Global only.
+
+  When patched (size > 0): new sessions inherit the value into their
+  LoadQueryInfluencers, making isAffectedByBatchSize() return true and
+  triggering batched collection loading. This can reduce N+1 collection
+  queries significantly.
+
+  Global only — applies to ALL collections in the session. Per-association
+  @BatchSize still requires source code + restart.
+
+  The original value is cached automatically, so reset-batchsize! restores
+  the prior setting rather than hard-coding -1.
+
+  Args:
+    size — positive integer for the batch size, or -1 to disable batching.
+
+  Returns the patched value.
+
+  Usage:
+    (hq/hot-patch-batchsize! 50)     ; patch to batch size 50
+    (hq/reset-batchsize!)             ; restore original value"
+  [size]
+  (when-not @original-batch-state
+    (swap! original-batch-state #(or % (get-batch-size-field-and-target!))))
+  (let [[field opts] @original-batch-state]
+    (.set field opts (int size)))
+  (printf "[hot-queries] batch-size patched to %d%n" size)
+  size)
+
+(defn reset-batchsize!
+  "Restores Hibernate defaultBatchFetchSize to -1 (disabled).
+
+  Returns the restored value.
+
+  Usage:
+    (hq/reset-batchsize!)"
+  []
+  (when @original-batch-state
+    (let [[field opts] @original-batch-state]
+      (.set field opts (int -1)))
+    (printf "[hot-queries] batch-size restored to -1 (disabled)%n")
+    (reset! original-batch-state nil)))

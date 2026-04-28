@@ -7,6 +7,27 @@ Each entry should carry enough context for a fresh agent to resume without askin
 
 _Last updated: 2026-03-21_
 
+---
+
+### ~~@BatchSize Hot-Patch (hq/hot-patch-batchsize! / hq/reset-batchsize!)~~
+
+✅ Done — shipped in `net.brdloush.livewire.hot-queries` namespace:
+
+- **`(hq/hot-patch-batchsize! 50)`** — patches Hibernate's global `defaultBatchFetchSize` to 50
+- **`(hq/reset-batchsize!)`** — restores to -1 (disabled)
+
+**Finding:** Hot-patching `@BatchSize` effects is possible via the global `defaultBatchFetchSize` setting only. Global only — not per-association.
+
+**Validation:**
+| State | Query Count | Genre Queries |
+|---|---|---|
+| Patched (size=50) | **11** | **1** (batched) |
+| Baseline (-1) | **481** | individual |
+
+**Docs updated:** SKILL.md (namespace row + workflow note), README.md (new subsection with examples), web/getting-started.html (new try-it card), web/index.html (batch-size example in SQL Tracing feature card).
+
+**See full investigation:** `tasks/batchsize-preliminary-result.md`
+
 ## 🚧 In Progress
 
 ### `trace` namespace — `hibernate-stats`

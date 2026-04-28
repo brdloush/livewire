@@ -210,7 +210,7 @@
       <div class="feature-card">
         <div class="feature-icon">🔬</div>
         <h3>SQL Tracing &amp; N+1 Detection</h3>
-        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call.</p>
+        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call. Test <code>@BatchSize</code> effects without restart: patch Hibernate's global batch size, measure the query count, then restore.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">trace/detect-n+1</span>
   <span class="p">(</span><span class="kw">trace/trace-sql</span>
     <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
@@ -218,7 +218,16 @@
 <span class="r">;; => {:suspicious-queries
 ;;      [{:sql "select ... from book_genre ...", :count 200}
 ;;       {:sql "select ... from review ...",     :count 200}]
-;;     :total-queries 481, :duration-ms 226}</span></pre></div>
+;;     :total-queries 481, :duration-ms 226}</span>
+
+<span class="c">;; Test @BatchSize without restart</span>
+<span class="p">(</span><span class="kw">hq/hot-patch-batchsize!</span> <span class="n">50</span><span class="p">)</span>
+<span class="p">(</span><span class="kw">trace/detect-n+1</span>
+  <span class="p">(</span><span class="kw">trace/trace-sql</span>
+    <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+      <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)))))</span>
+<span class="r">;; => :total-queries 11  (481 → 11 with batching)</span>
+<span class="p">(</span><span class="kw">hq/reset-batchsize!</span><span class="p">)</span></pre></div>
       </div>
 
       <div class="feature-card">

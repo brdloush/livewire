@@ -618,6 +618,21 @@ mvn spring-boot:run \
             </div>
 
             <div class="try-card">
+              <span class="try-tag tag-diagnose">Diagnose</span>
+              <div class="try-card-text">
+                <h4>Measure the true cost with batch-size hot-patch</h4>
+                <code class="try-prompt">Patch Hibernate's defaultBatchFetchSize to 50 and show me how many queries GET /api/books fires. Then restore it.</code>
+                <p>
+                  Before deciding between <code>@BatchSize</code> annotations or <code>JOIN FETCH</code>,
+                  measure the actual N+1 cost by live-patching Hibernate's global batch size. Claude
+                  calls <code>hq/hot-patch-batchsize!</code>, runs the trace, then calls
+                  <code>hq/reset-batchsize!</code> to clean up. This gives you the upper bound
+                  on how much batching could help — useful for prioritising fixes.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
               <span class="try-tag tag-query">Query</span>
               <div class="try-card-text">
                 <h4>Compare efficient vs. naive endpoints</h4>

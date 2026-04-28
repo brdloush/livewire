@@ -330,6 +330,10 @@ Fetch the `@ManyToOne` associations and maybe one collection with `JOIN FETCH`, 
 let Hibernate batch-load the rest via `@BatchSize` (or fire per-row lazy loads if no
 `@BatchSize` is configured). Trade: more queries (e.g. 3–5) but no Cartesian product.
 
+⚠️ When recommending the `@BatchSize` part of this fix, follow the placement rule in
+Variant D below: collection fields get the annotation directly; `@ManyToOne` targets need
+the annotation on the **target entity class**, never on the source field.
+
 ```sql
 -- Fetch author+genres; reviews+member load via subsequent IN or per-row selects
 SELECT DISTINCT b FROM Book b
@@ -371,30 +375,58 @@ when the placeholder count exceeds ~1000–2000. For large sets, **split into ba
 ```
 
 ### Variant D — `@BatchSize` annotation (source-level, zero query changes)
-Add `@BatchSize(size = 50)` on every `@OneToMany` / `@ManyToOne` association in the
-dependency graph. Hibernate then batches all lazy loads via `IN` clauses with configurable
-batch size. Trade: easy to add. **Downside:** `@BatchSize` is **global** on the entity —
-any code path that lazy-loads that collection benefits (or pays) for the batch size you
-pick. If your entity has a large collection that is rarely loaded, `@BatchSize(50)` may
-cause heavy IN clauses or unnecessary fetches on that code path. **But this can also be
-a good thing:** if multiple endpoints access the same association, one annotation fixes
-all of them — no scattered JPQL changes needed.
+Add `@BatchSize(size = 50)` to batch lazy loads via `IN` clauses. Trade: easy to add.
+**Downside:** `@BatchSize` is **global** — every code path that lazy-loads the same
+collection or association benefits (or pays) for the batch size you pick. **Upside:**
+if multiple endpoints access the same association, one annotation fixes all of them —
+no scattered JPQL changes needed.
+
+> ⚠️ **`@BatchSize` placement rule — `@ManyToOne` field placement is silently ignored.**
+> Hibernate honors `@BatchSize` in **exactly two places**:
+>
+> 1. On a **collection field** (`@OneToMany`, `@ManyToMany`, `@ElementCollection`) — batches
+>    that specific collection's lazy initialization.
+> 2. On the **target entity class declaration** — batches every lazy `@ManyToOne` /
+>    `@OneToOne` reference *to* that entity, anywhere in the codebase.
+>
+> Putting `@BatchSize` on a `@ManyToOne` / `@OneToOne` **field** compiles fine (the
+> annotation's `@Target` allows fields) but produces **zero runtime effect**. This is the
+> single most common Hibernate batch-fetching mistake — easy to miss in code review because
+> it looks plausible. **Never propose a fix that places `@BatchSize` on a `@ManyToOne` field.**
+>
+> Caveat: class-level `@BatchSize` is global to all `@ManyToOne` references targeting that
+> entity. Always flag this trade-off when recommending it.
+
+**Correct placement examples:**
 
 ```java
-@BatchSize(size = 50)
-private List<Review> reviews;
+// ✅ Collection field — batches Book.reviews specifically
+class Book {
+    @BatchSize(size = 50)
+    @OneToMany(mappedBy = "book")
+    private List<Review> reviews;
+}
 
+// ✅ Target entity class — batches every @ManyToOne to LibraryMember
+@Entity
 @BatchSize(size = 50)
-private LibraryMember member;
+class LibraryMember { ... }
 ```
 
 ```java
-@BatchSize(size = 50)
-private List<Review> reviews;
-
-@BatchSize(size = 50)
-private LibraryMember member;
+// ❌ WRONG — silently ignored, no error, no effect
+class Review {
+    @BatchSize(size = 50)            // ← does nothing on @ManyToOne field
+    @ManyToOne
+    private LibraryMember member;
+}
 ```
+
+**To validate placement:** the Livewire `hq/hot-patch-batchsize!` REPL test patches
+Hibernate's *global* `defaultBatchFetchSize`, which simulates **both** placements at once.
+A successful REPL test confirms the *magnitude* of the fix but **not** the correct
+placement — always cross-check the recipe against the rule above before recommending source
+edits.
 
 ### When to choose which variant
 - **One collection only:** Variant A (full JOIN FETCH) — safe, no Cartesian product risk

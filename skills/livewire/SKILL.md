@@ -244,7 +244,23 @@ in a full nREPL session.
 8. **Hot-patching:** Do not use `:reload` to pick up a newly built JAR — it re-reads the same
    old class on the classpath. Instead, evaluate the new `ns` form and function bodies directly.
 
-9. **After writing a source-code fix (Java/Kotlin):** always compile first, then restart.
+9. **Batch-size hot-patch — test `@BatchSize` effects without restart:**
+   The `hq/hot-patch-batchsize!` function patches Hibernate's global `defaultBatchFetchSize`
+   via reflection. When active, new sessions inherit the value and Hibernate batches collection
+   loading (e.g., 20 genre queries → 1 batched `WHERE id IN (?, ?, ...)`). Global only —
+   applies to ALL collections. Always restore after testing:
+   ```clojure
+   (require '[net.brdloush.livewire.hot-queries :as hq])
+
+   (hq/hot-patch-batchsize! 50)          ; patch
+   ;; ... run N+1 tests via trace/trace-sql or lw-trace-nplus1 ...
+   (hq/reset-batchsize!)                 ; restore (important!)
+   ```
+   **Workflow:** `trace` → `hot-patch-batchsize!` → `trace` again → compare counts → `reset-batchsize!`.
+   The global patch can mask whether a JPQL fix is better or worse than `@BatchSize` —
+   use it to validate the *magnitude* of the N+1 cost, not to pick the final fix.
+
+10. **After writing a source-code fix (Java/Kotlin):** always compile first, then restart.
    `mvn compile -DskipTests` before asking the user to restart. Missing a single `import`
    or wrong method reference produces a hard compile failure that stops the entire app
    from starting. The query-watcher cannot pick up constructor changes, new methods, or
@@ -330,7 +346,7 @@ Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and example
 | `net.brdloush.livewire.trace` | `trace` | `trace-sql`, `trace-sql-global`, `detect-n+1` |
 | `net.brdloush.livewire.jpa-query` | `jpa` | `jpa-query` — JPQL → Clojure maps, lazy-safe, paginated |
 | `net.brdloush.livewire.query` | `q` | `sql` (raw SQL), `diff-entity` (mutation observer) |
-| `net.brdloush.livewire.hot-queries` | `hq` | `hot-swap-query!`, `reset-all!`, `list-swapped` |
+| `net.brdloush.livewire.hot-queries` | `hq` | `hot-swap-query!`, `reset-all!`, `list-swapped`, `hot-patch-batchsize!`, `reset-batchsize!` |
 | `net.brdloush.livewire.query-watcher` | `qw` | `status`, background `@Query` auto-reloader |
 | `net.brdloush.livewire.faker` | `faker` | `build-entity`, `build-test-recipe` — fake data with constraint awareness |
 | `net.brdloush.livewire.callgraph` | `cg` | `blast-radius`, `method-dep-map`, `method-dep-clusters`, `dead-methods` |
@@ -449,6 +465,8 @@ These are the mistakes that repeatedly cause compiler/runtime errors or wrong re
 - **Don't nest `trace/trace-sql`** — `lw-trace-sql` and `lw-trace-nplus1` already wrap your expression. Putting `trace/trace-sql` or `trace/detect-n+1` inside the expression creates double-wrapping. Use raw `clj-nrepl-eval` when you need both tracing and transformation — but write the expression to a temp file if it contains `!`, `?`, `->`, `#()`, or nested parens. See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 - **Never use `(dorun (map ...))` in transaction context** — it creates a lazy seq chain that silently blocks and hangs. `dorun` does NOT realize lazy seqs it receives; it only consumes realized ones. Always use `doseq` for side effects or `mapv` for returning data.
 - **Never use `hq/hot-swap-query!` to test a hypothesis** — it mutates JVM state for all callers until explicitly reset. To prove a candidate JPQL reduces N+1, use `jpa/jpa-query` wrapped in `trace/trace-sql` or `lw-trace-nplus1` — zero side effects, no cleanup needed. Hot-swap is only for final end-to-end confirmation once the fix is already validated.
+- **Use `hq/hot-patch-batchsize!` to test `@BatchSize` effects without restart** — it patches Hibernate's global `defaultBatchFetchSize` via reflection. New sessions inherit the patched value, triggering batched collection loading. Global only (applies to ALL collections). Use `hq/reset-batchsize!` to restore — always clean up after testing.
+- **`@BatchSize` placement rule — never put it on a `@ManyToOne` / `@OneToOne` field.** Hibernate honors `@BatchSize` in exactly two places: (1) on a **collection field** (`@OneToMany`, `@ManyToMany`, `@ElementCollection`) — batches that specific collection; (2) on the **target entity class declaration** — batches every lazy `@ManyToOne`/`@OneToOne` reference *to* that entity. Field-level placement on a `@ManyToOne` compiles fine (the annotation's `@Target` allows fields) but is **silently ignored** at runtime — the most common Hibernate batch-fetching mistake. To batch a `@ManyToOne` to entity `Foo`, annotate `Foo` itself, not the source field. ⚠️ Class-level placement is global to all `@ManyToOne` references targeting that entity — always flag this trade-off when recommending it. The `hq/hot-patch-batchsize!` REPL test patches a **global** value and so simulates both placements at once — a successful test confirms the magnitude of the fix but **not** the correct annotation placement. Full rule: `$SKILL_DIR/references/n-plus-one-hunting.md`.
 - **`jpa/jpa-query` takes keyword args, not positional** — correct form: `(jpa/jpa-query jpql :page 0 :page-size 20)`. It does **not** support named query parameters (`:genreId` etc.); for parameterized JPQL use `(lw/bean jakarta.persistence.EntityManager)` directly.
 - **Always warn about Cartesian product when suggesting `JOIN FETCH`** — `JOIN FETCH` on two collections of the same parent duplicates rows at the SQL level (Cartesian product) and produces bloated entities/DTOs even though Hibernate deduplicates. **This is silently wrong — no exception, no warning — the DTO looks "mostly right" but nested collections contain duplicated items.** Even 2 genres × 2 reviews on a single row = 4× duplicated items. Never suggest `JOIN FETCH` on a second collection alongside an already-fetched collection without explicitly calling out the multiplication risk and offering an alternative (batch fetching with `@BatchSize`, two-query approach, or `IN` clause). Full rule: `$SKILL_DIR/references/n-plus-one-hunting.md`.
 - **Only present fix variants when the user explicitly asks.** Diagnostic output (N+1 trace, query counts, SQL patterns) is a complete diagnosis — the user knows what's wrong and how many queries it costs. Presenting variants unasked wastes effort and signals you don't distinguish between "what's wrong" and "how to fix it." When the user does ask, read `$SKILL_DIR/references/n-plus-one-hunting.md` for the full variant table and present 2–4 options with pros/cons so they can choose based on their constraints (source edit cost, performance, global vs local impact). The common variants are full `JOIN FETCH` (single query), partial `JOIN FETCH` + `@BatchSize`, multiple queries merged in code, and `@BatchSize` annotation-only fixes. **Never assume one approach is universally best** — context matters (result set size, call frequency, source edit permissions). Never present a single `JOIN FETCH` as THE answer if asked.

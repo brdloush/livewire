@@ -435,6 +435,32 @@ picks it up automatically — same result, no REPL call:
 ;; [hot-queries] watcher re-swapped ✓
 ```
 
+### 🎯 Test `@BatchSize` effects without restart
+
+Before writing source code to add `@BatchSize` annotations or `JOIN FETCH`, measure
+the *actual* N+1 cost by patching Hibernate's global `defaultBatchFetchSize` live.
+When active, Hibernate batches collection loading (e.g. 20 genre queries → 1
+batched `WHERE id IN (?, ?, ...)`). Global only — applies to ALL collections.
+
+```clojure
+;; Patch — all collections batch to size 50
+(hq/hot-patch-batchsize! 50)
+
+;; Verify: does the query count drop?
+(trace/trace-sql
+  (lw/run-as "member1"
+    (.getBooks (lw/bean "bookController"))))
+;; => {:count 11, ...}  (was 481 without batching)
+
+;; Restore when done — cleanup is important
+(hq/reset-batchsize!)
+;; => [hot-queries] batch-size restored to -1 (disabled)
+```
+
+Use this to validate the magnitude of the N+1 cost before deciding between `@BatchSize`
+annotations vs `JOIN FETCH`. The patch can mask whether a JPQL fix is better — use it
+to measure, not to pick the final fix.
+
 ### 🧭 Introspect the app's structure
 
 ```clojure

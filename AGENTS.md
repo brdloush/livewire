@@ -513,7 +513,35 @@ After a release is published, remind the maintainer:
 
 ---
 
-## Clojure gotchas
+## Clojure survival guide
+
+Before writing or editing any Clojure code, **read `references/clojure-survival-guide.md`**.
+It is a dense reference covering REPL-driven development, idiomatic patterns, naming
+conventions, data structures, Java interop, and anti-patterns. It is the authoritative
+source for Clojure syntax and idioms — consult it before writing code, and reference
+it whenever a REPL eval fails with a confusing compiler error.
+
+Key sections to remember:
+- **NEVER use `!` suffix** on pure functions (it signals mutation in Clojure).
+- **Use `recur`** in tail position to avoid `StackOverflowError`.
+- **Prefer threading macros** (`->`, `->>`, `some->`, `cond->`) over deep nesting.
+- **Use `ex-info`** for structured error handling with `ex-data`.
+- **Evaluate in the REPL before saving** — prove logic works before persisting.
+
+---
+
+## Clojure syntax & REPL workflow
+
+Before writing or editing any Clojure code, **read `references/clojure-survival-guide.md`**.
+It is the authoritative reference for idiomatic Clojure, REPL-driven workflows, naming
+conventions, and anti-patterns. Load it before touching any `.clj` file.
+
+Key reminders from that guide:
+- **NEVER use `!` suffix** on pure functions (it signals mutation or blocking I/O in Clojure).
+- **Use `recur`** in tail position to avoid `StackOverflowError`.
+- **Prefer threading macros** (`->`, `->>`, `some->`, `cond->`) over deep nesting.
+- **Evaluate in the REPL before saving** — prove logic works before persisting.
+- **Use `ex-info`** for structured error handling with `ex-data`.
 
 ### Never use the `lw/` alias inside Livewire source files
 

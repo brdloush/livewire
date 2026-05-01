@@ -311,6 +311,7 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
 | `lw-trace-nplus1 <clojure-expr>` | Detect N+1 queries in an expression |
+| `lw-trace-with-stats <clojure-expr>` | Run a body and capture aggregate Hibernate Statistics deltas (entity loads, collection fetches, query execution counts) |
 | `lw-call-endpoint [--limit N] <bean> <method> <role> [args...]` | Call a bean method under a single Spring Security role; list results capped at 10 by default. **Role must include `ROLE_` prefix** (e.g. `ROLE_MEMBER`, not `MEMBER`) — `lw-list-endpoints` shows `required-roles` without this prefix |
 | `lw-list-queries <repoBeanName>` | List all `@Query` methods on a repo with their current JPQL |
 | `lw-build-entity <EntityName> [edn-opts]` | Build a fake entity instance; optional EDN opts map (`:auto-deps?`, `:persist?`, `:rollback?`) |
@@ -343,7 +344,7 @@ Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and example
 |---|---|---|
 | `net.brdloush.livewire.core` | `lw` | Beans, transactions (`in-tx`, `in-readonly-tx`), `run-as`, properties, `bean->map`, `diff-entity` |
 | `net.brdloush.livewire.introspect` | `intro` | `list-entities`, `inspect-entity`, `list-endpoints`, endpoint auth metadata |
-| `net.brdloush.livewire.trace` | `trace` | `trace-sql`, `trace-sql-global`, `detect-n+1` |
+| `net.brdloush.livewire.trace` | `trace` | `trace-sql`, `trace-sql-global`, `trace-with-stats`, `detect-n+1` |
 | `net.brdloush.livewire.jpa-query` | `jpa` | `jpa-query` — JPQL → Clojure maps, lazy-safe, paginated |
 | `net.brdloush.livewire.query` | `q` | `sql` (raw SQL), `diff-entity` (mutation observer) |
 | `net.brdloush.livewire.hot-queries` | `hq` | `hot-swap-query!`, `reset-all!`, `list-swapped`, `hot-patch-batchsize!`, `reset-batchsize!` |
@@ -472,6 +473,7 @@ These are the mistakes that repeatedly cause compiler/runtime errors or wrong re
 - **Only present fix variants when the user explicitly asks.** Diagnostic output (N+1 trace, query counts, SQL patterns) is a complete diagnosis — the user knows what's wrong and how many queries it costs. Presenting variants unasked wastes effort and signals you don't distinguish between "what's wrong" and "how to fix it." When the user does ask, read `$SKILL_DIR/references/n-plus-one-hunting.md` for the full variant table and present 2–4 options with pros/cons so they can choose based on their constraints (source edit cost, performance, global vs local impact). The common variants are full `JOIN FETCH` (single query), partial `JOIN FETCH` + `@BatchSize`, multiple queries merged in code, and `@BatchSize` annotation-only fixes. **Never assume one approach is universally best** — context matters (result set size, call frequency, source edit permissions). Never present a single `JOIN FETCH` as THE answer if asked.
 - **Always verify data correctness after a fix — a trace showing "2 queries, 0 suspicious" does NOT mean the data is correct.** The most common silent bug: grouping by the wrong key (e.g. grouping reviews by review ID instead of book ID, which compiles, traces, and runs fine but returns empty reviews for every book). **Always call `lw-call-endpoint` or `lw/jpa-query` to inspect the response shape after implementing a fix.** The query count trace validates performance; a sample response validates correctness. They are two separate checks.
 - **Always run `mvn compile -DskipTests` after Java source changes** — missing a single `import` or wrong `let` binding produces a hard compile failure that stops the entire restart. The query-watcher cannot pick up constructor changes, new methods, or import fixes. Always compile before restarting.
+- **`trace/trace-with-stats` for aggregate stats, `trace/trace-sql` for raw SQL.** `trace-with-stats` returns entity load deltas, collection fetch/load counts, and query execution counts — no SQL text. It's the fastest way to spot the N+1 bottleneck (e.g. "200 collection fetches on `Book.reviews`") without parsing through hundreds of query lines. Use it when you want a high-level picture; use `trace-sql` when you need the actual SQL to write a `JOIN FETCH` fix. Never trust either alone as proof of correctness.
 - **Never trust `trace/trace-sql` or `lw-trace-nplus1` alone as proof of correctness.** They measure query count and suspicious patterns — not data shape, not group keys, not DTO assembly. A fix can reduce queries from 98 to 2 and still return empty nested collections. Always verify with a sample call to `lw-call-endpoint` or `lw/jpa-query`.
 
 For all other pitfalls (UUID args, optional params, `@PreAuthorize`, `javax` vs `jakarta`, timing warm-up, etc.), read `$SKILL_DIR/references/pitfalls.md`.

@@ -391,6 +391,18 @@ Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll 
   (lw/run-as "member1"
     (.getBooksByGenreAsync (lw/bean "bookService") 1)))
 ;; => {:result [...], :count 12, :queries [...]}
+
+;; Want aggregate stats instead of raw SQL? Entity loads, collection fetch counts, query execution counts — no SQL text.
+(trace/trace-with-stats
+  (doall (lw/run-as ["member1" "ROLE_MEMBER"]
+           (lw/in-readonly-tx
+             (.getAllBooks (lw/bean "bookService"))))))
+;; => {:duration-ms 125
+;;     :hibernate-stats
+;;     {:entity-deltas {"com.example.Book" {:load-count 200} ...}
+;;      :collection-deltas {"com.example.Book.genres" {:fetch-count 200, :load-count 200}
+;;                          "com.example.Book.reviews" {:fetch-count 200, :load-count 200}}
+;;      :query-deltas {"SELECT b FROM Book b JOIN ..." {:execution-count 1}}}}
 ```
 
 481 queries for one endpoint. Four N+1 suspects flagged automatically.

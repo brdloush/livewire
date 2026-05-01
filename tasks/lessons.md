@@ -27,6 +27,10 @@ and removed from here.
 
 ---
 
+- 2025-05-01: NEVER use `Math/min` or `Math/max` in Clojure — use the core functions `min`/`max` instead. `Math/min` takes 2 positional args and requires `Math/` prefix, while `min` is a variadic core function that takes any number of args and returns the smallest.
+
+---
+
 <!-- Example entry format:
 - 2025-03-15: When creating a GitHub release with `gh release create`, the `--target` flag
   requires a commit SHA, not a tag name — use `git rev-list -n1 vX.Y.Z` to obtain it.

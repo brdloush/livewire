@@ -210,7 +210,7 @@
       <div class="feature-card">
         <div class="feature-icon">🔬</div>
         <h3>SQL Tracing &amp; N+1 Detection</h3>
-        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call. Test <code>@BatchSize</code> effects without restart: patch Hibernate's global batch size, measure the query count, then restore.</p>
+        <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call. Prefer <code>trace-with-stats</code> when you want aggregate entity loads, collection fetch counts, and query execution counts without the raw SQL text. Test <code>@BatchSize</code> effects without restart: patch Hibernate's global batch size, measure the query count, then restore.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">trace/detect-n+1</span>
   <span class="p">(</span><span class="kw">trace/trace-sql</span>
     <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>

@@ -48,6 +48,116 @@
            (LivewireSqlTracer/stopGlobalTrace)
            (throw e#))))))
 
+(defn get-sf-stats
+  "Returns the Hibernate Statistics object from the running application's
+   SessionFactory. Used by `trace-with-stats` to capture aggregate activity."
+  []
+  (-> (lw/bean "entityManagerFactory")
+      (.unwrap org.hibernate.engine.spi.SessionFactoryImplementor)
+      (.getStatistics)))
+
+(defn snapshot-entity-stats
+  "Captures a snapshot of per-entity load/fetch/update counts.
+   Returns a map from entity FQN → stats map with :load-count, :fetch-count,
+   :update-count, :delete-count, :insert-count."
+  [stats]
+  (into {}
+        (map (fn [name]
+               (let [es (.getEntityStatistics stats name)]
+                 [name
+                  {:load-count (.getLoadCount es)
+                   :fetch-count (.getFetchCount es)
+                   :update-count (.getUpdateCount es)
+                   :delete-count (.getDeleteCount es)
+                   :insert-count (.getInsertCount es)}]))
+        (.getEntityNames stats)))
+
+(defn snapshot-collection-stats
+  "Captures a snapshot of per-collection fetch/load/update/remove/recreate counts.
+   Returns a map from collection role name → stats map."
+  [stats]
+  (into {}
+        (map (fn [name]
+               (let [cs (.getCollectionStatistics stats name)]
+                 [name
+                  {:fetch-count (.getFetchCount cs)
+                   :load-count (.getLoadCount cs)
+                   :update-count (.getUpdateCount cs)
+                   :remove-count (.getRemoveCount cs)
+                   :recreate-count (.getRecreateCount cs)}]))
+        (.getCollectionRoleNames stats)))
+
+(defn snapshot-query-stats
+  "Captures a snapshot of per-JPQL-query execution counts and timing.
+   Returns a map from JPQL query string → stats map with :execution-count,
+   :max-time-ms, :total-time-ms."
+  [stats]
+  (into {}
+        (map (fn [qs]
+               (let [qstat (.getQueryStatistics stats qs)]
+                 [qs
+                  {:execution-count (.getExecutionCount qstat)
+                   :max-time-ms (.getExecutionMaxTime qstat)
+                   :total-time-ms (.getExecutionTotalTime qstat)}]))
+        (into [] (.getQueries stats))))
+
+(defn delta-map
+  "Computes the difference between two stat snapshots.
+   Returns only the fields where the value increased (after - before).
+   Used to extract net activity between a trace call's before/after snapshots."
+  [after before]
+  (into {}
+        (keep (fn [[k after-m]]
+                (let [before-m (get before k)
+                      delta-m (cond-> after-m
+                                before-m
+                                (->> (map (fn [[field after-val]]
+                                            [field (- after-val (get before-m field 0)))])
+                                     (into {})))]
+                  (when (some #(< 0 (val %)) delta-m)
+                    [k (into {} (filter #(< 0 (val %))) delta-m)]))))
+        after))
+
+(defmacro trace-with-stats
+  "Executes body and captures aggregate Hibernate Statistics deltas.
+   Returns a map with :duration-ms and :hibernate-stats containing entity/collection/query deltas.
+   No actual query results or SQL text — purely aggregate data.
+
+   Entity deltas show which entities were loaded/fetched/updated and by how many.
+   Collection deltas show which lazy collections were fetched (N+1 pattern).
+   Query deltas show JPQL-level query execution counts and timing.
+
+   Note: Statistics are cumulative across the JVM session. This macro captures
+   a snapshot before and after the body, then returns the difference.
+
+   Example:
+     (trace/trace-with-stats
+       (doall (lw/run-as [\"member1\" \"ROLE_MEMBER\"]
+                (lw/in-readonly-tx
+                  (.getAllBooks (lw/bean \"bookService\"))))))
+     ;; => {:duration-ms 125
+     ;;     :hibernate-stats
+     ;;     {:entity-deltas {\"com.example.Book\" {:load-count 200} ...}
+     ;;      :collection-deltas {\"com.example.Book.genres\" {:fetch-count 200} ...}
+     ;;      :query-deltas {\"SELECT b FROM Book b JOIN ...\" {:execution-count 1}}}
+     "
+  [& body]
+  `(let [start# (System/currentTimeMillis)
+         ~'stats (get-sf-stats)
+         ~'before-entities (snapshot-entity-stats ~'stats)
+         ~'before-collections (snapshot-collection-stats ~'stats)
+         ~'before-queries (snapshot-query-stats ~'stats)
+         ~'result (do ~@body)
+         ~'after-entities (snapshot-entity-stats ~'stats)
+         ~'after-collections (snapshot-collection-stats ~'stats)
+         ~'after-queries (snapshot-query-stats ~'stats)
+         ~'duration (- (System/currentTimeMillis) start#)]
+     {:duration-ms ~'duration
+      :hibernate-stats
+      {:entity-deltas (delta-map ~'after-entities ~'before-entities)
+       :collection-deltas (delta-map ~'after-collections ~'before-collections)
+       :query-deltas (delta-map ~'after-queries ~'before-queries)}})
+
 (defn detect-n+1
   "Analyzes a trace result (from `trace-sql` or `trace-sql-global`) and
    flags any queries that were executed repeatedly.

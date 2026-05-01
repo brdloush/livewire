@@ -620,6 +620,21 @@ mvn spring-boot:run \
             <div class="try-card">
               <span class="try-tag tag-diagnose">Diagnose</span>
               <div class="try-card-text">
+                <h4>Measure aggregate DB activity without reading hundreds of queries</h4>
+                <code class="try-prompt">Run the books endpoint and show me the Hibernate entity loads and collection fetch stats — I want to see which associations are being lazily loaded.</code>
+                <p>
+                  Claude calls <code>trace/trace-with-stats</code> instead of <code>trace/trace-sql</code>
+                  to get aggregate statistics — entity load deltas, collection fetch/load counts, and
+                  query execution counts. When the collection deltas show 200 fetches on
+                  <code>Book.reviews</code>, the N+1 bottleneck is immediately obvious without parsing
+                  through hundreds of query lines.
+                </p>
+              </div>
+            </div>
+
+            <div class="try-card">
+              <span class="try-tag tag-diagnose">Diagnose</span>
+              <div class="try-card-text">
                 <h4>Measure the true cost with batch-size hot-patch</h4>
                 <code class="try-prompt">Patch Hibernate's defaultBatchFetchSize to 50 and show me how many queries GET /api/books fires. Then restore it.</code>
                 <p>

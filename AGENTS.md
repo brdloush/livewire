@@ -7,7 +7,7 @@ working on the Livewire project.
 
 ## Load the Livewire skill at session start
 
-At the start of **every** session, immediately load the livewire skill:
+At the start of **every** chat session, immediately load the livewire skill ONCE.:
 
 ```
 eca__skill: {"name": "livewire"}
@@ -26,7 +26,6 @@ Do not run `lw-start` automatically — the app may not be running. Do not add a
 These instructions are written for **ECA (Editor Code Assistant)**, which is the
 tool used by the primary developer ([@brdloush](https://github.com/brdloush)) for
 day-to-day Livewire development. Some rules reference ECA-specific capabilities:
-
 | ECA concept | What it does | If you use a different tool |
 |---|---|---|
 | `eca__task` | Structured in-session task planner with states, priorities, and blocking dependencies | Use your tool's equivalent, or maintain `tasks/todo.md` manually |

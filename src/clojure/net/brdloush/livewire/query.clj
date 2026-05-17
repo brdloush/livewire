@@ -1,7 +1,9 @@
 (ns net.brdloush.livewire.query
   "Query tools: execute SQL and JPQL directly against the live datasource."
   (:require [net.brdloush.livewire.core :as core]
-            [net.brdloush.livewire.entity-serialize :as es]))
+            [net.brdloush.livewire.entity-serialize :as es]
+            [clojure.string :as str]
+            [clojure.set :as set]))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Internal helpers
@@ -11,7 +13,7 @@
   [rs]
   (let [md         (.getMetaData rs)
         col-count  (.getColumnCount md)
-        col-keys   (mapv #(keyword (clojure.string/lower-case (.getColumnLabel md %)))
+        col-keys   (mapv #(keyword (str/lower-case (.getColumnLabel md %)))
                          (range 1 (inc col-count)))]
     (loop [rows []]
       (if (.next rs)
@@ -45,7 +47,7 @@
         (reset! after (es/entity->map (es/build-meta-map) 20 #{} (.find em (es/resolve-class em entity-class) id)))))
     (let [after-val @after
           changed   (into {}
-                      (for [k     (clojure.set/union (set (keys before)) (set (keys after-val)))
+                      (for [k     (set/union (set (keys before)) (set (keys after-val)))
                             :let  [vb (get before k) va (get after-val k)]
                             :when (not= vb va)]
                         [k [vb va]]))]

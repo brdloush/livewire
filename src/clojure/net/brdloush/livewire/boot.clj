@@ -1,8 +1,7 @@
 (ns net.brdloush.livewire.boot
   "Bootstrap namespace: starts and stops the nREPL server.
    Called by the Spring LivewireBootstrapBean via clojure.java.api.Clojure."
-  (:require [net.brdloush.livewire.callgraph :as callgraph]
-            [net.brdloush.livewire.core :as core]
+  (:require [net.brdloush.livewire.core :as core]
             [net.brdloush.livewire.query-watcher :as query-watcher]
             [nrepl.server :as nrepl])
   (:import [net.brdloush.livewire LivewireSqlTracer]

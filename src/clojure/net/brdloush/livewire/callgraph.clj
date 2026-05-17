@@ -937,7 +937,8 @@
                (cg/blast-radius \"bookService\" \"*\")
                (cg/blast-radius \"bookService\" \"*\" :per-method? true)"
   [target-bean target-method & {:keys [app-only per-method?] :or {app-only true per-method? false}}]
-  (let [all-deps (app-bean-deps)
+  (let [_app-only app-only  ; documented but unused — kept for API compat
+        all-deps (app-bean-deps)
         cg (call-graph-index)
         http-index (build-http-endpoint-index)
         sched-index (build-scheduled-index)

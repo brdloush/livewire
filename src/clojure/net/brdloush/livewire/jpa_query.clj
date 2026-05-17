@@ -59,19 +59,21 @@
    Ancestor-chain cycles render as \"<circular>\"."
   [jpql & {:keys [page page-size] :or {page 0 page-size 20}}]
   (core/in-readonly-tx
-        (let [meta-map (es/build-meta-map)
-            em       (core/bean jakarta.persistence.EntityManager)
-            q        (doto (.createQuery em jpql)
-                       (.setFirstResult (* page page-size))
-                       (.setMaxResults page-size))]
-        (let [results (.getResultList q)]
-          (if (and (seq results)
-                   (let [first-row (first results)]
-                     (or (.isArray (.getClass first-row))
-                         ;; single scalar: not an entity known to meta-map
-                         (nil? (get meta-map (first (str/split (.getSimpleName (.getClass first-row)) #"\$")))))))
-            ;; Scalar projection — unpack each row using AS aliases or :col0/:col1/...
-            (let [aliases (extract-select-aliases jpql)]
-              (mapv #(unpack-scalar-row aliases %) results))
-            ;; Entity projection — use the full entity serializer
-            (mapv #(es/entity->map meta-map page-size #{} %) results))))))
+   (doall
+    (let [meta-map (es/build-meta-map)
+          em       (core/bean jakarta.persistence.EntityManager)
+          q        (doto (.createQuery em jpql)
+                     (.setFirstResult (* page page-size))
+                     (.setMaxResults page-size))
+          results  (.getResultList q)]
+      (if (and (seq results)
+               (let [first-row (first results)]
+                 (or (.isArray (.getClass first-row))
+                     ;; single scalar: not an entity known to meta-map
+                     (nil? (get meta-map
+                                 (first (str/split (.getSimpleName (.getClass first-row)) #"\$")))))))
+          ;; Scalar projection — unpack each row using AS aliases or :col0/:col1/...
+          (let [aliases (extract-select-aliases jpql)]
+            (mapv #(unpack-scalar-row aliases %) results))
+          ;; Entity projection — use the full entity serializer
+          (mapv #(es/entity->map meta-map page-size #{} %) results))))))

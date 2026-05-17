@@ -1,6 +1,7 @@
 (ns net.brdloush.livewire.trace
   "Tracing tools: capture SQL execution natively without P6Spy."
-  (:import [net.brdloush.livewire LivewireSqlTracer LivewireSqlTracer$TraceEntry]))
+  (:import [net.brdloush.livewire LivewireSqlTracer LivewireSqlTracer$TraceEntry])
+  (:require [net.brdloush.livewire.core :as lwc]))
 
 (defn unpack-entries [entries]
   (mapv (fn [^LivewireSqlTracer$TraceEntry e]
@@ -52,7 +53,7 @@
   "Returns the Hibernate Statistics object from the running application's
    SessionFactory. Used by `trace-with-stats` to capture aggregate activity."
   []
-  (-> (lw/bean "entityManagerFactory")
+  (-> (lwc/bean "entityManagerFactory")
       (.unwrap org.hibernate.engine.spi.SessionFactoryImplementor)
       (.getStatistics)))
 
@@ -69,7 +70,7 @@
                    :fetch-count (.getFetchCount es)
                    :update-count (.getUpdateCount es)
                    :delete-count (.getDeleteCount es)
-                   :insert-count (.getInsertCount es)}]))
+                   :insert-count (.getInsertCount es)}])))
         (.getEntityNames stats)))
 
 (defn snapshot-collection-stats
@@ -84,7 +85,7 @@
                    :load-count (.getLoadCount cs)
                    :update-count (.getUpdateCount cs)
                    :remove-count (.getRemoveCount cs)
-                   :recreate-count (.getRecreateCount cs)}]))
+                   :recreate-count (.getRecreateCount cs)}])))
         (.getCollectionRoleNames stats)))
 
 (defn snapshot-query-stats
@@ -98,7 +99,7 @@
                  [qs
                   {:execution-count (.getExecutionCount qstat)
                    :max-time-ms (.getExecutionMaxTime qstat)
-                   :total-time-ms (.getExecutionTotalTime qstat)}]))
+                   :total-time-ms (.getExecutionTotalTime qstat)}])))
         (into [] (.getQueries stats))))
 
 (defn delta-map
@@ -112,7 +113,7 @@
                       delta-m (cond-> after-m
                                 before-m
                                 (->> (map (fn [[field after-val]]
-                                            [field (- after-val (get before-m field 0)))])
+                                            [field (- after-val (get before-m field 0))]))
                                      (into {})))]
                   (when (some #(< 0 (val %)) delta-m)
                     [k (into {} (filter #(< 0 (val %))) delta-m)]))))
@@ -156,7 +157,7 @@
       :hibernate-stats
       {:entity-deltas (delta-map ~'after-entities ~'before-entities)
        :collection-deltas (delta-map ~'after-collections ~'before-collections)
-       :query-deltas (delta-map ~'after-queries ~'before-queries)}})
+       :query-deltas (delta-map ~'after-queries ~'before-queries)}}))
 
 (defn detect-n+1
   "Analyzes a trace result (from `trace-sql` or `trace-sql-global`) and

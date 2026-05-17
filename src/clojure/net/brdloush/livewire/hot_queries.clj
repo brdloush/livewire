@@ -444,5 +444,5 @@
   (when @original-batch-state
     (let [[field opts] @original-batch-state]
       (.set field opts (int -1)))
-    (printf "[hot-queries] batch-size restored to -1 (disabled)%n")
+    (println "[hot-queries] batch-size restored to -1 (disabled)")
     (reset! original-batch-state nil)))

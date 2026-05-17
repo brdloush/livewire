@@ -11,10 +11,10 @@
            [org.springframework.security.core.context SecurityContextHolder SecurityContextImpl]
            [org.springframework.security.authentication UsernamePasswordAuthenticationToken]
            [org.springframework.security.core.authority SimpleGrantedAuthority]
-           [org.springframework.beans.factory.config ConfigurableListableBeanFactory]
-           [org.springframework.transaction TransactionDefinition]
            [org.springframework.transaction.interceptor RollbackRuleAttribute NoRollbackRuleAttribute]
-           [org.springframework.aop.support AopUtils]))
+           [org.springframework.aop.support AopUtils])
+  (:refer-clojure :exclude [bean])
+  (:require [clojure.string :as str]))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Context atom — populated by boot.clj on startup
@@ -125,14 +125,14 @@
   - Fully-qualified class names (contain a dot) — e.g. autoconfiguration placeholders.
   - Object identity strings (contain @) — e.g. raw BeanFactory/ApplicationContext refs."
   [^String s]
-  (and (not (clojure.string/includes? s "."))
-       (not (clojure.string/includes? s "@"))))
+  (and (not (str/includes? s "."))
+       (not (str/includes? s "@"))))
 
 (defn- clean-class-name
   "Strips CGLIB proxy suffixes (e.g. $$SpringCGLIB$$0) from a class name."
   [^String class-name]
   (when class-name
-    (clojure.string/replace class-name #"\$\$.*$" "")))
+    (str/replace class-name #"\$\$.*$" "")))
 
 (defn bean-deps
   "Returns a map describing the runtime wiring of a single bean:
@@ -455,6 +455,100 @@
   [pattern]
   (let [re (re-pattern pattern)]
     (into {} (filter (fn [[k _]] (re-find re k)) (all-properties)))))
+
+(def ^:private skip-source-names
+  "PropertySource names to skip during lookups.
+
+  `configurationProperties` is an aggregated resolver that mirrors every property
+  from all other sources — finding a value there does not reveal the originating
+  source, so it is excluded from lookup results."
+  #{"configurationProperties"})
+
+(defn prop-source
+  "Resolves which PropertySource provides the given property key.
+
+  Every `PropertySource` in the chain supports `.getProperty(name)` on the base
+  class, so this works uniformly across MapPropertySource, EnumerablePropertySource,
+  and custom types.
+
+  Sources listed in `skip-source-names` (currently `configurationProperties`) are
+  excluded because they are aggregated resolvers, not originating sources.
+
+  Options:
+    :all?  (default false) — when true, checks all sources even after finding
+           a match; when false, stops at the first source that contains the key.
+
+  Returns:
+    Default (stop at first match):
+      {:property <name>
+       :value    <val-or-nil>
+       :source   <source-name-or-nil>
+       :checked  [{:name <src> :found? false}
+                  {:name <src> :found? true :value <val>}]}
+
+    :all? true:
+      {:property <name>
+       :all      [{:name <src> :found? <bool> :value <val-or-nil>} ...]
+       :winner   {:name <src> :value <val>}  ; or nil if not found anywhere}
+
+  The source order reflects Spring resolution precedence (first source wins).
+
+  Examples:
+
+    ;; Where does ddl-auto come from?
+    (lw/prop-source \"spring.jpa.hibernate.ddl-auto\")
+    ;; => {:property \"spring.jpa.hibernate.ddl-auto\"
+    ;;     :value \"validate\"
+    ;;     :source \"Config resource 'class path resource [application.yml]' ...\"
+    ;;     :checked [{:name \"server.ports\" :found? false}
+    ;;               {:name \"application.yml\" :found? true :value \"validate\"}]}
+
+    ;; Check ALL sources — see if an env var shadows a YAML value
+    (lw/prop-source \"spring.jpa.hibernate.ddl-auto\" :all? true)
+    ;; => {:property \"spring.jpa.hibernate.ddl-auto\"
+    ;;     :all [{:name \"application.yml\" :found? true :value \"validate\"}
+    ;;           {:name \"systemEnvironment\" :found? true :value \"update\"} ...]
+    ;;     :winner {:name \"application.yml\" :value \"validate\"}}"
+  [property & {:keys [all?] :or {all? false}}]
+  (let [ps (.getPropertySources (.getEnvironment (ctx)))
+        it (.iterator ps)]
+    (if all?
+      ;; Check all sources (skip aggregated resolvers)
+      (loop [all-results []]
+        (if (.hasNext it)
+          (let [source (.next it)
+                name (.getName source)
+                val (if (contains? skip-source-names name)
+                      nil
+                      (.getProperty source property))]
+            (recur (conj all-results {:name name
+                                      :found? (boolean val)
+                                      :value val})))
+          {:property property
+           :all (vec all-results)
+           :winner (some-> (first (filter :found? all-results))
+                           (select-keys [:name :value]))}))
+      ;; Stop at first match (skip aggregated resolvers)
+      (loop [checked []
+             found-result nil]
+        (if (and (.hasNext it) (nil? found-result))
+          (let [source (.next it)
+                name (.getName source)
+                val (if (contains? skip-source-names name)
+                      nil
+                      (.getProperty source property))]
+            (if (and val (or (not (string? val)) (not (zero? (count val)))))
+              (recur (conj checked {:name name :found? true :value val})
+                     {:property property
+                      :value val
+                      :source name
+                      :checked (vec (conj checked {:name name :found? true :value val}))})
+              (recur (conj checked {:name name :found? false})
+                     nil)))
+          {:property property
+           :value (some-> found-result :value)
+           :source (some-> found-result :source)
+           :checked (vec checked)})))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Transactional macros

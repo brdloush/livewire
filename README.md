@@ -269,6 +269,26 @@ lw-start
 (lw/props-matching "spring\\.datasource\\.url")
 ;; => {"spring.datasource.url" "jdbc:postgresql://localhost:32808/test"}
 
+;; Trace a property value to its originating PropertySource
+(lw/prop-source "spring.datasource.url")
+;; => {:property "spring.datasource.url"
+;;     :value "jdbc:postgresql://localhost:32808/test"
+;;     :source "Config resource 'class path resource [application.yml]'"
+;;     :checked [{:name "server.ports", :found? false} ...]}
+
+;; See all sources that contribute a value (e.g., env var overrides)
+(lw/prop-source "spring.profiles.active" :all? true)
+;; => {:property "spring.profiles.active"
+;;     :all [{:name "commandLineArgs", :found? true, :value "dev,seed"}
+;;           {:name "systemEnvironment", :found? false}
+;;           {:name "systemProperties", :found? false} ...]
+;;     :winner {:name "commandLineArgs", :value "dev,seed"}}
+
+;; CLI shorthands
+;; lw-prop-source spring.datasource.url
+;; lw-prop-source spring.profiles.active --all
+;; lw-prop-sources              ← list all sources and their properties
+
 ;; Runtime environment summary + primary DataSource details
 (lw/info)
 ;; => {:spring-boot "4.0.1", :spring "7.0.2", :hibernate "7.2.0.Final", :java "25", ...

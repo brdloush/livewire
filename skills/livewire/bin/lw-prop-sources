@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Usage: lw-prop-sources [--all]
+# Lists all PropertySources and their contributed properties.
+#
+# By default, filters to app-relevant prefixes (spring., app., livewire., local.).
+# With --all, shows every property from every enumerable source.
+#
+# Examples:
+#   lw-prop-sources
+#   lw-prop-sources --all
+
+SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+ALL_FLAG="${1:-}"
+TMP_FILE=$(mktemp /tmp/lw-prop-sources-XXXXXX.clj)
+
+if [[ "$ALL_FLAG" == "--all" ]]; then
+  FILTER_EXPR="(fn [_] true)"
+else
+  FILTER_EXPR="#(re-find #\"^(spring|app|livewire|local)\\.\" (str %))"
+fi
+
+cat > "$TMP_FILE" <<CLJEOF
+(let [env (lw/bean org.springframework.core.env.Environment)
+      ps (.getPropertySources env)
+      it (.iterator ps)
+      filter-fn ${FILTER_EXPR}]
+  (println "| Source | Properties |")
+  (println "|--------|-----------|")
+  (loop []
+    (when (.hasNext it)
+      (let [source (.next it)
+            name (.getName source)
+            props (cond
+                    (instance? org.springframework.core.env.EnumerablePropertySource source)
+                    (let [names (.getPropertyNames ^org.springframework.core.env.EnumerablePropertySource source)]
+                      (->> (map str names)
+                           (filter filter-fn)
+                           (mapv #(str % "=" (.getProperty source %)))
+                           (vec)))
+
+                    (instance? org.springframework.core.env.MapPropertySource source)
+                    (let [m (.getSource source)]
+                      (when (instance? java.util.Map m)
+                        (->> (.keySet m)
+                             (map str)
+                             (filter filter-fn)
+                             (mapv #(str % "=" (.get m %)))
+                             (vec))))
+
+                    :else nil)]
+        (if (seq props)
+          (do
+            (println (str "| " name " | " (clojure.string/join ", " (take 5 props))
+                          (when (> (count props) 5) ", ...") " |"))
+            (recur))
+          (do
+            (println (str "| " name " | (enumeration not available) |"))
+            (recur)))))))
+CLJEOF
+
+exec "$SKILL_DIR/lw-eval" --file "$TMP_FILE"
+rm -f "$TMP_FILE"

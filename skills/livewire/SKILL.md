@@ -38,7 +38,7 @@ fi
 ### On `lw-help` (or any "what can Livewire do?" question)
 Give a brief prose overview — no headers, no tables, no bullet soup:
 
-> Livewire connects Claude to a running Spring Boot app via nREPL. From there you can inspect beans, entities, and HTTP endpoints; run JPQL queries and raw SQL against the live database; trace SQL to hunt N+1 problems and hot-swap `@Query` JPQL without restarting; observe exactly what fields a service call writes using `diff-entity`; analyse call graphs to find blast radius or plan a service split; and generate realistic fake entity graphs for test data prototyping. Run `lw-start` to connect, or ask about any specific feature.
+> Livewire connects Claude to a running Spring Boot app via nREPL. From there you can inspect beans, entities, and HTTP endpoints; run JPQL queries and raw SQL against the live database; trace SQL to hunt N+1 problems and hot-swap `@Query` JPQL without restarting; observe exactly what fields a service call writes using `diff-entity`; trace property values to their originating PropertySource; analyse call graphs to find blast radius or plan a service split; and generate realistic fake entity graphs for test data prototyping. Run `lw-start` to connect, or ask about any specific feature.
 
 ### On successful `lw-start`
 Present the result as a single brief paragraph — no tables, no bullet lists.
@@ -307,6 +307,8 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 | `lw-repo-entity <beanName>` | Entity class managed by one repository bean |
 | `lw-all-repo-entities` | Entity class for every repository bean — the full repo → entity map |
 | `lw-props <regex>` | Filter environment properties by regex |
+| `lw-prop-source <property> [--all]` | Show which PropertySource provides a property value; `--all` shows all sources |
+| `lw-prop-sources [--all]` | List all PropertySources and their properties (filtered by default); `--all` shows everything |
 | `lw-sql <query>` | Run a read-only SQL query |
 | `lw-jpa-query <jpql> [page] [page-size]` | Run a JPQL query and return serialized entity maps (traced, paged) |
 | `lw-trace-sql <clojure-expr>` | Capture SQL fired by an expression |
@@ -342,7 +344,7 @@ Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and example
 
 | Namespace | alias | What it covers |
 |---|---|---|
-| `net.brdloush.livewire.core` | `lw` | Beans, transactions (`in-tx`, `in-readonly-tx`), `run-as`, properties, `bean->map`, `diff-entity` |
+| `net.brdloush.livewire.core` | `lw` | Beans, transactions (`in-tx`, `in-readonly-tx`), `run-as`, properties, `prop-source`, `bean->map`, `diff-entity` |
 | `net.brdloush.livewire.introspect` | `intro` | `list-entities`, `inspect-entity`, `list-endpoints`, endpoint auth metadata |
 | `net.brdloush.livewire.trace` | `trace` | `trace-sql`, `trace-sql-global`, `trace-with-stats`, `detect-n+1` |
 | `net.brdloush.livewire.jpa-query` | `jpa` | `jpa-query` — JPQL → Clojure maps, lazy-safe, paginated |

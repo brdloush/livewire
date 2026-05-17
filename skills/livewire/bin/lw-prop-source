@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Usage: lw-prop-source <property> [--all]
+# Shows which PropertySource provides a given property value.
+#
+# Without --all: stops at the first source that contains the property.
+# With --all: shows all sources and their values (including losers).
+#
+# Examples:
+#   lw-prop-source spring.jpa.hibernate.ddl-auto
+#   lw-prop-source spring.jpa.hibernate.ddl-auto --all
+
+SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ -z "${1:-}" ]]; then
+  echo "Usage: $0 <property> [--all]" >&2
+  exit 1
+fi
+
+PROPERTY="$1"
+ALL_FLAG="${2:-}"
+TMP_FILE=$(mktemp /tmp/lw-prop-source-XXXXXX.clj)
+trap "rm -f $TMP_FILE" EXIT
+
+if [[ "$ALL_FLAG" == "--all" ]]; then
+  cat > "$TMP_FILE" <<CLJEOF
+(let [r (lw/prop-source "${PROPERTY}" :all? true)]
+  (println (:property r))
+  (doseq [s (:all r)]
+    (if (:found? s)
+      (println (str "  [WINNER] " (:name s) " = " (:value s)))
+      (println (str "  " (:name s) " = (not set)"))))
+  (when-not (:winner r)
+    (println "  (not found in any source)")))
+CLJEOF
+else
+  cat > "$TMP_FILE" <<CLJEOF
+(let [r (lw/prop-source "${PROPERTY}")]
+  (if (:value r)
+    (do
+      (println (str (:property r) " = " (:value r)))
+      (println (str "  from: " (:source r)))
+      (let [not-found (keep :name (filter (complement :found?) (:checked r)))]
+        (when (seq not-found)
+          (println (str "  checked (not found): " (clojure.string/join ", " not-found)))))
+    (do
+      (println (str (:property r) " = (not found)"))
+      (println "  checked: " (clojure.string/join ", " (map :name (:checked r)))))))
+CLJEOF
+fi
+
+exec "$SKILL_DIR/lw-eval" --file "$TMP_FILE"

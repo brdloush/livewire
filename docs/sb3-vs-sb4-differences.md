@@ -168,7 +168,7 @@ identically on SB3 and SB4 without any conditional logic:
 - `jpa/jpa-query` — `jakarta.persistence.EntityManager` + `entity-serialize`
 - `query/sql` — raw JDBC via Spring's `JdbcTemplate`
 - `introspect/list-entities`, `introspect/inspect-entity`, `introspect/list-endpoints`
-- `core/bean`, `core/in-tx`, `core/in-readonly-tx`, `core/run-as`
+- `core/bean`, `core/in-rollback-tx`, `core/in-tx`, `core/run-as`
 - `hot-queries` / `query-watcher`
 
 ---

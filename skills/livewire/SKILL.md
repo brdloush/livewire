@@ -91,6 +91,12 @@ This is not optional — static knowledge is unreliable for live-app questions.
 | `faker` `fake data` `build-entity` `build-test-recipe` `test data` | Writing Tests & Fake Data | `$SKILL_DIR/references/writing-tests-and-fake-data.md` |
 | `pitfall` `error` `exception` `unexpected` `what went wrong` | Pitfalls | `$SKILL_DIR/references/pitfalls.md` |
 | `variant discipline` `variant discipline` `don't test other variants` `stop after one` `only test what I chose` | Variant Discipline | `$SKILL_DIR/references/variant-discipline.md` |
+| **`eval` `query` `run` `call` `trace` `endpoint` `sql` `jpql` `bean` `check` `find` `inspect` `entity` `list`** | **Eval Reference** | **`$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`** |
+
+> ⚠️ **The eval-reference trigger is the most important.** Any request that involves evaluating
+> Clojure, running a query, calling a method, or inspecting data requires you to have loaded
+> the temp-file rules *before* writing the expression. If you haven't loaded it this session,
+> read it now before doing anything else.
 
 ---
 
@@ -192,6 +198,13 @@ in a full nREPL session.
 ## Workflow
 
 1. **Start the session** — always run `lw-start` first:
+
+2. **Load the eval-reference** — before writing your first Clojure expression, always read
+   `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`. This is mandatory — the file tells you
+   exactly when to use temp files and how. Skip it and you will violate shell-escaping rules
+   within a few turns.
+
+3. **Start the session** — always run `lw-start` first:
    ```bash
    lw-start
    ```
@@ -232,6 +245,12 @@ in a full nREPL session.
    and no special characters — things like `(lw/info)` or `(lw/find-beans-matching "Repo")`.
    For anything with function arguments, `do`, `let`, threading, or more than one form,
    use a temp file. When in doubt, use a temp file. It's never wrong.
+
+   ⚠️ **NEVER use `cat > /tmp/...` via bash to create temp files.** Always use the `write` tool
+   to create files and the `edit` tool to modify them. The `write` tool guarantees exact content
+   (no heredoc quoting surprises, no shell mangle) and keeps the file visible in the conversation
+   log. `cat > /tmp/... << 'EOF'` is the most common way agents bypass the temp-file rule while
+   still violating the spirit of it — the content is hidden in a bash call, not auditable.
 
 6. **Run independent read queries in parallel** — fire unrelated `clj-nrepl-eval` calls in a
    single message to reduce wall-clock time. Only serialize when one result feeds into the next.
@@ -331,9 +350,14 @@ The port defaults to **7888** and can be overridden with `LW_PORT`.
 > or nested parens as an inline shell argument — the shell will mangle them.
 > Use a temp file with a wrapper script:
 > ```bash
-> # Write the expression, then pass the file
+> # Create the temp file using the write tool (NOT cat):
+> # write /tmp/lw-expr.clj with the Clojure expression
 > $SKILL_DIR/bin/lw-eval --file /tmp/lw-expr.clj
 > ```
+> **🚫 NEVER use `cat > /tmp/... << 'EOF'` or any bash heredoc to create temp files.**
+> Always use the `write` tool to create files and the `edit` tool to modify them.
+> Using `cat` bypasses the spirit of the rule — the content is hidden in a bash call,
+> not auditable in the conversation log, and you've just violated the very rule you read.
 > See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md` for the complete rule.
 
 ---
@@ -344,7 +368,7 @@ Read `$SKILL_DIR/references/api-core.md` for full details, patterns, and example
 
 | Namespace | alias | What it covers |
 |---|---|---|
-| `net.brdloush.livewire.core` | `lw` | Beans, transactions (`in-tx`, `in-readonly-tx`), `run-as`, properties, `prop-source`, `bean->map`, `diff-entity` |
+| `net.brdloush.livewire.core` | `lw` | Beans, transactions (`in-rollback-tx`, `in-tx`), `run-as`, properties, `prop-source`, `bean->map`, `diff-entity` |
 | `net.brdloush.livewire.introspect` | `intro` | `list-entities`, `inspect-entity`, `list-endpoints`, endpoint auth metadata |
 | `net.brdloush.livewire.trace` | `trace` | `trace-sql`, `trace-sql-global`, `trace-with-stats`, `detect-n+1` |
 | `net.brdloush.livewire.jpa-query` | `jpa` | `jpa-query` — JPQL → Clojure maps, lazy-safe, paginated |
@@ -393,18 +417,18 @@ $SKILL_DIR/bin/lw-trace-nplus1 '(lw/run-as ["user" "ROLE_MEMBER"] (.getBooksByGe
 
 ## ⚠️ Hibernate lazy loading — always convert inside the transaction
 
-Returning a raw Hibernate entity from `in-tx` / `in-readonly-tx` will throw
+Returning a raw Hibernate entity from `in-rollback-tx` / `in-tx` will throw
 `LazyInitializationException` when the REPL tries to print it — the session is
 already closed. **Always eagerly convert to a plain Clojure map inside the
 transaction boundary.**
 
 ```clojure
 ;; ❌ blows up — printed after session closes
-(lw/in-readonly-tx
+(lw/in-tx
   (.findById (lw/bean "bookRepository") 1))
 
 ;; ✅ convert while the session is still open
-(lw/in-readonly-tx
+(lw/in-tx
   (-> (.findById (lw/bean "bookRepository") 1)
       .get
       clojure.core/bean
@@ -419,8 +443,8 @@ These are the mistakes that repeatedly cause compiler/runtime errors or wrong re
 
 - **Never shadow core functions** — `def`, `let`, `fn`, `loop`, destructuring — don't bind names like `first`, `map`, `update`, `get`, `keys`, `count`, `filter`, `reduce`. Shadowing `first` is the worst offender: every subsequent call to `clojure.core/first` throws `IllegalStateException: Attempting to call unbound fn`. Use `o-first`, `n-first`, `orig`, `new-` as prefixes.
 - **EDN doesn't use Java numeric suffixes** — `1L`, `1.0f`, `1d` are not valid EDN. Use `(long 1)`, `(float 1.0)` instead.
-- **Java records use field-name accessors** — records generate `.id`, `.title`, `.genreNames` — **not** `.getId()`, `.getTitle()`, `.getGenreNames()`. If you see `No matching field found` or a return value that looks like a `clojure.lang.Var`, it's almost certainly the accessor name. When in doubt, inspect a known instance: `(clojure.core/first (lw/in-readonly-tx (.findAll (lw/bean "bookRepository"))))` then check which methods exist.
-- **Always wrap entity access in `in-readonly-tx`** — lazy collections (`reviews`, `member`, etc.) throw `LazyInitializationException` if you touch them outside the transaction boundary. When the trace wrapper alone doesn't keep the session open, explicitly wrap the body in `(lw/in-readonly-tx ...)`.
+- **Java records use field-name accessors** — records generate `.id`, `.title`, `.genreNames` — **not** `.getId()`, `.getTitle()`, `.getGenreNames()`. If you see `No matching field found` or a return value that looks like a `clojure.lang.Var`, it's almost certainly the accessor name. When in doubt, inspect a known instance: `(clojure.core/first (lw/in-tx (.findAll (lw/bean "bookRepository"))))` then check which methods exist.
+- **Always wrap entity access in `in-tx`** — lazy collections (`reviews`, `member`, etc.) throw `LazyInitializationException` if you touch them outside the transaction boundary. When the trace wrapper alone doesn't keep the session open, explicitly wrap the body in `(lw/in-tx ...)`.
 - **Hibernate `setParameter` — always use named parameters (`:name`)** — the positional path (`?1`, `?2`) is a trap:
   - Bare `?` in JPQL → `ParameterLabelException: Unlabeled ordinal parameter ('?' rather than ?1)`
   - You must construct `?1`, `?2`, ... with `(iterate inc 1)` and `run!`-set each one — easy to get wrong
@@ -467,6 +491,7 @@ These are the mistakes that repeatedly cause compiler/runtime errors or wrong re
 - **`trace/trace-sql` only works on JPA entities** — DTOs, Java records, and `select-keys` results have no JPA metadata. `trace/trace-sql` will fail on them with `find not supported on type`. Trace against repository methods that return entities instead.
 - **Don't nest `trace/trace-sql`** — `lw-trace-sql` and `lw-trace-nplus1` already wrap your expression. Putting `trace/trace-sql` or `trace/detect-n+1` inside the expression creates double-wrapping. Use raw `clj-nrepl-eval` when you need both tracing and transformation — but write the expression to a temp file if it contains `!`, `?`, `->`, `#()`, or nested parens. See `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 - **Never use `(dorun (map ...))` in transaction context** — it creates a lazy seq chain that silently blocks and hangs. `dorun` does NOT realize lazy seqs it receives; it only consumes realized ones. Always use `doseq` for side effects or `mapv` for returning data.
+- **Never use `cat > /tmp/...` or bash heredocs to create Clojure temp files.** Use the `write` tool to create and the `edit` tool to modify. `cat >` hides content in bash output (not auditable), and more importantly it's the behavioral bypass that agents use to claim compliance while still violating the spirit of the temp-file rule. If you catch yourself about to type `cat >`, STOP and use `write` instead. Full rule: `$SKILL_DIR/references/clj-nrepl-eval-temp-files.md`.
 - **Never use `hq/hot-swap-query!` to test a hypothesis** — it mutates JVM state for all callers until explicitly reset. To prove a candidate JPQL reduces N+1, use `jpa/jpa-query` wrapped in `trace/trace-sql` or `lw-trace-nplus1` — zero side effects, no cleanup needed. Hot-swap is only for final end-to-end confirmation once the fix is already validated.
 - **Use `hq/hot-patch-batchsize!` to test `@BatchSize` effects without restart** — it patches Hibernate's global `defaultBatchFetchSize` via reflection. New sessions inherit the patched value, triggering batched collection loading. Global only (applies to ALL collections). Use `hq/reset-batchsize!` to restore — always clean up after testing.
 - **`@BatchSize` placement rule — never put it on a `@ManyToOne` / `@OneToOne` field.** Hibernate honors `@BatchSize` in exactly two places: (1) on a **collection field** (`@OneToMany`, `@ManyToMany`, `@ElementCollection`) — batches that specific collection; (2) on the **target entity class declaration** — batches every lazy `@ManyToOne`/`@OneToOne` reference *to* that entity. Field-level placement on a `@ManyToOne` compiles fine (the annotation's `@Target` allows fields) but is **silently ignored** at runtime — the most common Hibernate batch-fetching mistake. To batch a `@ManyToOne` to entity `Foo`, annotate `Foo` itself, not the source field. ⚠️ Class-level placement is global to all `@ManyToOne` references targeting that entity — always flag this trade-off when recommending it. The `hq/hot-patch-batchsize!` REPL test patches a **global** value and so simulates both placements at once — a successful test confirms the magnitude of the fix but **not** the correct annotation placement. Full rule: `$SKILL_DIR/references/n-plus-one-hunting.md`.

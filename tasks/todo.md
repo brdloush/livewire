@@ -42,7 +42,7 @@ _Last updated: 2026-03-21_
 ### `query` namespace — SQL tracing inside `diff-entity`
 
 Investigate whether wrapping `diff-entity` in `trace/trace-sql` captures the UPDATE/INSERT
-statements that Hibernate fires on the explicit `.flush` call inside `in-tx`.
+statements that Hibernate fires on the explicit `.flush` call inside `in-rollback-tx`.
 
 Two constraints to verify:
 1. `trace/trace-sql` uses a `StatementInspector` — does it intercept write statements, or

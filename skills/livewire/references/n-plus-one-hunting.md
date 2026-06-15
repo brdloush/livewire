@@ -158,7 +158,7 @@ rm /tmp/lw-multi-id.clj
 
 ## Shared associations in synthetic REPL test data mask N+1
 
-When creating multiple rows inside `lw/in-tx` to reproduce an N+1, if all rows point to
+When creating multiple rows inside `lw/in-rollback-tx` to reproduce an N+1, if all rows point to
 the **same** associated entity (e.g. the same `createdBy` employee for every row), the L1
 cache serves hits 2..N from memory — only 1 extra query fires instead of N, and
 `detect-n+1` reports nothing suspicious.
@@ -237,7 +237,7 @@ reimplements the **core flow** of the service method with your candidate fix, wr
     (mapv (fn [b] {:id (.getId b) :title (.getTitle b)}) books)))
 
 ;; Measure — zero restarts needed
-(let [res (trace/trace-sql (lw/in-readonly-tx (count (get-all-books-fixed))))]
+(let [res (trace/trace-sql (lw/in-tx (count (get-all-books-fixed))))]
   (select-keys res [:count :duration-ms]))
 ;; => {:count 2, :duration-ms 43}   ← was 481 queries, now 2
 ```
@@ -450,7 +450,7 @@ method call**. This baseline is your control: you compare every variant against 
 
 ```clojure
 ;; Record baseline — this is the broken version, no hot-swap needed
-(def baseline (trace/trace-sql (lw/in-readonly-tx (.getBooksByGenreId (lw/bean "bookService") 1))))
+(def baseline (trace/trace-sql (lw/in-tx (.getBooksByGenreId (lw/bean "bookService") 1))))
 ;; => {:count 98, :duration-ms 18, ...}
 ```
 

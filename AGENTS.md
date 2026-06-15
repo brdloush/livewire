@@ -708,7 +708,7 @@ Use `lw/run-as` with one of these usernames (or an appropriate role vector) when
 ;; Confirm N+1 on /api/books equivalent
 (let [res (trace/trace-sql
             (lw/run-as "member1"
-              (lw/in-readonly-tx
+              (lw/in-tx
                 (.getAllBooks (lw/bean "bookService")))))]
   (select-keys res [:count :duration-ms]))
 ;; => {:count 1201, :duration-ms ...}
@@ -803,8 +803,8 @@ logical structure, good naming. If the answer is no, iterate first.
 Some REPL operations leave **persistent state** in the live JVM that survives across calls:
 
 - **`hq/hot-swap-query!`** — patched queries stay active until explicitly restored. Other callers, background jobs, or monitoring queries will hit the swapped version.
-- **`lw/in-tx`** — always rolls back automatically. Safe, no cleanup needed.
-- **`lw/in-readonly-tx`** — read-only, no cleanup needed.
+- **`lw/in-rollback-tx`** — always rolls back automatically. Safe, no cleanup needed.
+- **`lw/in-tx`** — committed transaction, no cleanup needed.
 
 **After any session that used `hq/hot-swap-query!`, always restore before finishing:**
 

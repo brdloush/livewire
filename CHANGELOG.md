@@ -356,7 +356,7 @@ First versioned release.
 
 - **`core`** — `lw/bean`, `lw/beans-of-type`, `lw/bean-names`, `lw/find-beans-matching`,
   `lw/ctx`, `lw/info`, `lw/all-properties`, `lw/props-matching`,
-  `lw/in-tx`, `lw/in-readonly-tx`, `lw/run-as`
+  `lw/in-rollback-tx`, `lw/in-tx`, `lw/run-as`
 - **`query`** — raw SQL and JPQL execution via live `DataSource` / `EntityManager`
 - **`trace`** — `trace/trace-sql`, `trace/trace-sql-global`, `trace/detect-n+1`;
   works with both Hibernate 6 and 7

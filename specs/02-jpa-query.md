@@ -7,7 +7,7 @@
 
   Why this approach
 
-  lw-trace-sql wraps the expression in SQL capture. Executing JPQL via EntityManager inside lw/in-readonly-tx runs in a real transaction so Hibernate behaves exactly as it would in production. Paging via .setMaxResults is applied by
+  lw-trace-sql wraps the expression in SQL capture. Executing JPQL via EntityManager inside lw/in-tx runs in a real transaction so Hibernate behaves exactly as it would in production. Paging via .setMaxResults is applied by
    default (matching the existing lw-sql convention of capping at 20 rows) to prevent accidental full-table loads.
 
   The entity serializer uses intro/inspect-entity metadata to know which properties are scalars vs associations, and threads an immutable set for visited object identities to detect true ancestor-chain cycles without falsely
@@ -16,7 +16,7 @@
   ---
   The expression that worked (prototype)
 
-  (lw/in-readonly-tx
+  (lw/in-tx
     (let [meta-map (into {} (map (fn [n] [n (intro/inspect-entity n)])
                                  (map :name (intro/list-entities))))
 

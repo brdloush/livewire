@@ -213,7 +213,7 @@
         <p>Wrap any call with <code>trace-sql</code> and see every SQL it fires. <code>detect-n+1</code> automatically groups repeated queries and flags suspects — in one call. Prefer <code>trace-with-stats</code> when you want aggregate entity loads, collection fetch counts, and query execution counts without the raw SQL text. Test <code>@BatchSize</code> effects without restart: patch Hibernate's global batch size, measure the query count, then restore.</p>
         <div class="code-block"><pre><span class="p">(</span><span class="kw">trace/detect-n+1</span>
   <span class="p">(</span><span class="kw">trace/trace-sql</span>
-    <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+    <span class="p">(</span><span class="kw">lw/in-tx</span>
       <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)))))</span>
 <span class="r">;; => {:suspicious-queries
 ;;      [{:sql "select ... from book_genre ...", :count 200}
@@ -224,7 +224,7 @@
 <span class="p">(</span><span class="kw">hq/hot-patch-batchsize!</span> <span class="n">50</span><span class="p">)</span>
 <span class="p">(</span><span class="kw">trace/detect-n+1</span>
   <span class="p">(</span><span class="kw">trace/trace-sql</span>
-    <span class="p">(</span><span class="kw">lw/in-readonly-tx</span>
+    <span class="p">(</span><span class="kw">lw/in-tx</span>
       <span class="p">(</span><span class="kw">.getAllBooks</span> <span class="p">(</span><span class="kw">lw/bean</span> <span class="s">"bookService"</span><span class="p">)))))</span>
 <span class="r">;; => :total-queries 11  (481 → 11 with batching)</span>
 <span class="p">(</span><span class="kw">hq/reset-batchsize!</span><span class="p">)</span></pre></div>

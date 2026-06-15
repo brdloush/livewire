@@ -178,7 +178,7 @@ faker/build-entity "Review" {:auto-deps? true, :persist? true, :rollback? true}
         │       for each [field value]: find setter, .invoke instance value
         │
         └─ 6. if :persist?
-                in-tx (rollback if :rollback?):
+                in-rollback-tx (rollback if :rollback?):
                   em.persist(author) → em.persist(book) → em.persist(member)
                   → em.persist(review) → em.flush()
                   → return review (id is now set)
@@ -411,7 +411,7 @@ Livewire interface for their fixture classes.
 | Existing feature | Interaction |
 |---|---|
 | `intro/inspect-entity` | Phase 0 extends it; Phase 1 depends on the enriched output |
-| `core/in-tx` | Used by `:persist? true :rollback? true` to wrap the persist + flush |
+| `core/in-rollback-tx` | Used by `:persist? true :rollback? true` to wrap the persist + flush |
 | `core/bean` | Used to fetch `entityManagerFactory` and lookup repositories for genre fetch |
 | `q/diff-entity` | Complementary: `diff-entity` observes mutations on an existing entity; `faker/build-entity` constructs a new one |
 | `trace/trace-sql` | Can be wrapped around `faker/build-entity` calls to inspect what the cascade generates |

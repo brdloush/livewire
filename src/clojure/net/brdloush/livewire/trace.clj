@@ -134,7 +134,7 @@
    Example:
      (trace/trace-with-stats
        (doall (lw/run-as [\"member1\" \"ROLE_MEMBER\"]
-                (lw/in-readonly-tx
+                (lw/in-tx
                   (.getAllBooks (lw/bean \"bookService\"))))))
      ;; => {:duration-ms 125
      ;;     :hibernate-stats

@@ -323,7 +323,7 @@
                        "Repository")
         repo (try (core/bean repo-name) (catch Exception _ nil))
         row (when repo
-              (core/in-readonly-tx
+              (core/in-tx
                (first (shuffle (.findAll repo)))))]
     (when (and repo (nil? row))
       (throw (ex-info

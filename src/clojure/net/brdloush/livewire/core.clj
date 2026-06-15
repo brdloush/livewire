@@ -553,14 +553,14 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Transactional macros
 
-(defmacro in-tx
+(defmacro in-rollback-tx
   "Executes body inside a real Spring transaction that is always rolled back,
    even on success. Safe for mutation exploration — nothing persists.
 
    Returns the value of the last expression in body.
 
    Example:
-     (in-tx
+     (in-rollback-tx
        (.save userRepository (->User \"test@example.com\"))
        (count (findAll userRepository)))"
   [& body]
@@ -573,19 +573,19 @@
                      (.setRollbackOnly status#)
                      result#))))))
 
-(defmacro in-readonly-tx
-  "Executes body inside a read-only Spring transaction.
-   Useful for JPQL/SQL queries that require an active session.
+(defmacro in-tx
+  "Executes body inside a Spring transaction that keeps the Hibernate
+   session alive, so lazy associations can be accessed and queries can
+   run against a real database.
 
    Returns the value of the last expression in body.
 
    Example:
-     (in-readonly-tx
+     (in-tx
        (.findAll userRepository))"
   [& body]
   `(let [tt# (doto (TransactionTemplate. (bean PlatformTransactionManager))
-               (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW)
-               (.setReadOnly true))]
+               (.setPropagationBehavior TransactionDefinition/PROPAGATION_REQUIRES_NEW))]
      (.execute tt#
                (reify TransactionCallback
                  (doInTransaction [_# _status#]

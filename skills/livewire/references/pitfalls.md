@@ -116,7 +116,7 @@ Use `trace/trace-sql` on the real service method for **accurate query counts**.
 
 ```clojure
 ;; ❌ guessing — likely to fail with wrong table name or column
-(lw/in-readonly-tx (q/sql "SELECT id FROM loan_record WHERE returned = 1"))
+(lw/in-tx (q/sql "SELECT id FROM loan_record WHERE returned = 1"))
 
 ;; ✅ inspect first → table "loan_record", column is "return_date" not "returned"
 (jpa/jpa-query "SELECT lr.id, lr.member.id FROM LoanRecord lr WHERE lr.returnDate IS NULL" :page 0 :page-size 10)
@@ -161,10 +161,10 @@ lw-jpa-query 'SELECT b.id, b.title FROM Book b' 0 10
 
 ```clojure
 ;; ❌ may return millions of rows and hang the REPL
-(lw/in-readonly-tx (q/sql "SELECT id FROM book"))
+(lw/in-tx (q/sql "SELECT id FROM book"))
 
 ;; ✅ cap explicitly
-(lw/in-readonly-tx (q/sql "SELECT id, title FROM book LIMIT 10"))
+(lw/in-tx (q/sql "SELECT id, title FROM book LIMIT 10"))
 ```
 
 ---
@@ -336,7 +336,7 @@ lw-eval --file /tmp/lw-faker.clj
 
 ;; ✅ type-based lookup resolves the shared proxy
 (let [em (lw/bean jakarta.persistence.EntityManager)]
-  (lw/in-tx
+  (lw/in-rollback-tx
     (.flush em)
     (.clear em)))
 ```
@@ -532,7 +532,7 @@ causes `AuthorizationDeniedException` because no authorities are set on the auth
 
 ```clojure
 ;; ❌ PSQLException: No results were returned by the query
-(lw/in-tx (q/sql "CREATE INDEX idx_foo ON bar(baz)"))
+(lw/in-rollback-tx (q/sql "CREATE INDEX idx_foo ON bar(baz)"))
 
 ;; ✅ raw JDBC for DDL
 (let [ds (lw/bean javax.sql.DataSource)]
@@ -544,7 +544,7 @@ causes `AuthorizationDeniedException` because no authorities are set on the auth
 
 ### Never use `(dorun (map ...))` in Hibernate transaction context
 
-In the nREPL + Hibernate `in-readonly-tx` context, `(dorun (map ...))` creates a lazy
+In the nREPL + Hibernate `in-tx` context, `(dorun (map ...))` creates a lazy
 seq chain that silently blocks and hangs — it never completes and eventually times out.
 The `dorun` call returns the lazy seq instead of consuming it, and the transaction/nREPL
 thread pool deadlocks on the lazy chain.

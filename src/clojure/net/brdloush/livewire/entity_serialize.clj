@@ -78,7 +78,7 @@
    Java class and primary key `id`. Returns a plain Clojure map, or nil if
    not found. Runs inside a fresh read-only transaction."
   [entity-class id]
-  (core/in-readonly-tx
+  (core/in-tx
    (let [em  (core/bean jakarta.persistence.EntityManager)
          obj (.find em (resolve-class em entity-class) id)]
      (when obj

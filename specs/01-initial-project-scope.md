@@ -49,8 +49,8 @@ Bootstraps access to the running Spring context and exposes core primitives used
 - `(props-matching pattern)` — filters properties by regex
 
 **Key macros:**
-- `(in-tx & body)` — executes body in a real Spring transaction, **rolls back by default**. Safe mutation exploration.
-- `(in-readonly-tx & body)` — same, read-only semantics
+- `(in-rollback-tx & body)` — executes body in a real Spring transaction, **always rolls back**. Safe mutation exploration.
+- `(in-tx & body)` — executes body in a Spring transaction that keeps the Hibernate session alive for queries
 - `(run-as user-details & body)` — sets `SecurityContextHolder`, runs body, restores context. Essential for authorization debugging.
 
 ---
@@ -181,7 +181,7 @@ src/
       net/
         brdloush/
           livewire/
-            core.clj          ; context access, in-tx, run-as
+            core.clj          ; context access, in-rollback-tx, run-as
             introspect.clj    ; list-endpoints, inspect-entity
             query.clj         ; jpql, sql, diff-entity
             trace.clj         ; trace-sql, detect-n+1, hibernate-stats, call-service

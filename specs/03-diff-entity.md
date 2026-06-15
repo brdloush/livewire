@@ -29,7 +29,7 @@
      :after   { ... entity map after thunk  ... }
      :changed { key [old-value new-value] ... }}   ; only keys that differ
 
-  The thunk is called inside lw/in-tx, which rolls back by default. The caller
+  The thunk is called inside lw/in-rollback-tx, which always rolls back. The caller
   gets the diff without any persistent side effects.
 
   ---
@@ -98,7 +98,7 @@
   (defn diff-entity [entity-class id thunk]
     (let [load  (fn [] (jpa/load-entity entity-class id))   ; to be extracted from jpa-query
           before (load)
-          _      (lw/in-tx (thunk))                         ; rolls back automatically
+          _      (lw/in-rollback-tx (thunk))                ; rolls back automatically
           after  (load)
           changed (into {}
                     (for [k (clojure.set/union (set (keys before)) (set (keys after)))
@@ -109,13 +109,12 @@
       {:before before :after after :changed changed}))
 
   Key decisions:
-  - Rollback by default: the thunk runs inside lw/in-tx, which rolls back unless the
-    caller explicitly commits. Safe for exploration against a live dev database.
+  - Rollback by default: the thunk runs inside lw/in-rollback-tx, which always rolls back. Safe for exploration against a live dev database.
   - Two separate loads: load-before happens outside the thunk transaction so it sees
     the committed state; load-after happens in a fresh read-only tx after the rollback.
     This means :after should be identical to :before for a correctly rolled-back thunk —
     which is useful as a sanity check. If the caller wants to observe a committed write,
-    they wrap the thunk in lw/in-tx themselves and pass a no-rollback variant.
+    they wrap the thunk in lw/in-rollback-tx themselves and pass a no-rollback variant.
   - Serialization: delegate to the same entity->map used by jpa/jpa-query.
     Uninitialized lazy collections render as "<lazy>" rather than silently firing extra SQL.
   - Diff granularity: flat key comparison on the serialized maps. Nested entity

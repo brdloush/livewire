@@ -345,12 +345,12 @@ lw-start
 
 ```clojure
 ;; Raw SQL through the live DataSource — always cap results
-(lw/in-readonly-tx
+(in-tx
   (q/sql "SELECT id, title FROM book LIMIT 5"))
 ;; => [{:id 1, :title "All the King's Men"} ...]
 
 ;; Repository calls — always page, never call .findAll without a Pageable
-(lw/in-readonly-tx
+(in-tx
   (->> (.findAll (lw/bean "bookRepository")
                  (org.springframework.data.domain.PageRequest/of 0 3))
        .getContent
@@ -358,7 +358,7 @@ lw-start
 ;; => [{:id 1, :title "All the King's Men", :isbn "979-0-925405-37-0"} ...]
 
 ;; Mutations roll back automatically — safe to experiment
-(lw/in-tx
+(lw/in-rollback-tx
   (.save (lw/bean "bookRepository") ...)
   (.count (lw/bean "bookRepository")))
 ;; => 201  (and then silently rolled back)
@@ -390,7 +390,7 @@ Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll 
 ```clojure
 ;; See every SQL a call fires — wrap it and look
 (trace/trace-sql
-  (lw/in-readonly-tx
+  (in-tx
     (.count (lw/bean "bookRepository"))))
 ;; => {:result 200, :count 1, :duration-ms 8,
 ;;     :queries [{:sql "select count(*) from book b1_0", :caller "..."}]}
@@ -415,7 +415,7 @@ Spring Security doesn't know about your REPL. Without a `SecurityContext` it'll 
 ;; Want aggregate stats instead of raw SQL? Entity loads, collection fetch counts, query execution counts — no SQL text.
 (trace/trace-with-stats
   (doall (lw/run-as ["member1" "ROLE_MEMBER"]
-           (lw/in-readonly-tx
+           (in-tx
              (.getAllBooks (lw/bean "bookService"))))))
 ;; => {:duration-ms 125
 ;;     :hibernate-stats

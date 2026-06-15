@@ -40,7 +40,7 @@
   [entity-class id thunk]
   (let [before (es/load-entity entity-class id)
         after  (atom nil)]
-    (core/in-tx
+    (core/in-rollback-tx
       (thunk)
       (let [em (core/bean jakarta.persistence.EntityManager)]
         (.flush em)

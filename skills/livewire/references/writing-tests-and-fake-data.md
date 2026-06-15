@@ -72,7 +72,7 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
    ```clojure
    (use 'clojure.test)
-   (lw/in-tx
+   (lw/in-rollback-tx
      (let [author  (doto (com.example.Author.) (.setFirstName "Jane") (.setLastName "Austen"))
            _       (.save (lw/bean "authorRepository") author)
            book    (doto (com.example.Book.) (.setTitle "Test Book") (.setAuthor author))
@@ -117,7 +117,7 @@ The rules below are **fallback guidance** for when no existing pattern covers th
 
    Fields annotated both `@NotNull` and `insertable=false` (DB-defaulted columns like `created_at`)
    will fail bean validation in the REPL even though Hibernate would never actually insert the value.
-   Always set them explicitly in `lw/in-tx`:
+   Always set them explicitly in `lw/in-rollback-tx`:
 
    ```clojure
    (let [i (MyEntity.)

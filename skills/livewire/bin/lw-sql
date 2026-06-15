@@ -15,4 +15,4 @@ if [[ "${1:-}" == "--file" ]]; then
 else
   SQL_RAW="$*"
 fi
-exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(lw/in-readonly-tx (q/sql \"${SQL_RAW}\"))"
+exec clj-nrepl-eval -p "${LW_PORT:-7888}" <<< "(lw/in-tx (q/sql \"${SQL_RAW}\"))"

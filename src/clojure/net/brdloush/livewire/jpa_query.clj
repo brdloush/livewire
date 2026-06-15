@@ -58,7 +58,7 @@
    Uninitialized lazy collections render as \"<lazy>\".
    Ancestor-chain cycles render as \"<circular>\"."
   [jpql & {:keys [page page-size] :or {page 0 page-size 20}}]
-  (core/in-readonly-tx
+  (core/in-tx
    (doall
     (let [meta-map (es/build-meta-map)
           em       (core/bean jakarta.persistence.EntityManager)

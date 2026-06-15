@@ -80,7 +80,7 @@ the live Bloated Shelf app using the embedded nREPL.
 
    (let [res (trace/trace-sql
                (lw/run-as "member1"
-                 (lw/in-readonly-tx
+                 (lw/in-tx
                    (.getAllBooks (lw/bean "bookService")))))]
      (select-keys res [:count :duration-ms]))
    ;; => {:count 1201, :duration-ms ...}

@@ -26,8 +26,8 @@ methods.
 | `(lw/all-properties)` | All resolved environment properties → map |
 | `(lw/props-matching "spring\\.ds.*")` | Filter properties by regex |
 | `(lw/bean->map obj)` | Convert any Java object to a Clojure map — handles both regular JavaBeans and Java records (use this instead of `clojure.core/bean`) |
-| `(lw/in-tx & body)` | Run body in a transaction — **always rolls back** |
-| `(lw/in-readonly-tx & body)` | Run body in a read-only transaction |
+| `(lw/in-rollback-tx & body)` | Run body in a transaction — **always rolls back** |
+| `(lw/in-tx & body)` | Run body in a transaction — keeps the Hibernate session alive for queries |
 | `(lw/run-as user & body)` | Run body with a Spring `SecurityContext` set — required for `@PreAuthorize`-guarded beans |
 
 ### `bean-tx` / `all-bean-tx` — `@Transactional` boundary introspection
@@ -185,9 +185,9 @@ Use `run-as` whenever calling a bean that is protected by Spring Security (`@Pre
 (lw/run-as ["user" "ROLE_MEMBER"]
   (.getBookById (lw/bean "bookController") 25))
 
-;; Combine with in-readonly-tx for repository access under a security context
+;; Combine with in-tx for repository access under a security context
 (lw/run-as ["user" "ROLE_MEMBER"]
-  (lw/in-readonly-tx
+  (lw/in-tx
     (->> (.findAll (lw/bean "bookRepository")
                    (org.springframework.data.domain.PageRequest/of 0 3))
          .getContent
@@ -465,7 +465,7 @@ the observability gap `trace/trace-sql` leaves open.
 |---|---|
 | `(q/diff-entity entity-class id thunk)` | Snapshot entity before and after `thunk`, return `{:before … :after … :changed {key [old new]}}` |
 
-The thunk always runs inside `lw/in-tx` — **the change is always rolled back**.
+The thunk always runs inside `lw/in-rollback-tx` — **the change is always rolled back**.
 
 ### When to use it
 
@@ -563,7 +563,7 @@ REPL-initiated swaps.
 ;; Verify the fix
 (trace/trace-sql
   (lw/run-as ["admin" "ROLE_ADMIN"]
-    (lw/in-readonly-tx
+    (lw/in-tx
       (.findByIdWithDetails (lw/bean "bookRepository") 25))))
 
 ;; Restore original when done
